@@ -2,6 +2,7 @@
 This module estimates q-values.
 """
 import numpy as np
+import pandas as pd
 import numba as nb
 
 def tdc(metric, target, desc=True):
@@ -50,6 +51,12 @@ def tdc(metric, target, desc=True):
         array is the same length as the `metric` and `target` arrays.
     """
     # Check arguments
+    if isinstance(metric, pd.Series):
+        metric = metric.values
+
+    if isinstance(target, pd.Series):
+        target = target.values
+
     msg = "'{}' must be a 1D numpy.ndarray or pandas.Series"
     if not isinstance(metric, np.ndarray) or len(metric.shape) != 1:
         raise ValueError(msg.format("metric"))
@@ -80,7 +87,7 @@ def tdc(metric, target, desc=True):
     cum_decoys = ((target-1)**2).cumsum()
     num_total = cum_targets + cum_decoys
 
-    fdr = (cum_decoys + 1) / cum_targets
+    fdr = (cum_decoys + 1) / (cum_targets + np.finfo(float).tiny)
 
     # Calculate q-values
     unique_metric, indices = np.unique(metric, return_counts=True)

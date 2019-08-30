@@ -18,11 +18,14 @@ class PsmDataset():
     """
     def __init__(self, pin_files: Union[str, Tuple[str]]) -> None:
         """Initialize a PsmDataset object."""
+        if isinstance(pin_files, str):
+            pin_files = (pin_files,)
+
         self.data = pd.concat([_read_pin(f) for f in pin_files])
         cols = self.columns
 
         # Verify necessary columns are present.
-        required_cols = {"label", "scannr", "peptides", "proteins"}
+        required_cols = {"label", "scannr", "peptide", "proteins"}
         if not required_cols <= set(cols):
             raise ValueError("Required columns are missing from the pin file."
                              f" These are {required_cols} and are case "
@@ -31,7 +34,9 @@ class PsmDataset():
         # Change key cols to lowercase for consistency
         df_cols = self.data.columns.tolist()
         for col_name in required_cols:
-            df_cols[cols.index[col_name]] = col_name
+            df_cols[cols.index(col_name)] = col_name
+
+        self.data.columns = df_cols
 
     @property
     def columns(self) -> List[str]:
@@ -53,7 +58,7 @@ class PsmDataset():
     def features(self) -> pd.DataFrame:
         """Get the features of the PsmDataset"""
         cols = self.columns
-        feat_end = cols.index("peptides")
+        feat_end = cols.index("peptide")
 
         # Crux adds "ExpMass" and "CalcMass" columns after "ScanNr"
         if "calcmass" in self.columns:
@@ -61,7 +66,7 @@ class PsmDataset():
         else:
             feat_start = cols.index("scannr") + 1
 
-        return self.data.loc[:, feat_start:feat_end]
+        return self.data.iloc[:, feat_start:feat_end]
 
     @property
     def label(self) -> np.ndarray:
@@ -70,7 +75,21 @@ class PsmDataset():
 
     def find_best_feature(self, fdr: float) -> None:
         """Find the best feature to separate targets from decoys."""
-        qvals = self.features.apply(tdc, target=(self.labels+1)/2)
+        qvals = self.features.apply(tdc, target=(self.label+1)/2)
+        targ_qvals = qvals[self.label == 1]
+        num_passing = (targ_qvals <= fdr).sum()
+        best_feat = num_passing.idxmax()
+
+        print(num_passing)
+        print(qvals[best_feat].values > fdr)
+        print(self.label == 1)
+        unlabeled = np.logical_and(qvals[best_feat].values > fdr, self.label == 1)
+
+        target = self.label
+        target[unlabeled] = 0
+
+        return best_feat, num_passing[best_feat], target
+
 
 # Functions -------------------------------------------------------------------
 def _read_pin(pin_file):
