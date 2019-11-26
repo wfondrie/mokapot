@@ -79,10 +79,6 @@ class PsmDataset():
         targ_qvals = qvals[self.label == 1]
         num_passing = (targ_qvals <= fdr).sum()
         best_feat = num_passing.idxmax()
-
-        print(num_passing)
-        print(qvals[best_feat].values > fdr)
-        print(self.label == 1)
         unlabeled = np.logical_and(qvals[best_feat].values > fdr, self.label == 1)
 
         target = self.label

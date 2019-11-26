@@ -15,7 +15,7 @@ class MokapotSVM():
     """
     Create a Linear SVM model for classifying PSMs.
     """
-    def __init__(self, weights: pd.Series = None, intercept: float = 0,) \
+    def __init__(self, weights: pd.Series = None, intercept: float = 0) \
         -> None:
         """Initialize a MokapotSVM object"""
         self.weights = weights
@@ -40,7 +40,7 @@ class MokapotSVM():
 
         # Load features
         feat_names = psms.features.columns.tolist()
-        if set(feat_names) != set(self.feature_names):
+        if set(feat_names) != set(self.weights.index.tolist()):
             raise ValueError("Features of the PsmDataset do not match the "
                              "features used to fit the model.")
 
@@ -59,9 +59,9 @@ class MokapotSVM():
 
         # Normalize Features
         feat_names = psms.features.columns.tolist()
-        feat_mean = psms.features.mean(axis=1)
-        feat_stdev = psms.features.std(axis=1) + np.finfo(float).tiny
-        norm_feat = (psms.features - feat_mean) / feat_stdev
+        feat_mean = psms.features.mean(axis=0)
+        feat_stdev = psms.features.std(axis=0) + np.finfo(float).tiny
+        norm_feat = (psms.features.copy() - feat_mean) / feat_stdev
 
         # Initialize Model and Training Variables
         target = feat_target
@@ -73,7 +73,9 @@ class MokapotSVM():
             # Fit the model
             samples = norm_feat.values[target.astype(bool), :]
             iter_targ = target[target.astype(bool)]
-            model.fit(samples, iter_targ)
+            model = svm.LinearSVC(dual=psms.dual, class_weight="balanced")
+            model = model.fit(samples, iter_targ)
+            print(len(iter_targ))
 
             # Update scores
             scores = model.decision_function(norm_feat)
@@ -81,11 +83,12 @@ class MokapotSVM():
             # Update target
             qvals = tdc(scores, target=(psms.label+1)/2)
             unlabeled = np.logical_and(qvals > train_fdr, psms.label == 1)
-            target = self.label
+            target = psms.label
             target[unlabeled] = 0
             num_pass = (target == 1).sum()
+            print(num_pass)
 
-            logging.info("Iteration %i:\t Estimated %i PSMs with q<%f.",
+            logging.info("Iteration %i:\t Estimated %i PSMs with q<%.f",
                          i+1, num_pass, train_fdr)
 
         # Wrap up
@@ -94,10 +97,11 @@ class MokapotSVM():
                                "training. Consider a less stringent value for "
                                "'train_fdr'.")
 
-        feat_mean = feat_mean.append(pd.Seri)
+        feat_mean = feat_mean.append(pd.Series([0], index=["m0"]))
+        feat_stdev = feat_stdev.append(pd.Series([1], index=["m0"]))
         weights = np.append(model.coef_, model.intercept_)
         weights = pd.DataFrame({"Normalized": weights},
                                index=feat_names + ["m0"])
 
-        weights["Unnormalized"] = weights.Normalized
-
+        weights["Unnormalized"] = weights.Normalized * feat_stdev - feat_mean
+        logging.info("Learned SVM weights:\n%s", weights)
