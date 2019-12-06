@@ -16,12 +16,11 @@ class PsmDataset():
     """
     Store a collection of PSMs.
     """
-    def __init__(self, pin_files: Union[str, Tuple[str]]) -> None:
+    def __init__(self, psm_data = pd.DataFrame) -> None:
         """Initialize a PsmDataset object."""
-        if isinstance(pin_files, str):
-            pin_files = (pin_files,)
 
-        self.data = pd.concat([_read_pin(f) for f in pin_files])
+        self.data = psm_data
+        self.data = self.data.sample(frac=1).reset_index(drop=True)
         cols = self.columns
 
         # Verify necessary columns are present.
@@ -81,13 +80,47 @@ class PsmDataset():
         best_feat = num_passing.idxmax()
         unlabeled = np.logical_and(qvals[best_feat].values > fdr, self.label == 1)
 
-        target = self.label
+        target = self.label.copy()
         target[unlabeled] = 0
 
         return best_feat, num_passing[best_feat], target
 
+    def split(self, folds): #-> Tuple[Tuple[PsmDataset]]:
+        """Split into cross-validation folds"""
+        num = len(self.label) // folds
+
+        # Split the data evenly
+        splits = np.array_split(self.data, folds)
+
+        if len(splits[-1]) < num:
+            splits[-2] = pd.concat(splits[-2:])
+            splits = splits[:-1]
+
+        # Assign train and test sets
+        train = []
+        test = []
+        for idx, test_split in enumerate(splits):
+            train_split = pd.concat(splits[:idx] + splits[idx+1:])
+            train.append(PsmDataset(train_split))
+            test.append(PsmDataset(test_split))
+
+        return (tuple(train), tuple(test))
+
 
 # Functions -------------------------------------------------------------------
+def read_pin(pin_files: Union[str, Tuple[str]]) -> PsmDataset:
+    """Read a Percolator pin file to a PsmDataset"""
+    if isinstance(pin_files, str):
+        pin_files = (pin_files,)
+
+    psm_data = pd.concat([_read_pin(f) for f in pin_files])
+    return PsmDataset(psm_data)
+
+def read_mpin(mpin_files: Union[str, Tuple[str]]) -> PsmDataset:
+    """Read a Mokapot input (mpin) file to a PsmDataset"""
+    pass
+
+# Utility Functions -----------------------------------------------------------
 def _read_pin(pin_file):
     """Parse a Percolator INput formatted file."""
     if pin_file.endswith(".gz"):

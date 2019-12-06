@@ -2,6 +2,7 @@
 This module defines the model class to used my Molokai.
 """
 import logging
+from concurrent.futures import ProcessPoolExecutor
 from typing import Tuple
 
 import numpy as np
@@ -20,6 +21,7 @@ class MokapotSVM():
         """Initialize a MokapotSVM object"""
         self.weights = weights
         self.intercept = intercept
+        self.model = None
 
     def predict(self, psms: PsmDataset) -> np.ndarray:
         """
@@ -54,8 +56,8 @@ class MokapotSVM():
         """Fit an SVM model using the Percolator procedure"""
         best_feat, feat_pass, feat_target = psms.find_best_feature(train_fdr)
         logging.info("Selected feature '%s' as initial direction.\n"
-                     "-> Could separate %i training set positives with q<%f "
-                     "in that direction.", best_feat, feat_pass, train_fdr)
+                     "\t-> Could separate %i training set positives "
+                     "in that direction.", best_feat, feat_pass)
 
         # Normalize Features
         feat_names = psms.features.columns.tolist()
@@ -69,13 +71,12 @@ class MokapotSVM():
 
         # Begin training loop
         target = feat_target
+        num_passed = []
         for i in range(max_iter):
             # Fit the model
             samples = norm_feat.values[target.astype(bool), :]
             iter_targ = target[target.astype(bool)]
-            model = svm.LinearSVC(dual=psms.dual, class_weight="balanced")
-            model = model.fit(samples, iter_targ)
-            print(len(iter_targ))
+            model.fit(samples, iter_targ)
 
             # Update scores
             scores = model.decision_function(norm_feat)
@@ -83,19 +84,19 @@ class MokapotSVM():
             # Update target
             qvals = tdc(scores, target=(psms.label+1)/2)
             unlabeled = np.logical_and(qvals > train_fdr, psms.label == 1)
-            target = psms.label
+            target = psms.label.copy()
             target[unlabeled] = 0
             num_pass = (target == 1).sum()
-            print(num_pass)
+            num_passed.append(num_pass)
 
-            logging.info("Iteration %i:\t Estimated %i PSMs with q<%.f",
-                         i+1, num_pass, train_fdr)
+            #logging.info("Iteration %i:\t Estimated %i PSMs with q<%.2f",
+            #             i+1, num_pass, train_fdr)
 
         # Wrap up
         if feat_pass > num_pass:
-            raise RuntimeError("No improvement was detected with model "
-                               "training. Consider a less stringent value for "
-                               "'train_fdr'.")
+            logging.warning("No improvement was detected with model "
+                            "training. Consider a less stringent value for "
+                            "'train_fdr'.")
 
         feat_mean = feat_mean.append(pd.Series([0], index=["m0"]))
         feat_stdev = feat_stdev.append(pd.Series([1], index=["m0"]))
@@ -104,4 +105,27 @@ class MokapotSVM():
                                index=feat_names + ["m0"])
 
         weights["Unnormalized"] = weights.Normalized * feat_stdev - feat_mean
-        logging.info("Learned SVM weights:\n%s", weights)
+        #logging.info("Learned SVM weights:\n%s", weights)
+
+        return (model, weights, num_passed)
+
+    def percolate(self, psms: PsmDataset, train_fdr: float = 0.01,
+                  test_fdr: float = 0.01, max_iter: int = 10, folds: int = 3):
+        """Run the tradiational Percolator algorithm with cross-validation"""
+        train_sets, test_sets = psms.split(folds)
+
+        # Need kwargs for map:
+        map_args = [self.fit, train_sets, [train_fdr]*folds, [max_iter]*folds]
+        print(map_args)
+
+        # Train models in parallel:
+        trained_models = []
+        logging.info("Training SVM models by %i-fold cross-validation...", folds)
+        with ProcessPoolExecutor() as executor:
+            for split, results in enumerate(executor.map(*map_args)):
+                num_passed = str(results[2]).join("->")
+                trained_models.append(results[0])
+                logging.info("Split %i positive PSMs by iteration:\n\t%s",
+                             split+1, num_passed)
+
+        logging.info("Scoring PSMs...")
