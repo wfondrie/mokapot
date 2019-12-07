@@ -3,7 +3,7 @@ This module defines the model class to used my Molokai.
 """
 import logging
 from concurrent.futures import ProcessPoolExecutor
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -21,7 +21,6 @@ class MokapotSVM():
         """Initialize a MokapotSVM object"""
         self.weights = weights
         self.intercept = intercept
-        self.model = None
 
     def predict(self, psms: PsmDataset) -> np.ndarray:
         """
@@ -53,6 +52,20 @@ class MokapotSVM():
 
     def fit(self, psms: PsmDataset, train_fdr: float = 0.01,
             max_iter: int = 10) -> None:
+        """Fit an SVM model using the Percolator procedure"""
+        weights, feat_pass, num_pass = self.__fit(psms, train_fdr, max_iter)
+
+        if feat_pass > num_pass:
+            raise RuntimeError("No improvement was detected with model "
+                               "training. Consider a less stringent value for "
+                               "'train_fdr'")
+
+        logging.info("Learned SVM weights:\n%s", weights)
+        self.weights = weights.Unnormalized[:-1]
+        self.intercept = weights.Unnormalized[-1]
+
+    def __fit(self, psms: PsmDataset, train_fdr: float = 0.01,
+              max_iter: int = 10) -> Tuple[pd.DataFrame, str]:
         """Fit an SVM model using the Percolator procedure"""
         best_feat, feat_pass, feat_target = psms.find_best_feature(train_fdr)
         logging.info("Selected feature '%s' as initial direction.\n"
@@ -89,15 +102,7 @@ class MokapotSVM():
             num_pass = (target == 1).sum()
             num_passed.append(num_pass)
 
-            #logging.info("Iteration %i:\t Estimated %i PSMs with q<%.2f",
-            #             i+1, num_pass, train_fdr)
-
         # Wrap up
-        if feat_pass > num_pass:
-            logging.warning("No improvement was detected with model "
-                            "training. Consider a less stringent value for "
-                            "'train_fdr'.")
-
         feat_mean = feat_mean.append(pd.Series([0], index=["m0"]))
         feat_stdev = feat_stdev.append(pd.Series([1], index=["m0"]))
         weights = np.append(model.coef_, model.intercept_)
@@ -105,9 +110,11 @@ class MokapotSVM():
                                index=feat_names + ["m0"])
 
         weights["Unnormalized"] = weights.Normalized * feat_stdev - feat_mean
-        #logging.info("Learned SVM weights:\n%s", weights)
 
-        return (model, weights, num_passed)
+        return (weights, feat_pass, num_passed)
+
+    def predict(self, psms: Union[PsmDataset, Tuple[PsmDataset]]) -> None:
+        """Apply the learned model to """
 
     def percolate(self, psms: PsmDataset, train_fdr: float = 0.01,
                   test_fdr: float = 0.01, max_iter: int = 10, folds: int = 3):
@@ -115,7 +122,7 @@ class MokapotSVM():
         train_sets, test_sets = psms.split(folds)
 
         # Need kwargs for map:
-        map_args = [self.fit, train_sets, [train_fdr]*folds, [max_iter]*folds]
+        map_args = [self.__fit, train_sets, [train_fdr]*folds, [max_iter]*folds]
         print(map_args)
 
         # Train models in parallel:
@@ -129,3 +136,4 @@ class MokapotSVM():
                              split+1, num_passed)
 
         logging.info("Scoring PSMs...")
+        
