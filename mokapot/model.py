@@ -22,18 +22,14 @@ class MokapotSVM():
         self.weights = weights
         self.intercept = intercept
 
-    def predict(self, psms: PsmDataset) -> np.ndarray:
+    def predict(self, psms: PsmDataset) -> None:
         """
         Score the PSMs in a PsmDataset
 
         Parameters
         ----------
-        psms : mokapot.PsmDataset
+        psms
             The collection of PSMs to score.
-
-        Returns
-        -------
-        The SVM score for each sample.
         """
         if self.weights is None:
             raise ValueError("This model is untrained and unitialized. Run "
@@ -113,8 +109,6 @@ class MokapotSVM():
 
         return (weights, feat_pass, num_passed)
 
-    def predict(self, psms: Union[PsmDataset, Tuple[PsmDataset]]) -> None:
-        """Apply the learned model to """
 
     def percolate(self, psms: PsmDataset, train_fdr: float = 0.01,
                   test_fdr: float = 0.01, max_iter: int = 10, folds: int = 3):

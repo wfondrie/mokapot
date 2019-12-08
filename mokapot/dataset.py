@@ -4,6 +4,7 @@ normalize a collection of PSMs in PIN (Percolator INput) format.
 """
 import logging
 import gzip
+import random
 from typing import List, Union, Tuple
 
 import numpy as np
@@ -20,13 +21,12 @@ class PsmDataset():
         """Initialize a PsmDataset object."""
 
         self.data = psm_data
-        self.data = self.data.sample(frac=1).reset_index(drop=True)
         cols = self.columns
 
         # Verify necessary columns are present.
         required_cols = {"label", "scannr", "peptide", "proteins"}
         if not required_cols <= set(cols):
-            raise ValueError("Required columns are missing from the pin file."
+            raise ValueError("Required columns are missing."
                              f" These are {required_cols} and are case "
                              "insensitive.")
 
@@ -36,6 +36,7 @@ class PsmDataset():
             df_cols[cols.index(col_name)] = col_name
 
         self.data.columns = df_cols
+        self._metrics = None
 
     @property
     def columns(self) -> List[str]:
@@ -87,13 +88,20 @@ class PsmDataset():
 
     def split(self, folds): #-> Tuple[Tuple[PsmDataset]]:
         """Split into cross-validation folds"""
-        num = len(self.label) // folds
+        # Shuffle PSMs by scan
+        scan_cols = ["scannr"]
+        if "expmass" in self.columns:
+            group_cols += ["expmass"]
+
+        scans = [df for _, df in self.data.groupby(scan_cols)]
+        random.shuffle(scans)
 
         # Split the data evenly
-        splits = np.array_split(self.data, folds)
+        num = len(scans) // folds
+        splits = [scans[i:i+num] for i in range(0, len(scans), num)]
 
         if len(splits[-1]) < num:
-            splits[-2] = pd.concat(splits[-2:])
+            splits[-2] += splits[-1]
             splits = splits[:-1]
 
         # Assign train and test sets
