@@ -109,6 +109,7 @@ class PsmDataset():
         test = []
         for idx, test_split in enumerate(splits):
             train_split = pd.concat(splits[:idx] + splits[idx+1:])
+            test_split = pd.concat(test_split).reset_index(drop=True)
             train.append(PsmDataset(train_split))
             test.append(PsmDataset(test_split))
 

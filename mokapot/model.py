@@ -35,16 +35,47 @@ class MokapotSVM():
             raise ValueError("This model is untrained and unitialized. Run "
                              "fit() or load_weights() first.")
 
-        # Load features
-        feat_names = psms.features.columns.tolist()
-        if set(feat_names) != set(self.weights.index.tolist()):
-            raise ValueError("Features of the PsmDataset do not match the "
-                             "features used to fit the model.")
+        # For users, 'psms' should be a PsmDataset. However, if the MokapotSVM
+        # was fit using the 'percolate()' method, self.weights and
+        # self.intercept will be a tuple. In this case, this method should only
+        # use the first set of weights.
+        # NOTE: 'percolate()' calls 'predict' on a tuple of PsmDataset objects
+        # of equal length to self.weights.
 
-        feat = psms.features[self.weights.index].values
+        # The standard user case:
+        if isinstance(psms, PsmDataset):
+            psms += (psms,)
+            if isinstance(self.weights, pd.Series):
+                weights = (self.weights,)
+                intercepts = (self.intercept,)
+            else:
+                weights = self.weights[0]
+                intercepts = self.intercept[0]
 
-        # Make predictions
-        return np.dot(feat, self.weights.values) + self.intercept
+        # As used in 'percolate()'
+        else:
+            weights = self.weights
+            intercepts = self.intercept
+
+        # This should not be raised by users...
+        if len(psms) != len(self.weights):
+            raise ValueError("psms does not match weights")
+
+        predictions = []
+        for psm_set, weight, intercept in zip(psms, weights, intercepts):
+            feat_names = psm_set.features.columns.tolist()
+            if set(feat_names) != set(weight.index.tolist()):
+                raise ValueError("Features of the PsmDataset do not match the"
+                                 "features used to fit the MokapotSVM model")
+
+            feat = psm_set.features[weight.index].values
+            pred = np.dot(feat, weight.values) + intercept
+            predictions.append(pred)
+
+        if len(predictions) == 1:
+            predictions = predictions[0]
+
+        return predictions
 
     def fit(self, psms: PsmDataset, train_fdr: float = 0.01,
             max_iter: int = 10) -> None:
@@ -124,10 +155,11 @@ class MokapotSVM():
         logging.info("Training SVM models by %i-fold cross-validation...", folds)
         with ProcessPoolExecutor() as executor:
             for split, results in enumerate(executor.map(*map_args)):
-                num_passed = str(results[2]).join("->")
+                num_passed = [f"({i+1}) {n}" for i, n in enumerate(results[2])]
+                num_passed = num_passed.join("->")
                 trained_models.append(results[0])
                 logging.info("Split %i positive PSMs by iteration:\n\t%s",
                              split+1, num_passed)
 
         logging.info("Scoring PSMs...")
-        
+        scores = self.predict(test_sets)
