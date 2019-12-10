@@ -33,7 +33,7 @@ class PsmDataset():
                              "insensitive.")
 
         # Initialize scores attribute
-        self.scores = None
+        self._scores = None
 
         # Columns that define PSMs, Peptides, and Proteins
         self.psm_cols = ["scannr"]
@@ -52,6 +52,39 @@ class PsmDataset():
     def columns(self) -> List[str]:
         """Get the columns of the PIN files in lower case."""
         return self.data.columns.tolist()
+
+    @property
+    def scores(self) -> np.ndarray:
+        """Get the scores assigned to the PSMs of this dataset"""
+        return self._scores
+
+    @scores.setter
+    def scores(self, score_array: np.ndarray, test_fdr: float = 0.01) -> None:
+        """
+        Add scores to the PsmDataset.
+
+        Scores are calibrated such that by subtracting the score at the
+        specified 'test_fdr' and dividing by the median of the decoy scores.
+        Note that assigning new scores replaces any previous scores that were
+        stored.
+        """
+        psm_df = self.data[self.psm_cols+["label"]]
+
+        if len(score_array) != len(psm_df):
+            raise ValueError("Length of 'score_array' must be equal to the"
+                             " number of PSMs, %i", len(psm_df))
+
+        psm_df["score"] = score_array
+        psm_idx = psm_df.groupby(self.psm_cols).score.idxmax()
+        psms = psm_df.loc[psm_idx, :]
+
+        labels = (psms.label.values+1)/2
+        qvals = tdc(psms.score.values, target=labels)
+
+        decoy_med = qvals[~labels].median()
+        test_score = psms.score.values[qvals <= test_fdr].min()
+
+        self._scores = (score_array - test_score) / decoy_med
 
     @property
     def dual(self) -> bool:
@@ -135,7 +168,7 @@ class PsmDataset():
 
         else:
             if feature not in self.features.columns:
-                raise ValueError("Feature not found")
+                raise ValueError("Feature not found in self.features.")
 
             score_feat = self.features[feature].values
 

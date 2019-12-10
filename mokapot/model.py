@@ -66,7 +66,7 @@ class MokapotSVM():
         for psm_set, weight, intercept in zip(psms, weights, intercepts):
             feat_names = psm_set.features.columns.tolist()
             if set(feat_names) != set(weight.index.tolist()):
-                raise ValueError("Features of the PsmDataset do not match the"
+                raise ValueError("Features of the PsmDataset do not match the "
                                  "features used to fit the MokapotSVM model")
 
             feat = psm_set.features[weight.index].values
@@ -160,14 +160,7 @@ class MokapotSVM():
         logging.info("Training SVM models by %i-fold cross-validation...\n", folds)
         with ProcessPoolExecutor() as prc:
             for split, results in enumerate(prc.map(*map_args)):
-                logging.info("Fold %i -----------------------------------------"
-                             "--------------", split+1)
-                _best_feat_msg(results[3], results[1])
-                num_passed = [f"{n}" for i, n in enumerate(results[2])]
-                num_passed = "->".join(num_passed)
-                logging.info("Positive PSMs by iteration:")
-                logging.info("%s\n", num_passed)
-
+                _fold_msg(results[3], results[1], results[2], split+1)
                 self.weights.append(results[0].Unnormalized[:-1])
                 self.intercept.append(results[0].Unnormalized[-1])
 
@@ -176,9 +169,15 @@ class MokapotSVM():
         del train_sets
 
         logging.info("Scoring PSMs...")
+        scores = self.predict(test_sets)
+
+        # Add scores to test sets
+        for test_set, score in zip(test_sets, scores):
+            test_set.scores = score
+
         test_data = pd.concat([d.data for d in test_sets], ignore_index=True)
         dataset = PsmDataset(test_data)
-        dataset.scores = np.concatenate(self.predict(test_sets))
+        dataset.scores = np.concatenate([s for s in test_set.scores])
 
         return dataset.get_results()
 
@@ -189,3 +188,14 @@ def _best_feat_msg(best_feat, num_pass):
     logging.info("Selected feature '%s' as initial direction.", best_feat)
     logging.info("Could separate %i training set positives in that direction.",
                  num_pass)
+
+def _fold_msg(best_feat, best_feat_pass, num_pass, fold=None):
+    """Logging messages for each fold"""
+    if fold is not None:
+        logging.info("Fold %i ------------------------------------------------"
+                             "--------------", fold+1)
+        _best_feat_msg(best_feat, best_feat_pass)
+        logging.info("Positive PSMs by iteration:")
+        num_passed = [f"{n}" for i, n in enumerate(num_pass)]
+        num_passed = "->".join(num_passed)
+        logging.info("%s\n", num_passed)
