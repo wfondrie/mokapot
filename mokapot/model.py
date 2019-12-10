@@ -59,7 +59,7 @@ class MokapotSVM():
             intercepts = self.intercept
 
         # This should not be raised by users...
-        if len(psms) != len(self.weights):
+        if len(psms) != len(weights):
             raise ValueError("psms does not match weights")
 
         predictions = []
@@ -104,8 +104,13 @@ class MokapotSVM():
         # Normalize Features
         feat_names = psms.features.columns.tolist()
         feat_mean = psms.features.mean(axis=0)
-        feat_stdev = psms.features.std(axis=0) + np.finfo(float).tiny
-        norm_feat = (psms.features.copy() - feat_mean) / feat_stdev
+        feat_stdev = psms.features.std(axis=0)
+        norm_feat = psms.features.copy()
+        norm_feat = np.divide((norm_feat - feat_mean), feat_stdev,
+                              out=np.zeros_like(norm_feat),
+                              where=(feat_stdev != 0))
+
+        #norm_feat = (psms.features.copy() - feat_mean) / feat_stdev
 
         # Initialize Model and Training Variables
         target = feat_target
@@ -116,7 +121,7 @@ class MokapotSVM():
         num_passed = []
         for _ in range(max_iter):
             # Fit the model
-            samples = norm_feat.values[target.astype(bool), :]
+            samples = norm_feat[target.astype(bool), :]
             iter_targ = target[target.astype(bool)]
             model.fit(samples, iter_targ)
 
@@ -131,14 +136,20 @@ class MokapotSVM():
             num_pass = (target == 1).sum()
             num_passed.append(num_pass)
 
-        # Wrap up
-        feat_mean = feat_mean.append(pd.Series([0], index=["m0"]))
-        feat_stdev = feat_stdev.append(pd.Series([1], index=["m0"]))
-        weights = np.append(model.coef_, model.intercept_)
-        weights = pd.DataFrame({"Normalized": weights},
-                               index=feat_names + ["m0"])
+        # Wrap up: Transform weights to original feature scale.
+        weights = pd.DataFrame({"Normalized": model.coef_.flatten()},
+                               index=feat_names)
 
-        weights["Unnormalized"] = weights.Normalized * feat_stdev + feat_mean
+        weights["Unnormalized"] = np.divide(weights.Normalized, feat_stdev,
+                                            out=np.zeros_like(feat_stdev),
+                                            where=(feat_stdev != 0))
+
+        int_sub = (feat_mean / feat_stdev * weights.Normalized).sum()
+        norm_int = model.intercept_ - int_sub
+
+        weights = weights.append(pd.DataFrame({"Normalized": model.intercept_,
+                                               "Unnormalized": norm_int},
+                                              index=["m0"]))
 
         return (weights, feat_pass, num_passed, best_feat)
 
@@ -177,7 +188,7 @@ class MokapotSVM():
 
         test_data = pd.concat([d.data for d in test_sets], ignore_index=True)
         dataset = PsmDataset(test_data)
-        dataset.scores = np.concatenate([s for s in test_set.scores])
+        dataset.scores = np.concatenate([s.scores for s in test_sets])
 
         return dataset.get_results()
 
@@ -193,7 +204,7 @@ def _fold_msg(best_feat, best_feat_pass, num_pass, fold=None):
     """Logging messages for each fold"""
     if fold is not None:
         logging.info("Fold %i ------------------------------------------------"
-                             "--------------", fold+1)
+                     "--------------", fold)
         _best_feat_msg(best_feat, best_feat_pass)
         logging.info("Positive PSMs by iteration:")
         num_passed = [f"{n}" for i, n in enumerate(num_pass)]

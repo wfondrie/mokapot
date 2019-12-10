@@ -18,7 +18,8 @@ class PsmDataset():
     """
     Store a collection of PSMs.
     """
-    def __init__(self, psm_data = pd.DataFrame) -> None:
+    def __init__(self, psm_data = pd.DataFrame,
+                 normalization_fdr: float = 0.01) -> None:
         """Initialize a PsmDataset object."""
 
         self.data = psm_data
@@ -26,14 +27,16 @@ class PsmDataset():
         self.data.columns = self.data.columns.str.lower()
 
         # Verify necessary columns are present
-        required_cols = {"label", "scannr", "peptide", "proteins"}
+        required_cols = {"label", "specid", "scannr", "peptide", "proteins"}
         if not required_cols <= set(self.columns):
             raise ValueError("Required columns are missing."
                              f" These are {required_cols} and are case "
                              "insensitive.")
 
-        # Initialize scores attribute
+        # Initialize scores attributes
+        self._raw_scores = None
         self._scores = None
+        self._normalization_fdr = normalization_fdr
 
         # Columns that define PSMs, Peptides, and Proteins
         self.psm_cols = ["scannr"]
@@ -54,37 +57,49 @@ class PsmDataset():
         return self.data.columns.tolist()
 
     @property
+    def normalization_fdr(self) -> float:
+        """Get the normalization_fdr"""
+        return self._normalization_fdr
+
+    @normalization_fdr.setter
+    def normalization_fdr(self, fdr: float):
+        """Change the FDR threshold used for score normalization"""
+        self._normalization_fdr = fdr
+        if self._raw_scores is not None:
+            self.scores = self._raw_scores
+
+    @property
     def scores(self) -> np.ndarray:
         """Get the scores assigned to the PSMs of this dataset"""
         return self._scores
 
     @scores.setter
-    def scores(self, score_array: np.ndarray, test_fdr: float = 0.01) -> None:
+    def scores(self, score_array: np.ndarray) -> None:
         """
         Add scores to the PsmDataset.
 
-        Scores are calibrated such that by subtracting the score at the
+        Scores are normalized such that by subtracting the score at the
         specified 'test_fdr' and dividing by the median of the decoy scores.
         Note that assigning new scores replaces any previous scores that were
         stored.
         """
-        psm_df = self.data[self.psm_cols+["label"]]
+        self._raw_scores = score_array
+        fdr = self._normalization_fdr
 
+        psm_df = self.data.loc[:, self.psm_cols+["label"]]
         if len(score_array) != len(psm_df):
-            raise ValueError("Length of 'score_array' must be equal to the"
-                             " number of PSMs, %i", len(psm_df))
+            raise ValueError(f"Length of 'score_array' must be equal to the"
+                             " number of PSMs, {len(psm_df)}")
 
         psm_df["score"] = score_array
         psm_idx = psm_df.groupby(self.psm_cols).score.idxmax()
         psms = psm_df.loc[psm_idx, :]
-
         labels = (psms.label.values+1)/2
         qvals = tdc(psms.score.values, target=labels)
+        decoy_med = np.median(psms.score.values[~labels.astype(bool)])
+        test_score = np.min(psms.score.values[qvals <= fdr])
 
-        decoy_med = qvals[~labels].median()
-        test_score = psms.score.values[qvals <= test_fdr].min()
-
-        self._scores = (score_array - test_score) / decoy_med
+        self._scores = (score_array - test_score) / (test_score - decoy_med)
 
     @property
     def dual(self) -> bool:
@@ -172,7 +187,9 @@ class PsmDataset():
 
             score_feat = self.features[feature].values
 
-        psm_df = self.data[self.psm_cols+self.peptide_cols+self.protein_cols+["label"]]
+        cols = self.psm_cols + self.peptide_cols + self.protein_cols \
+            + ["label", "scanid"]
+        psm_df = self.data.loc[:, cols]
         psm_df["score"] = score_feat
 
         if not desc:
@@ -189,27 +206,25 @@ class PsmDataset():
         # TODO: Protein level FDR.
 
         out_list = []
-        cols = self.psm_cols + ["score", "mokapot q-values"] \
+        cols = ["specid"] + self.psm_cols + ["score", "mokapot q-values"] \
             + self.peptide_cols + self.protein_cols
 
         for dat in (psms, peptides):
-            dat["mokapot q-values"] = tdc(dat.score.values,
-                                          target=(dat.label.values+1)/2)
+            dat["mokapot q-values"] = tdc(dat.score.values, (dat.label+1)/2)
+            dat = dat.loc[dat.label == 1, :] # Keep only targets
+            dat = dat.sort_values("score", ascending=(not desc))
+            dat = dat.reset_index(drop=True)
+            dat = dat[cols]
 
-            dat.sort_values("score", ascending=(not desc), inplace=True)
-            dat.reset_index(drop=True, inplace=True)
-            dat=dat[cols]
-
+            dat.rename(columns={"specid": "PSMid"})
             if feature is None:
-                dat = dat.rename({"score": "mokapot score"})
+                dat = dat.rename(columns={"score": "mokapot score"})
             else:
-                dat = dat.rename({"score": feature})
+                dat = dat.rename(columns={"score": feature})
 
             out_list.append(dat)
 
         return tuple(out_list)
-
-
 
 # Functions -------------------------------------------------------------------
 def read_pin(pin_files: Union[str, Tuple[str]]) -> PsmDataset:
