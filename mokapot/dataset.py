@@ -5,12 +5,13 @@ normalize a collection of PSMs in PIN (Percolator INput) format.
 import logging
 import gzip
 import random
+import itertools
 from typing import List, Union, Tuple
 
 import numpy as np
 import pandas as pd
 
-from mokapot.qvalues import tdc
+from .qvalues import tdc
 
 # Classes ---------------------------------------------------------------------
 class PsmDataset():
@@ -21,27 +22,36 @@ class PsmDataset():
         """Initialize a PsmDataset object."""
 
         self.data = psm_data
-        cols = self.columns
+        # Change key cols to lowercase for consistency
+        self.data.columns = self.data.columns.str.lower()
 
-        # Verify necessary columns are present.
+        # Verify necessary columns are present
         required_cols = {"label", "scannr", "peptide", "proteins"}
-        if not required_cols <= set(cols):
+        if not required_cols <= set(self.columns):
             raise ValueError("Required columns are missing."
                              f" These are {required_cols} and are case "
                              "insensitive.")
 
-        # Change key cols to lowercase for consistency
-        df_cols = self.data.columns.tolist()
-        for col_name in required_cols:
-            df_cols[cols.index(col_name)] = col_name
+        # Initialize scores attribute
+        self.scores = None
 
-        self.data.columns = df_cols
-        self._metrics = None
+        # Columns that define PSMs, Peptides, and Proteins
+        self.psm_cols = ["scannr"]
+        if "expmass" in self.columns:
+            self.psm_cols += ["expmass"]
+        if "fileidx" in self.columns:
+            self.psm_cols += ["fileidx"]
+        if "file" in self.columns:
+            self.psm_cols += ["file"]
+
+        self.peptide_cols = ["peptide"]
+        self.protein_cols = ["proteins"]
+
 
     @property
     def columns(self) -> List[str]:
         """Get the columns of the PIN files in lower case."""
-        return [c.lower() for c in self.data.columns.tolist()]
+        return self.data.columns.tolist()
 
     @property
     def dual(self) -> bool:
@@ -88,12 +98,8 @@ class PsmDataset():
 
     def split(self, folds): #-> Tuple[Tuple[PsmDataset]]:
         """Split into cross-validation folds"""
-        # Shuffle PSMs by scan
-        scan_cols = ["scannr"]
-        if "expmass" in self.columns:
-            group_cols += ["expmass"]
-
-        scans = [df for _, df in self.data.groupby(scan_cols)]
+        # Group by scan columns and shuffle
+        scans = [df for _, df in self.data.groupby(self.psm_cols)]
         random.shuffle(scans)
 
         # Split the data evenly
@@ -104,16 +110,72 @@ class PsmDataset():
             splits[-2] += splits[-1]
             splits = splits[:-1]
 
+        # This part is slow :/
+        splits = [pd.concat(s, copy=False) for s in splits]
+
         # Assign train and test sets
         train = []
         test = []
         for idx, test_split in enumerate(splits):
-            train_split = pd.concat(splits[:idx] + splits[idx+1:])
-            test_split = pd.concat(test_split).reset_index(drop=True)
+            train_split = pd.concat(splits[:idx]+splits[idx+1:],
+                                    ignore_index=True)
+
             train.append(PsmDataset(train_split))
             test.append(PsmDataset(test_split))
 
         return (tuple(train), tuple(test))
+
+    def get_results(self, feature: str = None, desc: bool = True) \
+        -> Tuple[pd.DataFrame]:
+        """Get the PSMs and peptides with FDR estimates. Proteins to come"""
+        if feature is None:
+            score_feat = self.scores
+            if score_feat is None:
+                raise ValueError("No Mokapot scores have been assigned.")
+
+        else:
+            if feature not in self.features.columns:
+                raise ValueError("Feature not found")
+
+            score_feat = self.features[feature].values
+
+        psm_df = self.data[self.psm_cols+self.peptide_cols+self.protein_cols+["label"]]
+        psm_df["score"] = score_feat
+
+        if not desc:
+            psm_df.score = -psm_df.score
+
+        # PSM
+        psm_idx = psm_df.groupby(self.psm_cols).score.idxmax()
+        psms = psm_df.loc[psm_idx, :]
+
+        # Peptides
+        peptide_idx = psms.groupby(self.peptide_cols).score.idxmax()
+        peptides = psms.loc[peptide_idx, :]
+
+        # TODO: Protein level FDR.
+
+        out_list = []
+        cols = self.psm_cols + ["score", "mokapot q-values"] \
+            + self.peptide_cols + self.protein_cols
+
+        for dat in (psms, peptides):
+            dat["mokapot q-values"] = tdc(dat.score.values,
+                                          target=(dat.label.values+1)/2)
+
+            dat.sort_values("score", ascending=(not desc), inplace=True)
+            dat.reset_index(drop=True, inplace=True)
+            dat=dat[cols]
+
+            if feature is None:
+                dat = dat.rename({"score": "mokapot score"})
+            else:
+                dat = dat.rename({"score": feature})
+
+            out_list.append(dat)
+
+        return tuple(out_list)
+
 
 
 # Functions -------------------------------------------------------------------

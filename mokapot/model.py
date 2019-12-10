@@ -1,6 +1,7 @@
 """
 This module defines the model class to used my Molokai.
 """
+import copy
 import logging
 from concurrent.futures import ProcessPoolExecutor
 from typing import Tuple, Union
@@ -9,8 +10,8 @@ import numpy as np
 import pandas as pd
 import sklearn.svm as svm
 
-from mokapot.dataset import PsmDataset
-from mokapot.qvalues import tdc
+from .dataset import PsmDataset
+from .qvalues import tdc
 
 class MokapotSVM():
     """
@@ -44,7 +45,7 @@ class MokapotSVM():
 
         # The standard user case:
         if isinstance(psms, PsmDataset):
-            psms += (psms,)
+            psms = (psms,)
             if isinstance(self.weights, pd.Series):
                 weights = (self.weights,)
                 intercepts = (self.intercept,)
@@ -78,11 +79,12 @@ class MokapotSVM():
         return predictions
 
     def fit(self, psms: PsmDataset, train_fdr: float = 0.01,
-            max_iter: int = 10) -> None:
+            max_iter: int = 10, progress_bar: bool = True) -> None:
         """Fit an SVM model using the Percolator procedure"""
-        weights, feat_pass, num_pass = self.__fit(psms, train_fdr, max_iter)
+        res = self._fit(psms, train_fdr, max_iter, progress_bar)
+        weights, feat_pass, num_pass, _ = res
 
-        if feat_pass > num_pass:
+        if feat_pass > num_pass[-1]:
             raise RuntimeError("No improvement was detected with model "
                                "training. Consider a less stringent value for "
                                "'train_fdr'")
@@ -91,13 +93,13 @@ class MokapotSVM():
         self.weights = weights.Unnormalized[:-1]
         self.intercept = weights.Unnormalized[-1]
 
-    def __fit(self, psms: PsmDataset, train_fdr: float = 0.01,
-              max_iter: int = 10) -> Tuple[pd.DataFrame, str]:
+    def _fit(self, psms: PsmDataset, train_fdr: float = 0.01,
+             max_iter: int = 10, msg: bool = True) -> Tuple[pd.DataFrame, str]:
         """Fit an SVM model using the Percolator procedure"""
         best_feat, feat_pass, feat_target = psms.find_best_feature(train_fdr)
-        logging.info("Selected feature '%s' as initial direction.\n"
-                     "\t-> Could separate %i training set positives "
-                     "in that direction.", best_feat, feat_pass)
+
+        if msg:
+            _best_feat_msg(best_feat, feat_pass)
 
         # Normalize Features
         feat_names = psms.features.columns.tolist()
@@ -112,7 +114,7 @@ class MokapotSVM():
         # Begin training loop
         target = feat_target
         num_passed = []
-        for i in range(max_iter):
+        for _ in range(max_iter):
             # Fit the model
             samples = norm_feat.values[target.astype(bool), :]
             iter_targ = target[target.astype(bool)]
@@ -136,30 +138,54 @@ class MokapotSVM():
         weights = pd.DataFrame({"Normalized": weights},
                                index=feat_names + ["m0"])
 
-        weights["Unnormalized"] = weights.Normalized * feat_stdev - feat_mean
+        weights["Unnormalized"] = weights.Normalized * feat_stdev + feat_mean
 
-        return (weights, feat_pass, num_passed)
+        return (weights, feat_pass, num_passed, best_feat)
 
 
     def percolate(self, psms: PsmDataset, train_fdr: float = 0.01,
-                  test_fdr: float = 0.01, max_iter: int = 10, folds: int = 3):
+                  test_fdr: float = 0.01, max_iter: int = 10, folds: int = 3) \
+                  -> Tuple[pd.DataFrame]:
         """Run the tradiational Percolator algorithm with cross-validation"""
+        logging.info(f"Splitting data into {folds} folds...")
         train_sets, test_sets = psms.split(folds)
 
-        # Need kwargs for map:
-        map_args = [self.__fit, train_sets, [train_fdr]*folds, [max_iter]*folds]
-        print(map_args)
+        # Need args for map:
+        map_args = [self._fit, train_sets, [train_fdr]*folds,
+                    [max_iter]*folds, [False]*folds]
 
         # Train models in parallel:
-        trained_models = []
-        logging.info("Training SVM models by %i-fold cross-validation...", folds)
-        with ProcessPoolExecutor() as executor:
-            for split, results in enumerate(executor.map(*map_args)):
-                num_passed = [f"({i+1}) {n}" for i, n in enumerate(results[2])]
-                num_passed = num_passed.join("->")
-                trained_models.append(results[0])
-                logging.info("Split %i positive PSMs by iteration:\n\t%s",
-                             split+1, num_passed)
+        self.weights = []
+        self.intercept = []
+        logging.info("Training SVM models by %i-fold cross-validation...\n", folds)
+        with ProcessPoolExecutor() as prc:
+            for split, results in enumerate(prc.map(*map_args)):
+                logging.info("Fold %i -----------------------------------------"
+                             "--------------", split+1)
+                _best_feat_msg(results[3], results[1])
+                num_passed = [f"{n}" for i, n in enumerate(results[2])]
+                num_passed = "->".join(num_passed)
+                logging.info("Positive PSMs by iteration:")
+                logging.info("%s\n", num_passed)
+
+                self.weights.append(results[0].Unnormalized[:-1])
+                self.intercept.append(results[0].Unnormalized[-1])
+
+        self.weights = tuple(self.weights)
+        self.intercept = tuple(self.intercept)
+        del train_sets
 
         logging.info("Scoring PSMs...")
-        scores = self.predict(test_sets)
+        test_data = pd.concat([d.data for d in test_sets], ignore_index=True)
+        dataset = PsmDataset(test_data)
+        dataset.scores = np.concatenate(self.predict(test_sets))
+
+        return dataset.get_results()
+
+
+# Utility Functions -----------------------------------------------------------
+def _best_feat_msg(best_feat, num_pass):
+    """Log the best feature and the number of positive PSMs."""
+    logging.info("Selected feature '%s' as initial direction.", best_feat)
+    logging.info("Could separate %i training set positives in that direction.",
+                 num_pass)

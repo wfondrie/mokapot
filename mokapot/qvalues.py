@@ -87,7 +87,10 @@ def tdc(metric, target, desc=True):
     cum_decoys = ((target-1)**2).cumsum()
     num_total = cum_targets + cum_decoys
 
-    fdr = (cum_decoys + 1) / (cum_targets + np.finfo(float).tiny)
+    # Handles zeros in denominator
+    fdr = np.divide((cum_decoys + 1), cum_targets,
+                    out=np.ones_like(cum_targets, dtype=float),
+                    where=(cum_targets != 0))
 
     # Calculate q-values
     unique_metric, indices = np.unique(metric, return_counts=True)
