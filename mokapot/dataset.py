@@ -188,7 +188,7 @@ class PsmDataset():
             score_feat = self.features[feature].values
 
         cols = self.psm_cols + self.peptide_cols + self.protein_cols \
-            + ["label", "scanid"]
+            + ["label", "specid"]
         psm_df = self.data.loc[:, cols]
         psm_df["score"] = score_feat
 
@@ -206,17 +206,17 @@ class PsmDataset():
         # TODO: Protein level FDR.
 
         out_list = []
-        cols = ["specid"] + self.psm_cols + ["score", "mokapot q-values"] \
+        cols = ["specid"] + self.psm_cols + ["score", "q-value"] \
             + self.peptide_cols + self.protein_cols
 
         for dat in (psms, peptides):
-            dat["mokapot q-values"] = tdc(dat.score.values, (dat.label+1)/2)
+            dat["q-value"] = tdc(dat.score.values, (dat.label+1)/2)
             dat = dat.loc[dat.label == 1, :] # Keep only targets
             dat = dat.sort_values("score", ascending=(not desc))
             dat = dat.reset_index(drop=True)
             dat = dat[cols]
 
-            dat.rename(columns={"specid": "PSMid"})
+            dat = dat.rename(columns={"specid": "PSMId"})
             if feature is None:
                 dat = dat.rename(columns={"score": "mokapot score"})
             else:
