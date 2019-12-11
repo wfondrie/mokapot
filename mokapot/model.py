@@ -1,7 +1,7 @@
 """
 This module defines the model class to used my Molokai.
 """
-import copy
+import os
 import logging
 from concurrent.futures import ProcessPoolExecutor
 from typing import Tuple, Union
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import sklearn.svm as svm
 
-from .dataset import PsmDataset
+from .dataset import PsmDataset, merge
 from .qvalues import tdc
 
 class MokapotSVM():
@@ -136,6 +136,9 @@ class MokapotSVM():
             num_pass = (target == 1).sum()
             num_passed.append(num_pass)
 
+        if msg:
+            _fold_msg(best_feat, feat_pass, num_passed)
+
         # Wrap up: Transform weights to original feature scale.
         weights = pd.DataFrame({"Normalized": model.coef_.flatten()},
                                index=feat_names)
@@ -155,10 +158,11 @@ class MokapotSVM():
 
 
     def percolate(self, psms: PsmDataset, train_fdr: float = 0.01,
-                  test_fdr: float = 0.01, max_iter: int = 10, folds: int = 3) \
+                  test_fdr: float = 0.01, max_iter: int = 10,
+                  folds: int = 3, max_workers: int = None) \
                   -> Tuple[pd.DataFrame]:
         """Run the tradiational Percolator algorithm with cross-validation"""
-        logging.info(f"Splitting data into {folds} folds...")
+        logging.info(f"Splitting PSMs into {folds} folds...")
         train_sets, test_sets = psms.split(folds)
 
         # Need args for map:
@@ -169,7 +173,7 @@ class MokapotSVM():
         self.weights = []
         self.intercept = []
         logging.info("Training SVM models by %i-fold cross-validation...\n", folds)
-        with ProcessPoolExecutor() as prc:
+        with ProcessPoolExecutor(max_workers=max_workers) as prc:
             for split, results in enumerate(prc.map(*map_args)):
                 _fold_msg(results[3], results[1], results[2], split+1)
                 self.weights.append(results[0].Unnormalized[:-1])
@@ -184,12 +188,10 @@ class MokapotSVM():
 
         # Add scores to test sets
         for test_set, score in zip(test_sets, scores):
+            test_set.normalization_fdr = test_fdr
             test_set.scores = score
 
-        test_data = pd.concat([d.data for d in test_sets], ignore_index=True)
-        dataset = PsmDataset(test_data)
-        dataset.scores = np.concatenate([s.scores for s in test_sets])
-
+        dataset = merge(test_sets)
         return dataset.get_results()
 
 
@@ -206,7 +208,8 @@ def _fold_msg(best_feat, best_feat_pass, num_pass, fold=None):
         logging.info("Fold %i ------------------------------------------------"
                      "--------------", fold)
         _best_feat_msg(best_feat, best_feat_pass)
-        logging.info("Positive PSMs by iteration:")
-        num_passed = [f"{n}" for i, n in enumerate(num_pass)]
-        num_passed = "->".join(num_passed)
-        logging.info("%s\n", num_passed)
+
+    logging.info("Positive PSMs by iteration:")
+    num_passed = [f"{n}" for i, n in enumerate(num_pass)]
+    num_passed = "->".join(num_passed)
+    logging.info("%s\n", num_passed)

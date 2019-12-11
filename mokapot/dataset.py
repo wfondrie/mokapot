@@ -18,38 +18,54 @@ class PsmDataset():
     """
     Store a collection of PSMs.
     """
-    def __init__(self, psm_data = pd.DataFrame,
+    def __init__(self, psm_data = pd.DataFrame, metadata: Tuple[str] = None,
                  normalization_fdr: float = 0.01) -> None:
         """Initialize a PsmDataset object."""
-
         self.data = psm_data
+
         # Change key cols to lowercase for consistency
-        self.data.columns = self.data.columns.str.lower()
+        #self.data.columns = self.data.columns.str.lower()
+        cols = self.data.columns #.str.lower()
 
         # Verify necessary columns are present
         required_cols = {"label", "specid", "scannr", "peptide", "proteins"}
-        if not required_cols <= set(self.columns):
+        if not required_cols <= set(cols.str.lower()):
             raise ValueError("Required columns are missing."
                              f" These are {required_cols} and are case "
                              "insensitive.")
+
+        # Verify additional specified metadata is present
+        if metadata is not None:
+            self._metadata_cols = metadata
+            if set(metadata) <= set(cols):
+                raise ValueError("One or more columns specified by 'metadata' "
+                                 "is not present. Are they capitalized "
+                                 "correctly?")
+        else:
+            metadata = []
+            self._metadata_cols = []
 
         # Initialize scores attributes
         self._raw_scores = None
         self._scores = None
         self._normalization_fdr = normalization_fdr
 
-        # Columns that define PSMs, Peptides, and Proteins
-        self.psm_cols = ["scannr"]
-        if "expmass" in self.columns:
-            self.psm_cols += ["expmass"]
-        if "fileidx" in self.columns:
-            self.psm_cols += ["fileidx"]
-        if "file" in self.columns:
-            self.psm_cols += ["file"]
+        # Columns that define metadata, PSMs, Peptides, and Proteins
+        psm_cols = ["scannr", "expmass"]
+        peptide_cols = ["peptide"]
+        protein_cols = ["proteins"]
+        label_col = ["label"]
+        specid_col = ["specid"]
+        other_cols = ["calcmass"]
+        nonfeat_cols = sum([psm_cols, peptide_cols, protein_cols, label_col,
+                            specid_col, other_cols, metadata], [])
 
-        self.peptide_cols = ["peptide"]
-        self.protein_cols = ["proteins"]
-
+        self._psm_cols = [c for c in cols if c.lower() in psm_cols]
+        self._peptide_cols = [c for c in cols if c.lower() in peptide_cols]
+        self._protein_cols = [c for c in cols if c.lower() in protein_cols]
+        self._label_col = [c for c in cols if c.lower() in label_col]
+        self._feature_cols = [c for c in cols if c.lower() not in nonfeat_cols]
+        self._specid_col = [c for c in cols if c.lower() in specid_col]
 
     @property
     def columns(self) -> List[str]:
@@ -85,16 +101,16 @@ class PsmDataset():
         """
         self._raw_scores = score_array
         fdr = self._normalization_fdr
+        psm_df = self.data.loc[:, self._psm_cols + self._label_col]
 
-        psm_df = self.data.loc[:, self.psm_cols+["label"]]
         if len(score_array) != len(psm_df):
             raise ValueError(f"Length of 'score_array' must be equal to the"
                              " number of PSMs, {len(psm_df)}")
 
         psm_df["score"] = score_array
-        psm_idx = psm_df.groupby(self.psm_cols).score.idxmax()
+        psm_idx = _groupby_max(psm_df, self._psm_cols, "score")
         psms = psm_df.loc[psm_idx, :]
-        labels = (psms.label.values+1)/2
+        labels = (psms[self._label_col[0]].values + 1) / 2
         qvals = tdc(psms.score.values, target=labels)
         decoy_med = np.median(psms.score.values[~labels.astype(bool)])
         test_score = np.min(psms.score.values[qvals <= fdr])
@@ -115,21 +131,12 @@ class PsmDataset():
     @property
     def features(self) -> pd.DataFrame:
         """Get the features of the PsmDataset"""
-        cols = self.columns
-        feat_end = cols.index("peptide")
-
-        # Crux adds "ExpMass" and "CalcMass" columns after "ScanNr"
-        if "calcmass" in self.columns:
-            feat_start = cols.index("calcmass") + 1
-        else:
-            feat_start = cols.index("scannr") + 1
-
-        return self.data.iloc[:, feat_start:feat_end]
+        return self.data.loc[:, self._feature_cols]
 
     @property
     def label(self) -> np.ndarray:
         """Get the data PSM labels."""
-        return self.data.label.values
+        return self.data[self._label_col[0]].values
 
     def find_best_feature(self, fdr: float) -> None:
         """Find the best feature to separate targets from decoys."""
@@ -146,8 +153,7 @@ class PsmDataset():
 
     def split(self, folds): #-> Tuple[Tuple[PsmDataset]]:
         """Split into cross-validation folds"""
-        # Group by scan columns and shuffle
-        scans = [df for _, df in self.data.groupby(self.psm_cols)]
+        scans = list(self.data.groupby(self._psm_cols, sort=False).indices.values())
         random.shuffle(scans)
 
         # Split the data evenly
@@ -158,8 +164,8 @@ class PsmDataset():
             splits[-2] += splits[-1]
             splits = splits[:-1]
 
-        # This part is slow :/
-        splits = [pd.concat(s, copy=False) for s in splits]
+        split_idx = [_get_indices(s) for s in splits]
+        splits = [self.data.loc[i, :] for i in split_idx]
 
         # Assign train and test sets
         train = []
@@ -187,37 +193,40 @@ class PsmDataset():
 
             score_feat = self.features[feature].values
 
-        cols = self.psm_cols + self.peptide_cols + self.protein_cols \
-            + ["label", "specid"]
+        cols = sum([self._psm_cols, self._peptide_cols, self._protein_cols,
+                    self._label_col, self._metadata_cols, self._specid_col],
+                   [])
+
         psm_df = self.data.loc[:, cols]
         psm_df["score"] = score_feat
 
         if not desc:
             psm_df.score = -psm_df.score
 
-        # PSM
-        psm_idx = psm_df.groupby(self.psm_cols).score.idxmax()
+        # PSMs
+        psm_idx = _groupby_max(psm_df, self._psm_cols, "score")
         psms = psm_df.loc[psm_idx, :]
 
         # Peptides
-        peptide_idx = psms.groupby(self.peptide_cols).score.idxmax()
+        peptide_idx = _groupby_max(psms, self._peptide_cols, "score")
         peptides = psms.loc[peptide_idx, :]
 
         # TODO: Protein level FDR.
 
         out_list = []
-        cols = ["specid"] + self.psm_cols + ["score", "q-value"] \
-            + self.peptide_cols + self.protein_cols
+        keep = sum([self._metadata_cols, self._specid_col,
+                    ["score", "q-value"], self._peptide_cols,
+                    self._protein_cols], [])
 
         for dat in (psms, peptides):
-            targ = (dat.label+1)/2
+            targ = (dat[self._label_col[0]].values + 1) / 2
             dat["q-value"] = tdc(dat.score.values, targ)
             dat = dat.loc[targ.astype(bool), :] # Keep only targets
             dat = dat.sort_values("score", ascending=(not desc))
             dat = dat.reset_index(drop=True)
-            dat = dat[cols]
+            dat = dat[keep]
 
-            dat = dat.rename(columns={"specid": "PSMId"})
+            dat = dat.rename(columns={self._specid_col[0]: "PSMId"})
             if feature is None:
                 dat = dat.rename(columns={"score": "mokapot score"})
             else:
@@ -236,9 +245,26 @@ def read_pin(pin_files: Union[str, Tuple[str]]) -> PsmDataset:
     psm_data = pd.concat([_read_pin(f) for f in pin_files])
     return PsmDataset(psm_data)
 
+
 def read_mpin(mpin_files: Union[str, Tuple[str]]) -> PsmDataset:
     """Read a Mokapot input (mpin) file to a PsmDataset"""
     pass
+
+
+def merge(psms: Tuple[PsmDataset]):
+    """Merge multiple PsmDataset objects into one."""
+    psm_data = pd.concat([p.data for p in psms], ignore_index=True)
+    new_psms = PsmDataset(psm_data)
+    scores = [p.scores for p in psms]
+    scores_exist = [s is not None for s in scores]
+
+    if all(scores_exist):
+        new_psms.scores = np.concatenate(scores)
+    elif any(scores_exist):
+        logging.warning("One or more PsmDataset did not have scores "
+                        "assigned. Scores were reset with merge.")
+
+    return new_psms
 
 # Utility Functions -----------------------------------------------------------
 def _read_pin(pin_file):
@@ -255,3 +281,11 @@ def _read_pin(pin_file):
 
     pin_df = pd.DataFrame(columns=header, data=rows)
     return pin_df.apply(pd.to_numeric, errors="ignore")
+
+def _get_indices(split):
+    """Get the indices from split"""
+    return list(itertools.chain.from_iterable(split))
+
+def _groupby_max(df, by, max_col):
+    """Quickly get the indices for the maximum value of col"""
+    return df.sort_values(by+[max_col]).drop_duplicates(by, keep="last").index
