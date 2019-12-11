@@ -210,8 +210,9 @@ class PsmDataset():
             + self.peptide_cols + self.protein_cols
 
         for dat in (psms, peptides):
-            dat["q-value"] = tdc(dat.score.values, (dat.label+1)/2)
-            dat = dat.loc[dat.label == 1, :] # Keep only targets
+            targ = (dat.label+1)/2
+            dat["q-value"] = tdc(dat.score.values, targ)
+            dat = dat.loc[targ.astype(bool), :] # Keep only targets
             dat = dat.sort_values("score", ascending=(not desc))
             dat = dat.reset_index(drop=True)
             dat = dat[cols]
