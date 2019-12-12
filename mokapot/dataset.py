@@ -204,6 +204,8 @@ class PsmDataset():
             psm_df.score = -psm_df.score
 
         # PSMs
+        logging.info("Conducting target-decoy competition.")
+        logging.info("Selecting one PSM per %s...", "+".join(self._psm_cols))
         psm_idx = _groupby_max(psm_df, self._psm_cols, "score")
         psms = psm_df.loc[psm_idx, :]
 
@@ -218,13 +220,18 @@ class PsmDataset():
                     ["score", "q-value"], self._peptide_cols,
                     self._protein_cols], [])
 
-        for dat in (psms, peptides):
+        labs = ("PSMs", "peptides")
+        for dat, lab in zip((psms, peptides), labs):
             targ = (dat[self._label_col[0]].values + 1) / 2
             dat["q-value"] = tdc(dat.score.values, targ)
             dat = dat.loc[targ.astype(bool), :] # Keep only targets
             dat = dat.sort_values("score", ascending=(not desc))
             dat = dat.reset_index(drop=True)
             dat = dat[keep]
+
+            num_found = (dat["q-value"] <= self._normalization_fdr).sum()
+            logging.info("-> Found %i %s at %2.f%% FDR.", num_found, lab,
+                         self._normalization_fdr*100)
 
             dat = dat.rename(columns={self._specid_col[0]: "PSMId"})
             if feature is None:

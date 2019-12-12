@@ -205,8 +205,7 @@ def _best_feat_msg(best_feat, num_pass):
 def _fold_msg(best_feat, best_feat_pass, num_pass, fold=None):
     """Logging messages for each fold"""
     if fold is not None:
-        logging.info("Fold %i ------------------------------------------------"
-                     "--------------", fold)
+        logging.info("Fold %i", fold)
         _best_feat_msg(best_feat, best_feat_pass)
 
     logging.info("Positive PSMs by iteration:")
