@@ -2,23 +2,27 @@
 This module contains the classes and methods needed to import, validate and
 normalize a collection of PSMs in PIN (Percolator INput) format.
 """
+from __future__ import annotations
 import logging
 import gzip
 import random
 import itertools
-from typing import List, Union, Tuple
+from concurrent.futures import ProcessPoolExecutor
+from typing import List, Union, Tuple, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from .qvalues import tdc
+if TYPE_CHECKING: # Needed to avoid circular imports for type hints :P
+    from .model import MokapotModel
 
 # Classes ---------------------------------------------------------------------
 class PsmDataset():
     """
     Store a collection of PSMs.
     """
-    def __init__(self, psm_data = pd.DataFrame, metadata: Tuple[str] = None,
+    def __init__(self, psm_data: pd.DataFrame, metadata: Tuple[str] = None,
                  normalization_fdr: float = 0.01) -> None:
         """Initialize a PsmDataset object."""
         self.data = psm_data
@@ -151,7 +155,7 @@ class PsmDataset():
 
         return best_feat, num_passing[best_feat], target
 
-    def split(self, folds): #-> Tuple[Tuple[PsmDataset]]:
+    def split(self, folds) -> Tuple[Tuple[PsmDataset]]:
         """Split into cross-validation folds"""
         scans = list(self.data.groupby(self._psm_cols, sort=False).indices.values())
         random.shuffle(scans)
@@ -164,7 +168,7 @@ class PsmDataset():
             splits[-2] += splits[-1]
             splits = splits[:-1]
 
-        split_idx = [_get_indices(s) for s in splits]
+        split_idx = [_flatten(s) for s in splits]
         splits = [self.data.loc[i, :] for i in split_idx]
 
         # Assign train and test sets
@@ -177,7 +181,7 @@ class PsmDataset():
             train.append(PsmDataset(train_split))
             test.append(PsmDataset(test_split))
 
-        return (tuple(train), tuple(test))
+        return (tuple(train), tuple(test), tuple(splits))
 
     def get_results(self, feature: str = None, desc: bool = True) \
         -> Tuple[pd.DataFrame]:
@@ -243,6 +247,41 @@ class PsmDataset():
 
         return tuple(out_list)
 
+    def percolate(self, estimator: MokapotModel, train_fdr: float = 0.01,
+                  test_fdr: float = 0.01, max_iter: int = 10,
+                  folds: int = 3, max_workers: int = None,
+                  **kwargs) -> None:
+        """Run the tradiational Percolator algorithm with cross-validation"""
+        logging.info("Splitting PSMs into %i folds...", folds)
+        train_sets, test_sets, test_idx = self.split(folds)
+
+        # Need args for map:
+        map_args = [estimator._fit, train_sets, [train_fdr]*folds,
+                    [max_iter]*folds, [False]*folds, [kwargs]*folds]
+
+        # Train models in parallel:
+        estimator.estimator = []
+        logging.info("Training SVM models by %i-fold cross-validation...\n", folds)
+        with ProcessPoolExecutor(max_workers=max_workers) as prc:
+            for split, results in enumerate(prc.map(*map_args)):
+                _fold_msg(results[3], results[1], results[2], split+1)
+                estimator.estimator.append(results[0])
+
+        estimator.estimator = tuple(estimator.estimator)
+        del train_sets # clear some memory
+
+        logging.info("Scoring PSMs...")
+        scores = estimator.predict(test_sets)
+
+        # Add scores to test sets
+        for test_set, score in zip(test_sets, scores):
+            test_set.normalization_fdr = test_fdr
+            test_set.scores = score
+
+        scores = np.concatenate([s.scores for s in test_sets])
+        test_idx = np.concatenate(test_idx)
+        self.scores = scores[test_idx]
+
 # Functions -------------------------------------------------------------------
 def read_pin(pin_files: Union[str, Tuple[str]]) -> PsmDataset:
     """Read a Percolator pin file to a PsmDataset"""
@@ -289,10 +328,32 @@ def _read_pin(pin_file):
     pin_df = pd.DataFrame(columns=header, data=rows)
     return pin_df.apply(pd.to_numeric, errors="ignore")
 
-def _get_indices(split):
+
+def _flatten(split):
     """Get the indices from split"""
     return list(itertools.chain.from_iterable(split))
+
 
 def _groupby_max(df, by, max_col):
     """Quickly get the indices for the maximum value of col"""
     return df.sort_values(by+[max_col]).drop_duplicates(by, keep="last").index
+
+
+def _best_feat_msg(best_feat, num_pass):
+    """Log the best feature and the number of positive PSMs."""
+    logging.info("Selected feature '%s' as initial direction.", best_feat)
+    logging.info("Could separate %i training set positives in that direction.",
+                 num_pass)
+
+
+def _fold_msg(best_feat, best_feat_pass, num_pass, fold=None):
+    """Logging messages for each fold"""
+    if fold is not None:
+        logging.info("Fold %i", fold)
+        _best_feat_msg(best_feat, best_feat_pass)
+
+    logging.info("Positive PSMs by iteration:")
+    num_passed = [f"{n}" for i, n in enumerate(num_pass)]
+    num_passed = "->".join(num_passed)
+    logging.info("%s\n", num_passed)
+
