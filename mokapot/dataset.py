@@ -14,8 +14,9 @@ import numpy as np
 import pandas as pd
 
 from .qvalues import tdc
+from .utils import unnormalize_weights
 if TYPE_CHECKING: # Needed to avoid circular imports for type hints :P
-    from .model import MokapotModel
+    from .model import Classifier
 
 # Classes ---------------------------------------------------------------------
 class PsmDataset():
@@ -144,7 +145,9 @@ class PsmDataset():
 
     def find_best_feature(self, fdr: float) -> None:
         """Find the best feature to separate targets from decoys."""
+        print("what?")
         qvals = self.features.apply(tdc, target=(self.label+1)/2)
+        print("wtf")
         targ_qvals = qvals[self.label == 1]
         num_passing = (targ_qvals <= fdr).sum()
         best_feat = num_passing.idxmax()
@@ -153,6 +156,7 @@ class PsmDataset():
         target = self.label.copy()
         target[unlabeled] = 0
 
+        print("why?")
         return best_feat, num_passing[best_feat], target
 
     def split(self, folds) -> Tuple[Tuple[PsmDataset]]:
@@ -247,7 +251,7 @@ class PsmDataset():
 
         return tuple(out_list)
 
-    def percolate(self, estimator: MokapotModel, train_fdr: float = 0.01,
+    def percolate(self, classifier: Classifier, train_fdr: float = 0.01,
                   test_fdr: float = 0.01, max_iter: int = 10,
                   folds: int = 3, max_workers: int = None,
                   **kwargs) -> None:
@@ -256,22 +260,37 @@ class PsmDataset():
         train_sets, test_sets, test_idx = self.split(folds)
 
         # Need args for map:
-        map_args = [estimator._fit, train_sets, [train_fdr]*folds,
+        map_args = [classifier._fit, train_sets, [train_fdr]*folds,
                     [max_iter]*folds, [False]*folds, [kwargs]*folds]
 
         # Train models in parallel:
-        estimator.estimator = []
-        logging.info("Training SVM models by %i-fold cross-validation...\n", folds)
+        classifier.estimator = []
+        classifier._train_mean = []
+        classifier._train_std = []
+        logging.info("Training models by %i-fold cross-validation...\n", folds)
         with ProcessPoolExecutor(max_workers=max_workers) as prc:
             for split, results in enumerate(prc.map(*map_args)):
                 _fold_msg(results[3], results[1], results[2], split+1)
-                estimator.estimator.append(results[0])
+                if not estimator._normalize:
+                    weights = unnormalize_weights(results[0].coef_,
+                                                  results[0].intercept_,
+                                                  results[4], results[5])
 
-        estimator.estimator = tuple(estimator.estimator)
+                    results[0].coef_ = weights[0]
+                    results[1].intercept_ = weights[1]
+
+                classifier.estimator.append(results[0])
+                classifier._train_mean.append(results[4])
+                classifier._train_std.append(results[5])
+
+        classifier.estimator = tuple(classifier.estimator)
+        classifier._train_mean = tuple(classifier._train_mean)
+        classifier._train_std = tuple(classifier._train_std)
+        classifier._trained = True
         del train_sets # clear some memory
 
         logging.info("Scoring PSMs...")
-        scores = estimator.predict(test_sets)
+        scores = classifier.predict(test_sets)
 
         # Add scores to test sets
         for test_set, score in zip(test_sets, scores):
