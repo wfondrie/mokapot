@@ -86,7 +86,7 @@ class Classifier():
 
             feat = psm_set.features[self.feature_names].values
             if self._normalize:
-                feat = np.divide((feat - tmean), tstd,
+                feat = np.divide((feat - tmean.values), tstd.values,
                                  out=np.zeros_like(feat),
                                  where=(tstd != 0))
 
@@ -119,9 +119,7 @@ class Classifier():
              max_iter: int = 10, msg: bool = True,
              kwargs: Dict = None) -> Tuple[pd.DataFrame, str]:
         """Fit the model using the Percolator procedure"""
-        print(1)
         best_feat, feat_pass, feat_target = psms.find_best_feature(train_fdr)
-        print(2)
         if msg:
             _best_feat_msg(best_feat, feat_pass)
 

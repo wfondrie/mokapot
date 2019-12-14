@@ -123,17 +123,6 @@ class PsmDataset():
         self._scores = (score_array - test_score) / (test_score - decoy_med)
 
     @property
-    def dual(self) -> bool:
-        """Get the best dual setting for sklearn.svm.LinearSVC()"""
-        dual = False
-        if self.data.shape[0] <= self.data.shape[1]:
-            dual = True
-            logging.warning("The number of features is greater than the number"
-                            " of PSMs.")
-
-        return dual
-
-    @property
     def features(self) -> pd.DataFrame:
         """Get the features of the PsmDataset"""
         return self.data.loc[:, self._feature_cols]
@@ -145,9 +134,7 @@ class PsmDataset():
 
     def find_best_feature(self, fdr: float) -> None:
         """Find the best feature to separate targets from decoys."""
-        print("what?")
         qvals = self.features.apply(tdc, target=(self.label+1)/2)
-        print("wtf")
         targ_qvals = qvals[self.label == 1]
         num_passing = (targ_qvals <= fdr).sum()
         best_feat = num_passing.idxmax()
@@ -156,7 +143,6 @@ class PsmDataset():
         target = self.label.copy()
         target[unlabeled] = 0
 
-        print("why?")
         return best_feat, num_passing[best_feat], target
 
     def split(self, folds) -> Tuple[Tuple[PsmDataset]]:
@@ -185,7 +171,7 @@ class PsmDataset():
             train.append(PsmDataset(train_split))
             test.append(PsmDataset(test_split))
 
-        return (tuple(train), tuple(test), tuple(splits))
+        return (tuple(train), tuple(test), tuple(split_idx))
 
     def get_results(self, feature: str = None, desc: bool = True) \
         -> Tuple[pd.DataFrame]:
@@ -253,7 +239,7 @@ class PsmDataset():
 
     def percolate(self, classifier: Classifier, train_fdr: float = 0.01,
                   test_fdr: float = 0.01, max_iter: int = 10,
-                  folds: int = 3, max_workers: int = None,
+                  folds: int = 3, max_workers: int = 1,
                   **kwargs) -> None:
         """Run the tradiational Percolator algorithm with cross-validation"""
         logging.info("Splitting PSMs into %i folds...", folds)
@@ -269,9 +255,15 @@ class PsmDataset():
         classifier._train_std = []
         logging.info("Training models by %i-fold cross-validation...\n", folds)
         with ProcessPoolExecutor(max_workers=max_workers) as prc:
-            for split, results in enumerate(prc.map(*map_args)):
+            if max_workers == 1:
+                map_func = map
+            else:
+                map_func = prc.map
+
+            for split, results in enumerate(map_func(*map_args)):
                 _fold_msg(results[3], results[1], results[2], split+1)
-                if not estimator._normalize:
+                if not classifier._normalize:
+                    print("normalizing")
                     weights = unnormalize_weights(results[0].coef_,
                                                   results[0].intercept_,
                                                   results[4], results[5])
@@ -299,7 +291,8 @@ class PsmDataset():
 
         scores = np.concatenate([s.scores for s in test_sets])
         test_idx = np.concatenate(test_idx)
-        self.scores = scores[test_idx]
+        self.scores = scores[np.argsort(test_idx)]
+
 
 # Functions -------------------------------------------------------------------
 def read_pin(pin_files: Union[str, Tuple[str]]) -> PsmDataset:
