@@ -3,20 +3,24 @@ This module contains the classes and methods needed to import, validate and
 normalize a collection of PSMs in PIN (Percolator INput) format.
 """
 from __future__ import annotations
+import copy
 import logging
 import gzip
 import random
 import itertools
 from concurrent.futures import ProcessPoolExecutor
-from typing import List, Union, Tuple, TYPE_CHECKING
+from typing import List, Union, Tuple
 
 import numpy as np
 import pandas as pd
+import sklearn.base as base
+import sklearn.svm as svm
 
-from .qvalues import tdc
-from .utils import unnormalize_weights
-if TYPE_CHECKING: # Needed to avoid circular imports for type hints :P
-    from .model import Classifier
+import mokapot.utils as utils
+from mokapot.qvalues import tdc
+from mokapot.model import Classifier, MODEL_TYPES
+
+LOGGER = logging.getLogger(__name__)
 
 # Classes ---------------------------------------------------------------------
 class PsmDataset():
@@ -113,7 +117,7 @@ class PsmDataset():
                              " number of PSMs, {len(psm_df)}")
 
         psm_df["score"] = score_array
-        psm_idx = _groupby_max(psm_df, self._psm_cols, "score")
+        psm_idx = utils.groupby_max(psm_df, self._psm_cols, "score")
         psms = psm_df.loc[psm_idx, :]
         labels = (psms[self._label_col[0]].values + 1) / 2
         qvals = tdc(psms.score.values, target=labels)
@@ -158,7 +162,7 @@ class PsmDataset():
             splits[-2] += splits[-1]
             splits = splits[:-1]
 
-        split_idx = [_flatten(s) for s in splits]
+        split_idx = [utils.flatten(s) for s in splits]
         splits = [self.data.loc[i, :] for i in split_idx]
 
         # Assign train and test sets
@@ -198,13 +202,13 @@ class PsmDataset():
             psm_df.score = -psm_df.score
 
         # PSMs
-        logging.info("Conducting target-decoy competition.")
-        logging.info("Selecting one PSM per %s...", "+".join(self._psm_cols))
-        psm_idx = _groupby_max(psm_df, self._psm_cols, "score")
+        LOGGER.info("Conducting target-decoy competition...")
+        LOGGER.info("Selecting one PSM per %s...", "+".join(self._psm_cols))
+        psm_idx = utils.groupby_max(psm_df, self._psm_cols, "score")
         psms = psm_df.loc[psm_idx, :]
 
         # Peptides
-        peptide_idx = _groupby_max(psms, self._peptide_cols, "score")
+        peptide_idx = utils.groupby_max(psms, self._peptide_cols, "score")
         peptides = psms.loc[peptide_idx, :]
 
         # TODO: Protein level FDR.
@@ -224,7 +228,7 @@ class PsmDataset():
             dat = dat[keep]
 
             num_found = (dat["q-value"] <= self._normalization_fdr).sum()
-            logging.info("-> Found %i %s at %2.f%% FDR.", num_found, lab,
+            LOGGER.info("-> Found %i %s at %s%% FDR.", num_found, lab,
                          self._normalization_fdr*100)
 
             dat = dat.rename(columns={self._specid_col[0]: "PSMId"})
@@ -237,52 +241,38 @@ class PsmDataset():
 
         return tuple(out_list)
 
-    def percolate(self, classifier: Classifier, train_fdr: float = 0.01,
-                  test_fdr: float = 0.01, max_iter: int = 10,
-                  folds: int = 3, max_workers: int = 1,
-                  **kwargs) -> None:
+    def percolate(self, estimator: MODEL_TYPES = \
+                  svm.LinearSVC(dual=False, class_weight="balanced"),
+                  train_fdr: float = 0.01,
+                  test_fdr: float = 0.01,
+                  max_iter: int = 10,
+                  folds: int = 3,
+                  max_workers: int = 1) -> None:
         """Run the tradiational Percolator algorithm with cross-validation"""
-        logging.info("Splitting PSMs into %i folds...", folds)
+        LOGGER.info("Splitting PSMs into %i folds...", folds)
         train_sets, test_sets, test_idx = self.split(folds)
-
         # Need args for map:
-        map_args = [classifier._fit, train_sets, [train_fdr]*folds,
-                    [max_iter]*folds, [False]*folds, [kwargs]*folds]
+        map_args = [_fit_model,
+                    train_sets,
+                    [base.clone(estimator) for _ in range(folds)],
+                    [train_fdr]*folds,
+                    [max_iter]*folds,
+                    list(range(1, folds+1))]
 
         # Train models in parallel:
-        classifier.estimator = []
-        classifier._train_mean = []
-        classifier._train_std = []
-        logging.info("Training models by %i-fold cross-validation...\n", folds)
+        LOGGER.info("Training models by %i-fold cross-validation...\n", folds)
         with ProcessPoolExecutor(max_workers=max_workers) as prc:
             if max_workers == 1:
-                map_func = map
+                map_fun = map
             else:
-                map_func = prc.map
+                map_fun = prc.map
 
-            for split, results in enumerate(map_func(*map_args)):
-                _fold_msg(results[3], results[1], results[2], split+1)
-                if not classifier._normalize:
-                    print("normalizing")
-                    weights = unnormalize_weights(results[0].coef_,
-                                                  results[0].intercept_,
-                                                  results[4], results[5])
+            classifiers = [c for c in map_fun(*map_args)]
 
-                    results[0].coef_ = weights[0]
-                    results[1].intercept_ = weights[1]
-
-                classifier.estimator.append(results[0])
-                classifier._train_mean.append(results[4])
-                classifier._train_std.append(results[5])
-
-        classifier.estimator = tuple(classifier.estimator)
-        classifier._train_mean = tuple(classifier._train_mean)
-        classifier._train_std = tuple(classifier._train_std)
-        classifier._trained = True
         del train_sets # clear some memory
 
-        logging.info("Scoring PSMs...")
-        scores = classifier.predict(test_sets)
+        LOGGER.info("Scoring PSMs...")
+        scores = [c.predict(p) for c, p in zip(classifiers, test_sets)]
 
         # Add scores to test sets
         for test_set, score in zip(test_sets, scores):
@@ -292,6 +282,7 @@ class PsmDataset():
         scores = np.concatenate([s.scores for s in test_sets])
         test_idx = np.concatenate(test_idx)
         self.scores = scores[np.argsort(test_idx)]
+        return classifiers
 
 
 # Functions -------------------------------------------------------------------
@@ -319,7 +310,7 @@ def merge(psms: Tuple[PsmDataset]):
     if all(scores_exist):
         new_psms.scores = np.concatenate(scores)
     elif any(scores_exist):
-        logging.warning("One or more PsmDataset did not have scores "
+        LOGGER.warning("One or more PsmDataset did not have scores "
                         "assigned. Scores were reset with merge.")
 
     return new_psms
@@ -341,31 +332,9 @@ def _read_pin(pin_file):
     return pin_df.apply(pd.to_numeric, errors="ignore")
 
 
-def _flatten(split):
-    """Get the indices from split"""
-    return list(itertools.chain.from_iterable(split))
-
-
-def _groupby_max(df, by, max_col):
-    """Quickly get the indices for the maximum value of col"""
-    return df.sort_values(by+[max_col]).drop_duplicates(by, keep="last").index
-
-
-def _best_feat_msg(best_feat, num_pass):
-    """Log the best feature and the number of positive PSMs."""
-    logging.info("Selected feature '%s' as initial direction.", best_feat)
-    logging.info("Could separate %i training set positives in that direction.",
-                 num_pass)
-
-
-def _fold_msg(best_feat, best_feat_pass, num_pass, fold=None):
-    """Logging messages for each fold"""
-    if fold is not None:
-        logging.info("Fold %i", fold)
-        _best_feat_msg(best_feat, best_feat_pass)
-
-    logging.info("Positive PSMs by iteration:")
-    num_passed = [f"{n}" for i, n in enumerate(num_pass)]
-    num_passed = "->".join(num_passed)
-    logging.info("%s\n", num_passed)
-
+def _fit_model(train_set, estimator, train_fdr, max_iter, fold):
+    """Fit the classifier with th train_set, evaluate on test"""
+    LOGGER.info("Starting fold %i...", fold)
+    classifier = Classifier(estimator)
+    classifier.fit(train_set, train_fdr=train_fdr, max_iter=max_iter)
+    return classifier
