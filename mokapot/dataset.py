@@ -177,7 +177,7 @@ class PsmDataset():
 
         return (tuple(train), tuple(test), tuple(split_idx))
 
-    def get_results(self, feature: str = None, desc: bool = True) \
+    def assign_confidence(self, feature: str = None, desc: bool = True) \
         -> Tuple[pd.DataFrame]:
         """Get the PSMs and peptides with FDR estimates. Proteins to come"""
         if feature is None:
