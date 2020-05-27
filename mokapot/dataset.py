@@ -83,16 +83,16 @@ class PsmDataset(ABC):
         self.data = psms
 
         # Set columns
-        self.spectrum_columns = tuple(spectrum_columns)
+        self.spectrum_columns = utils.tuplize(spectrum_columns)
         self.feature_columns = feature_columns
 
         if experiment_columns is not None:
-            self.experiment_columns = tuple(experiment_columns)
+            self.experiment_columns = utils.tuplize(experiment_columns)
         else:
             self.experiment_columns = ()
 
         if other_columns is not None:
-            other_columns = tuple(other_columns)
+            other_columns = utils.tuplize(other_columns)
         else:
             other_columns = ()
 
@@ -177,8 +177,8 @@ class PsmDataset(ABC):
 
             if num_passing > best_positives:
                 best_positives = num_passing
-                best_feat = self.features.columns[feat_idx]
-                new_labels = labs.iloc[:, feat_idx].values
+                best_feat = feat_idx
+                new_labels = labs.loc[:, feat_idx].values
 
         if best_feat is None:
             raise RuntimeError("No PSMs found below the fdr_threshold.")
@@ -214,10 +214,8 @@ class PsmDataset(ABC):
             Each of the returned tuples contains the indices  of PSMs in a
             split.
         """
-        scans = self.data.groupby(self.spectrum_columns, sort=False) \
-                         .indices \
-                         .values() \
-                         .tolist()
+        cols = list(self.spectrum_columns)
+        scans = list(self.data.groupby(cols, sort=False).indices.values())
 
         random.shuffle(scans)
 
@@ -229,10 +227,7 @@ class PsmDataset(ABC):
             splits[-2] += splits[-1]
             splits = splits[:-1]
 
-            split_idx = [utils.flatten(s) for s in splits]
-            splits = [self.data.loc[i, :] for i in split_idx]
-
-        return tuple(split_idx)
+        return tuple(utils.flatten(s) for s in splits)
 
 
 class LinearPsmDataset(PsmDataset):
@@ -251,7 +246,7 @@ class LinearPsmDataset(PsmDataset):
     target_column : str
         The column specifying whether each PSM is a target (`True`) or a
         decoy (`False`). This column will be coerced to boolean, so the
-        specifying targets as `1` and decoys as `-1` will work correctly.
+        specifying targets as `1` and decoys as `-1` will not work correctly.
 
     spectrum_columns : str or tuple of str
         The column(s) that collectively identify unique mass spectra.
@@ -284,9 +279,9 @@ class LinearPsmDataset(PsmDataset):
                  feature_columns: Union[str, Tuple[str, ...], None] = None) \
             -> None:
         """Initialize a PsmDataset object."""
-        self.target_column = tuple(target_column)
-        self.peptide_columns = tuple(peptide_columns)
-        self.protein_column = tuple(protein_column)
+        self.target_column = target_column
+        self.peptide_columns = utils.tuplize(peptide_columns)
+        self.protein_column = utils.tuplize(protein_column)
 
         # Some error checking:
         if len(self.protein_column) > 1:
@@ -294,7 +289,7 @@ class LinearPsmDataset(PsmDataset):
                              "'protein_column'.")
 
         # Finish initialization
-        other_columns = sum([self.target_column,
+        other_columns = sum([utils.tuplize(self.target_column),
                              self.peptide_columns,
                              self.protein_column],
                             tuple())

@@ -29,8 +29,9 @@ class Model():
                  standardize_features: bool = True) -> None:
         """Initialize a Model object"""
         if estimator is None:
-            svm_model = svm.LinearSVC(C=0, dual=False)
-            estimator = ms.GridSearchCV(svm_model, param_grid=PERC_GRID)
+            svm_model = svm.LinearSVC(dual=False)
+            estimator = ms.GridSearchCV(svm_model, param_grid=PERC_GRID,
+                                        refit=False)
 
         self.estimator = estimator
         self.feature_names = None
@@ -59,7 +60,7 @@ class Model():
             raise ValueError("Features of the PsmDataset do not match the "
                              "features of this Model.")
 
-        feat = psms.features[self.feature_names].values
+        feat = psms.features.loc[:, self.feature_names].values
         if self._standardize_features:
             feat = utils.safe_divide((feat - self._train_mean.values),
                                      self._train_std.values)
@@ -83,9 +84,14 @@ class Model():
                                       self._train_std)
 
         # Initialize Model and Training Variables
-        if hasattr(self._base_estimator, "best_estimator_"):
-            self._base_estimator.fit(norm_feat, feat_labels)
-            model = self._base_estimator.best_estimator_
+        if hasattr(self._base_estimator, "estimator"):
+            cv_samples = norm_feat[feat_labels.astype(bool), :]
+            cv_targ = (feat_labels[feat_labels.astype(bool)]+1)/2
+            self._base_estimator.fit(cv_samples, cv_targ)
+            best_params = self._base_estimator.best_params_
+            model = self._base_estimator.estimator
+            model.set_params(**best_params)
+            print(best_params)
         else:
             model = base.clone(self._base_estimator)
 
@@ -95,7 +101,7 @@ class Model():
         for _ in range(max_iter):
             # Fit the model
             samples = norm_feat[target.astype(bool), :]
-            iter_targ = target[target.astype(bool)]
+            iter_targ = (target[target.astype(bool)]+1)/2
             model.fit(samples, iter_targ)
 
             # Update scores
@@ -104,6 +110,7 @@ class Model():
             # Update target
             target = psms.update_labels(scores, fdr_threshold=train_fdr)
             num_passed.append((target == 1).sum())
+            print(iter_targ.sum())
 
         self.estimator = model
         self._trained = True

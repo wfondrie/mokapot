@@ -41,3 +41,18 @@ def safe_divide(numerator, denominator, ones=False):
 
     return np.divide(numerator, denominator, out=out,
                      where=(denominator != 0))
+
+
+def tuplize(obj):
+    """Convert obj to a tuple, without splitting strings"""
+    try:
+        _ = iter(obj)
+    except TypeError:
+        obj = (obj,)
+    else:
+        if isinstance(obj, str):
+            obj = (obj,)
+        else:
+            tuple(obj)
+
+    return obj

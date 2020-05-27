@@ -30,7 +30,7 @@ class PsmConfidence():
         """
         self.data = psms.metadata
         self.data[len(psms.columns)] = scores
-        self.score_column = psms.columns[-1]
+        self.score_column = self.data.columns[-1]
 
         # This attribute holds the results as DataFrames:
         self.qvalues: Dict[str, pd.DataFrame] = {}
@@ -50,7 +50,7 @@ class PsmConfidence():
         psm_idx = _groupby_max(self.data, psm_columns, self.score_column)
         self.data = self.data.loc[psm_idx]
 
-    def plot(self, level: str, theshold: float = 0.1,
+    def plot(self, level: str, threshold: float = 0.1,
              ax: plt.Axes = None, **kwargs) -> plt.Axes:
         """
         Plot the accepted number of PSMs, peptides, or proteins over
@@ -78,7 +78,44 @@ class PsmConfidence():
             A plot of the cumulative number of accepted target PSMs,
             peptides, or proteins.
         """
-        pass
+        level_labs = {"psms": "PSMs",
+                      "peptides": "Peptides",
+                      "proteins": "Proteins"}
+
+        if ax is None:
+            ax = plt.gca()
+        elif not isinstance(ax, plt.Axes):
+            raise ValueError("'ax' must be a matplotlib Axes instance.")
+
+        # Calculate cumulative targets at each q-value
+        qvals = self.qvalues[level].loc[:, ["mokapot q-value"]]
+        qvals = qvals.sort_values(by="mokapot q-value", ascending=True)
+        qvals["target"] = 1
+        qvals["num"] = qvals["target"].cumsum()
+        qvals = qvals.groupby(["mokapot q-value"]).max().reset_index()
+        qvals = qvals[["mokapot q-value", "num"]]
+
+        if True: #dat.qvalues[0]:
+            zero = pd.DataFrame({"mokapot q-value": qvals["mokapot q-value"][0],
+                                 "num": 0},
+                                index=[-1])
+            qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
+
+        xmargin = threshold * 0.05
+        ymax = qvals.num[qvals["mokapot q-value"] <= (threshold + xmargin)].max()
+        ymargin = ymax * 0.05
+
+        # Set margins
+        curr_ylims = ax.get_ylim()
+        if curr_ylims[1] < ymax + ymargin:
+            ax.set_ylim(0 - ymargin, ymax + ymargin)
+
+        ax.set_xlim(0 - xmargin, threshold + xmargin)
+        ax.set_xlabel("q-value")
+        ax.set_ylabel(f"Accepted {level_labs[level]}")
+
+        return ax.step(qvals["mokapot q-value"].values,
+                       qvals.num.values, where="post", **kwargs)
 
 
 class LinearPsmConfidence(PsmConfidence):
@@ -111,8 +148,8 @@ class LinearPsmConfidence(PsmConfidence):
         peptides = self.data.loc[peptide_idx]
 
         for level, data in zip(("psms", "peptides"), (self.data, peptides)):
-            scores = self.data[self.score_column]
-            targets = self.data[self.target_column]
+            scores = data[self.score_column]
+            targets = data[self.target_column].astype(bool)
             data["mokapot q-value"] = qvalues.tdc(scores, targets, desc)
 
             # TODO: Add PEP estimation here
@@ -121,7 +158,7 @@ class LinearPsmConfidence(PsmConfidence):
             data = data.loc[targets, :] \
                        .sort_values(self.score_column, ascending=(not desc)) \
                        .reset_index(drop=True) \
-                       .drop(self.target_column) \
+                       .drop(self.target_column, axis=1) \
                        .rename(columns={"mokapot score": self.score_column})
 
             self.qvalues[level] = data
@@ -132,6 +169,7 @@ class LinearPsmConfidence(PsmConfidence):
 
 
 # Functions -------------------------------------------------------------------
-def _groupby_max(df: pd.DataFrame, by: Tuple[str, ...], max_col: str):
+def _groupby_max(df: pd.DataFrame, by_cols: Tuple[str, ...], max_col: str):
     """Quickly get the indices for the maximum value of col"""
-    return df.sort_values(by+(max_col,)).drop_duplicates(by, keep="last").index
+    by = list(by_cols)
+    return df.sort_values(by+[max_col], axis=0).drop_duplicates(by, keep="last").index

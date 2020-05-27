@@ -72,17 +72,28 @@ def brew(psms: PsmDataset,
     """
     all_idx = set(range(len(psms.data)))
     test_idx = psms.split(folds)
+    test = sum(test_idx, [])
 
-    train_sets = [psms.data.iloc[tuple(all_idx - set(i))] for i in test_idx]
-    test_sets = [psms.data.iloc[i] for i in test_idx]
+    train_sets = []
+    test_sets = []
+    for idx in test_idx:
+        train_set = copy.copy(psms)
+        train_set.data = psms.data.iloc[list(all_idx - set(idx)), :]
+        train_sets.append(train_set)
+
+        test_set = copy.copy(psms)
+        test_set.data = psms.data.iloc[list(idx), :]
+        test_sets.append(test_set)
+
+    print([len(x.data) for x in train_sets])
+    print([len(y.data) for y in test_sets])
 
     # Create args for map:
     map_args = [_fit_model,
                 train_sets,
                 [copy.deepcopy(model) for _ in range(folds)],
                 [train_fdr]*folds,
-                [max_iter]*folds,
-                list(range(1, folds+1))]
+                [max_iter]*folds]
 
     # Train models in parallel
     with ProcessPoolExecutor(max_workers=max_workers) as prc:
@@ -93,9 +104,9 @@ def brew(psms: PsmDataset,
 
         models = [c for c in map_fun(*map_args)]
 
-    scores = [_predict(p, m, test_fdr) for p, m in zip(models, test_sets)]
-    test_idx = sum(test_idx, tuple())
-    scores = np.concatenate(scores)[test_idx]
+    scores = [_predict(p, m, test_fdr) for p, m in zip(test_sets, models)]
+    rev_idx = np.argsort(sum(test_idx, [])).tolist()
+    scores = np.concatenate(scores)[rev_idx]
 
     return psms.assign_confidence(scores, None, desc=True)
 
