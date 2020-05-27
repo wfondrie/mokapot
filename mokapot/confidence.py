@@ -10,6 +10,7 @@ from typing import Tuple, Union, Dict, TYPE_CHECKING
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from triqler import qvality
 
 import mokapot.qvalues as qvalues
 if TYPE_CHECKING:
@@ -148,18 +149,20 @@ class LinearPsmConfidence(PsmConfidence):
         peptides = self.data.loc[peptide_idx]
 
         for level, data in zip(("psms", "peptides"), (self.data, peptides)):
-            scores = data[self.score_column]
-            targets = data[self.target_column].astype(bool)
+            scores = data.loc[:, self.score_column].values
+            targets = data.loc[:, self.target_column].astype(bool).values
             data["mokapot q-value"] = qvalues.tdc(scores, targets, desc)
-
-            # TODO: Add PEP estimation here
-            data["mokapot PEP"] = 0
 
             data = data.loc[targets, :] \
                        .sort_values(self.score_column, ascending=(not desc)) \
                        .reset_index(drop=True) \
                        .drop(self.target_column, axis=1) \
-                       .rename(columns={"mokapot score": self.score_column})
+                       .rename(columns={self.score_column: "mokapot score"})
+
+            target_scores = scores[targets]
+            decoy_scores = scores[~targets]
+            _, data["mokapot PEP"] = qvality.getQvaluesFromScores(scores[targets],
+                                                                  scores[~targets])
 
             self.qvalues[level] = data
 
