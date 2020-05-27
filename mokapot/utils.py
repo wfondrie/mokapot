@@ -26,11 +26,6 @@ def flatten(split):
     return list(itertools.chain.from_iterable(split))
 
 
-def groupby_max(df, by, max_col):
-    """Quickly get the indices for the maximum value of col"""
-    return df.sort_values(by+[max_col]).drop_duplicates(by, keep="last").index
-
-
 def safe_divide(numerator, denominator, ones=False):
     """Divide ignoring div by zero warnings"""
     if isinstance(numerator, pd.Series):

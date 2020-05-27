@@ -3,155 +3,222 @@ This module contains the classes and methods needed to import, validate and
 normalize a collection of PSMs in PIN (Percolator INput) format.
 """
 from __future__ import annotations
-import copy
 import logging
-import gzip
 import random
-import itertools
-from concurrent.futures import ProcessPoolExecutor
 from typing import List, Union, Tuple
+from abc import ABC, abstractmethod
 
 import numpy as np
 import pandas as pd
-import sklearn.base as base
-import sklearn.svm as svm
 
+import mokapot.qvalues as qvalues
 import mokapot.utils as utils
-from mokapot.qvalues import tdc
-from mokapot.model import Classifier, MODEL_TYPES
+from mokapot.confidence import PsmConfidence, LinearPsmConfidence
 
 LOGGER = logging.getLogger(__name__)
 
+
 # Classes ---------------------------------------------------------------------
-class PsmDataset():
+class PsmDataset(ABC):
     """
-    Store a collection of PSMs.
+    Store a collection of PSMs and their features.
     """
-    def __init__(self, psm_data: pd.DataFrame, metadata: Tuple[str] = None,
-                 normalization_fdr: float = 0.01) -> None:
-        """Initialize a PsmDataset object."""
-        self.data = psm_data
+    @property
+    @abstractmethod
+    def targets(self) -> np.ndarray:
+        """An array indicating whether each PSM is a target."""
+        return
 
-        # Change key cols to lowercase for consistency
-        #self.data.columns = self.data.columns.str.lower()
-        cols = self.data.columns #.str.lower()
+    @abstractmethod
+    def assign_confidence(self,
+                          scores: np.ndarray,
+                          protein_database: None,
+                          desc: bool) \
+            -> PsmConfidence:
+        """Return how to assign confidence."""
+        return
 
-        # Verify necessary columns are present
-        required_cols = {"label", "specid", "scannr", "peptide", "proteins"}
-        if not required_cols <= set(cols.str.lower()):
-            raise ValueError("Required columns are missing."
-                             f" These are {required_cols} and are case "
-                             "insensitive.")
+    @abstractmethod
+    def update_labels(self,
+                      scores: np.ndarray,
+                      fdr_threshold: float = 0.01,
+                      desc: bool = True) \
+            -> np.ndarray:
+        """
+        Return the label for each PSM, given it's score.
 
-        # Verify additional specified metadata is present
-        if metadata is not None:
-            self._metadata_cols = metadata
-            if set(metadata) <= set(cols):
-                raise ValueError("One or more columns specified by 'metadata' "
-                                 "is not present. Are they capitalized "
-                                 "correctly?")
+        This method is used during model training to define positive
+        examples. These are traditionally the target PSMs that fall
+        within a specified FDR threshold.
+
+        Parameters
+        ----------
+        scores : numpy.ndarray
+            The score used to rank the PSMs.
+
+        fdr_threshold : float
+            The false discovery rate threshold to use.
+
+        desc : bool
+            Are higher scores better?
+
+        Returns
+        -------
+        np.ndarray
+            The label of each PSM, where 1 indicates a positive example,
+            -1 indicates a negative example, and 0 removes the PSM from
+            training. Typically, 0 is reserved for targets, below a
+            specified FDR threshold.
+        """
+        return
+
+    def __init__(self,
+                 psms: pd.DataFrame,
+                 spectrum_columns: Union[str, Tuple[str, ...]],
+                 experiment_columns: Union[str, Tuple[str, ...], None],
+                 feature_columns: Union[str, Tuple[str, ...], None],
+                 other_columns: Union[str, Tuple[str, ...], None]) \
+            -> None:
+        """Initialize an object"""
+        self.data = psms
+
+        # Set columns
+        self.spectrum_columns = tuple(spectrum_columns)
+        self.feature_columns = feature_columns
+
+        if experiment_columns is not None:
+            self.experiment_columns = tuple(experiment_columns)
         else:
-            metadata = []
-            self._metadata_cols = []
+            self.experiment_columns = ()
 
-        # Initialize scores attributes
-        self._raw_scores = None
-        self._scores = None
-        self._normalization_fdr = normalization_fdr
+        if other_columns is not None:
+            other_columns = tuple(other_columns)
+        else:
+            other_columns = ()
 
-        # Columns that define metadata, PSMs, Peptides, and Proteins
-        psm_cols = ["scannr", "expmass"]
-        peptide_cols = ["peptide"]
-        protein_cols = ["proteins"]
-        label_col = ["label"]
-        specid_col = ["specid"]
-        other_cols = ["calcmass"]
-        nonfeat_cols = sum([psm_cols, peptide_cols, protein_cols, label_col,
-                            specid_col, other_cols, metadata], [])
+        # Check that all of the columns exist:
+        used_columns = sum([other_columns,
+                            self.spectrum_columns,
+                            self.experiment_columns],
+                           tuple())
 
-        self._psm_cols = [c for c in cols if c.lower() in psm_cols]
-        self._peptide_cols = [c for c in cols if c.lower() in peptide_cols]
-        self._protein_cols = [c for c in cols if c.lower() in protein_cols]
-        self._label_col = [c for c in cols if c.lower() in label_col]
-        self._feature_cols = [c for c in cols if c.lower() not in nonfeat_cols]
-        self._specid_col = [c for c in cols if c.lower() in specid_col]
+        missing_columns = [c not in self.data.columns for c in used_columns]
+        if not missing_columns:
+            raise ValueError("The following specified columns were not found: "
+                             f"{missing_columns}")
 
-    @property
-    def columns(self) -> List[str]:
-        """Get the columns of the PIN files in lower case."""
-        return self.data.columns.tolist()
+        # Get the feature columns
+        if feature_columns is None:
+            feature_columns = tuple(c for c in self.data.columns
+                                    if c not in used_columns)
+        else:
+            feature_columns = tuple(feature_columns)
 
     @property
-    def normalization_fdr(self) -> float:
-        """Get the normalization_fdr"""
-        return self._normalization_fdr
-
-    @normalization_fdr.setter
-    def normalization_fdr(self, fdr: float):
-        """Change the FDR threshold used for score normalization"""
-        self._normalization_fdr = fdr
-        if self._raw_scores is not None:
-            self.scores = self._raw_scores
+    def metadata_columns(self) -> Tuple[str, ...]:
+        """A tuple of the metadata columns"""
+        return tuple(c for c in self.data.columns
+                     if c not in self.feature_columns)
 
     @property
-    def scores(self) -> np.ndarray:
-        """Get the scores assigned to the PSMs of this dataset"""
-        return self._scores
-
-    @scores.setter
-    def scores(self, score_array: np.ndarray) -> None:
-        """
-        Add scores to the PsmDataset.
-
-        Scores are normalized such that by subtracting the score at the
-        specified 'test_fdr' and dividing by the median of the decoy scores.
-        Note that assigning new scores replaces any previous scores that were
-        stored.
-        """
-        self._raw_scores = score_array
-        fdr = self._normalization_fdr
-        psm_df = self.data.loc[:, self._psm_cols + self._label_col]
-
-        if len(score_array) != len(psm_df):
-            raise ValueError(f"Length of 'score_array' must be equal to the"
-                             " number of PSMs, {len(psm_df)}")
-
-        psm_df["score"] = score_array
-        psm_idx = utils.groupby_max(psm_df, self._psm_cols, "score")
-        psms = psm_df.loc[psm_idx, :]
-        labels = (psms[self._label_col[0]].values + 1) / 2
-        qvals = tdc(psms.score.values, target=labels)
-        decoy_med = np.median(psms.score.values[~labels.astype(bool)])
-        test_score = np.min(psms.score.values[qvals <= fdr])
-
-        self._scores = (score_array - test_score) / (test_score - decoy_med)
+    def metadata(self) -> pd.DataFrame:
+        """A pandas DataFrame of the metadata."""
+        return self.data.loc[:, self.metadata_columns]
 
     @property
     def features(self) -> pd.DataFrame:
-        """Get the features of the PsmDataset"""
-        return self.data.loc[:, self._feature_cols]
+        """A pandas DataFrame of the features."""
+        return self.data.loc[:, self.feature_columns]
 
     @property
-    def label(self) -> np.ndarray:
-        """Get the data PSM labels."""
-        return self.data[self._label_col[0]].values
+    def spectra(self) -> pd.DataFrame:
+        """
+        A pandas DataFrame of the columns that uniquely identify a
+        mass spectrum.
+        """
+        return self.data.loc[:, self.spectrum_columns]
 
-    def find_best_feature(self, fdr: float) -> None:
-        """Find the best feature to separate targets from decoys."""
-        qvals = self.features.apply(tdc, target=(self.label+1)/2)
-        targ_qvals = qvals[self.label == 1]
-        num_passing = (targ_qvals <= fdr).sum()
-        best_feat = num_passing.idxmax()
-        unlabeled = np.logical_and(qvals[best_feat].values > fdr, self.label == 1)
+    @property
+    def columns(self) -> List[str]:
+        """The columns of the dataset."""
+        return self.data.columns.tolist()
 
-        target = self.label.copy()
-        target[unlabeled] = 0
+    def find_best_feature(self, fdr_threshold: float) \
+            -> Tuple[str, int, np.ndarray]:
+        """
+        Find the best feature to separate targets from decoys at the
+        specified false-discovery rate threshold.
 
-        return best_feat, num_passing[best_feat], target
+        Parameters
+        ----------
+        fdr_threshold : float
+            The false-discovery rate threshold used to define the
+            best feature.
 
-    def split(self, folds) -> Tuple[Tuple[PsmDataset]]:
-        """Split into cross-validation folds"""
-        scans = list(self.data.groupby(self._psm_cols, sort=False).indices.values())
+        Returns
+        -------
+        A tuple of an str, int, and numpy.ndarray
+            The contains the name of the best feature, the number of
+            positive examples found if that feature is used, and an
+            array containing the labels defining positive and negative
+            examples when that feature is used.
+        """
+        best_feat = None
+        best_positives = 0
+        new_labels = None
+        for desc in (True, False):
+            labs = self.features.apply(self.update_labels,
+                                       fdr_threshold=fdr_threshold,
+                                       desc=desc)
+
+            num_passing = (labs == 1).sum()
+            feat_idx = num_passing.idxmax()
+            num_passing = num_passing[feat_idx]
+
+            if num_passing > best_positives:
+                best_positives = num_passing
+                best_feat = self.features.columns[feat_idx]
+                new_labels = labs.iloc[:, feat_idx].values
+
+        if best_feat is None:
+            raise RuntimeError("No PSMs found below the fdr_threshold.")
+
+        return best_feat, best_positives, new_labels
+
+    def calibrate_scores(self, scores: np.ndarray, fdr_threshold: float,
+                         desc: bool = True) -> np.ndarray:
+        """Calibrate scores"""
+        labels = self.update_labels(scores, fdr_threshold, desc)
+        target_score = np.min(scores[labels == 1])
+        decoy_score = np.median(scores[labels == -1])
+
+        return (scores - target_score) / (target_score - decoy_score)
+
+    def split(self, folds: int) -> Tuple[Tuple[int, ...], ...]:
+        """
+        Get the indices for random, even splits of the dataset.
+
+        Each tuple of integers contains the indices for a random subset of
+        PSMs. PSMs are grouped by spectrum, such that all PSMs from the same
+        spectrum only appear in one split. The typical use for this method
+        is to split the PSMs into cross-validation folds.
+
+        Parameters
+        ----------
+        folds: int
+            The number of splits to generate.
+
+        Returns
+        -------
+        A tuple of tuples of ints
+            Each of the returned tuples contains the indices  of PSMs in a
+            split.
+        """
+        scans = self.data.groupby(self.spectrum_columns, sort=False) \
+                         .indices \
+                         .values() \
+                         .tolist()
+
         random.shuffle(scans)
 
         # Split the data evenly
@@ -162,179 +229,128 @@ class PsmDataset():
             splits[-2] += splits[-1]
             splits = splits[:-1]
 
-        split_idx = [utils.flatten(s) for s in splits]
-        splits = [self.data.loc[i, :] for i in split_idx]
+            split_idx = [utils.flatten(s) for s in splits]
+            splits = [self.data.loc[i, :] for i in split_idx]
 
-        # Assign train and test sets
-        train = []
-        test = []
-        for idx, test_split in enumerate(splits):
-            train_split = pd.concat(splits[:idx]+splits[idx+1:],
-                                    ignore_index=True)
-
-            train.append(PsmDataset(train_split))
-            test.append(PsmDataset(test_split))
-
-        return (tuple(train), tuple(test), tuple(split_idx))
-
-    def assign_confidence(self, feature: str = None, desc: bool = True) \
-        -> Tuple[pd.DataFrame]:
-        """Get the PSMs and peptides with FDR estimates. Proteins to come"""
-        if feature is None:
-            score_feat = self.scores
-            if score_feat is None:
-                raise ValueError("No Mokapot scores have been assigned.")
-
-        else:
-            if feature not in self.features.columns:
-                raise ValueError("Feature not found in self.features.")
-
-            score_feat = self.features[feature].values
-
-        cols = sum([self._psm_cols, self._peptide_cols, self._protein_cols,
-                    self._label_col, self._metadata_cols, self._specid_col],
-                   [])
-
-        psm_df = self.data.loc[:, cols]
-        psm_df["score"] = score_feat
-
-        if not desc:
-            psm_df.score = -psm_df.score
-
-        # PSMs
-        LOGGER.info("Conducting target-decoy competition...")
-        LOGGER.info("Selecting one PSM per %s...", "+".join(self._psm_cols))
-        psm_idx = utils.groupby_max(psm_df, self._psm_cols, "score")
-        psms = psm_df.loc[psm_idx, :]
-
-        # Peptides
-        peptide_idx = utils.groupby_max(psms, self._peptide_cols, "score")
-        peptides = psms.loc[peptide_idx, :]
-
-        # TODO: Protein level FDR.
-
-        out_list = []
-        keep = sum([self._metadata_cols, self._specid_col,
-                    ["score", "q-value"], self._peptide_cols,
-                    self._protein_cols], [])
-
-        labs = ("PSMs", "peptides")
-        for dat, lab in zip((psms, peptides), labs):
-            targ = (dat[self._label_col[0]].values + 1) / 2
-            dat["q-value"] = tdc(dat.score.values, targ)
-            dat = dat.loc[targ.astype(bool), :] # Keep only targets
-            dat = dat.sort_values("score", ascending=(not desc))
-            dat = dat.reset_index(drop=True)
-            dat = dat[keep]
-
-            num_found = (dat["q-value"] <= self._normalization_fdr).sum()
-            LOGGER.info("-> Found %i %s at %s%% FDR.", num_found, lab,
-                         self._normalization_fdr*100)
-
-            dat = dat.rename(columns={self._specid_col[0]: "PSMId"})
-            if feature is None:
-                dat = dat.rename(columns={"score": "mokapot score"})
-            else:
-                dat = dat.rename(columns={"score": feature})
-
-            out_list.append(dat)
-
-        return tuple(out_list)
-
-    def percolate(self, estimator: MODEL_TYPES = \
-                  svm.LinearSVC(dual=False, class_weight="balanced"),
-                  train_fdr: float = 0.01,
-                  test_fdr: float = 0.01,
-                  max_iter: int = 10,
-                  folds: int = 3,
-                  max_workers: int = 1) -> None:
-        """Run the tradiational Percolator algorithm with cross-validation"""
-        LOGGER.info("Splitting PSMs into %i folds...", folds)
-        train_sets, test_sets, test_idx = self.split(folds)
-        # Need args for map:
-        map_args = [_fit_model,
-                    train_sets,
-                    [base.clone(estimator) for _ in range(folds)],
-                    [train_fdr]*folds,
-                    [max_iter]*folds,
-                    list(range(1, folds+1))]
-
-        # Train models in parallel:
-        LOGGER.info("Training models by %i-fold cross-validation...\n", folds)
-        with ProcessPoolExecutor(max_workers=max_workers) as prc:
-            if max_workers == 1:
-                map_fun = map
-            else:
-                map_fun = prc.map
-
-            classifiers = [c for c in map_fun(*map_args)]
-
-        del train_sets # clear some memory
-
-        LOGGER.info("Scoring PSMs...")
-        scores = [c.predict(p) for c, p in zip(classifiers, test_sets)]
-
-        # Add scores to test sets
-        for test_set, score in zip(test_sets, scores):
-            test_set.normalization_fdr = test_fdr
-            test_set.scores = score
-
-        scores = np.concatenate([s.scores for s in test_sets])
-        test_idx = np.concatenate(test_idx)
-        self.scores = scores[np.argsort(test_idx)]
-        return classifiers
+        return tuple(split_idx)
 
 
-# Functions -------------------------------------------------------------------
-def read_pin(pin_files: Union[str, Tuple[str]]) -> PsmDataset:
-    """Read a Percolator pin file to a PsmDataset"""
-    if isinstance(pin_files, str):
-        pin_files = (pin_files,)
+class LinearPsmDataset(PsmDataset):
+    """
+    Store and analyze a collection of PSMs
 
-    psm_data = pd.concat([_read_pin(f) for f in pin_files])
-    return PsmDataset(psm_data)
+    A `PsmDataset` is intended to store a collection of PSMs from
+    standard, data-dependent acquisition proteomics experiments and
+    defines the necessary fields for mokapot analysis.
 
+    Parameters
+    ----------
+    psms : pandas.DataFrame
+        A collection of PSMs.
 
-def read_mpin(mpin_files: Union[str, Tuple[str]]) -> PsmDataset:
-    """Read a Mokapot input (mpin) file to a PsmDataset"""
-    pass
+    target_column : str
+        The column specifying whether each PSM is a target (`True`) or a
+        decoy (`False`). This column will be coerced to boolean, so the
+        specifying targets as `1` and decoys as `-1` will work correctly.
 
+    spectrum_columns : str or tuple of str
+        The column(s) that collectively identify unique mass spectra.
+        Multiple columns can be useful to avoid combining scans from
+        multiple mass spectrometry runs.
 
-def merge(psms: Tuple[PsmDataset]):
-    """Merge multiple PsmDataset objects into one."""
-    psm_data = pd.concat([p.data for p in psms], ignore_index=True)
-    new_psms = PsmDataset(psm_data)
-    scores = [p.scores for p in psms]
-    scores_exist = [s is not None for s in scores]
+    peptide_columns : str or tuple of str
+        The column(s) that collectively define a peptide. Multiple
+        columns may be useful if sequence and modifications are provided
+        as separate columns.
 
-    if all(scores_exist):
-        new_psms.scores = np.concatenate(scores)
-    elif any(scores_exist):
-        LOGGER.warning("One or more PsmDataset did not have scores "
-                        "assigned. Scores were reset with merge.")
+    protein_column : str
+        The column that specifies which protein(s) the detected peptide
+        might have originated from. This column should contain a
+        delimited list of protein identifiers that match the FASTA file
+        used for database searching.
 
-    return new_psms
+    feature_columns : str or tuple of str
+        The column(s) specifying the feature(s) for mokapot analysis. If
+        `None`, these are assumed to be all columns not specified in the
+        previous parameters.
+    """
+    def __init__(self,
+                 psms: pd.DataFrame,
+                 target_column: str,
+                 spectrum_columns: Union[str, Tuple[str, ...]] = "scan",
+                 peptide_columns: Union[str, Tuple[str, ...]] = "peptide",
+                 protein_column: str = "protein",
+                 experiment_columns: Union[str, Tuple[str, ...], None] = None,
+                 feature_columns: Union[str, Tuple[str, ...], None] = None) \
+            -> None:
+        """Initialize a PsmDataset object."""
+        self.target_column = tuple(target_column)
+        self.peptide_columns = tuple(peptide_columns)
+        self.protein_column = tuple(protein_column)
 
-# Utility Functions -----------------------------------------------------------
-def _read_pin(pin_file):
-    """Parse a Percolator INput formatted file."""
-    if pin_file.endswith(".gz"):
-        fopen = gzip.open
-    else:
-        fopen = open
+        # Some error checking:
+        if len(self.protein_column) > 1:
+            raise ValueError("Only one column can be used for "
+                             "'protein_column'.")
 
-    with fopen(pin_file, "r") as pin:
-        header = pin.readline()
-        header = header.replace("\n", "").split("\t")
-        rows = [l.replace("\n", "").split("\t", len(header)-1) for l in pin]
+        # Finish initialization
+        other_columns = sum([self.target_column,
+                             self.peptide_columns,
+                             self.protein_column],
+                            tuple())
 
-    pin_df = pd.DataFrame(columns=header, data=rows)
-    return pin_df.apply(pd.to_numeric, errors="ignore")
+        super().__init__(psms=psms,
+                         spectrum_columns=spectrum_columns,
+                         experiment_columns=experiment_columns,
+                         feature_columns=feature_columns,
+                         other_columns=other_columns)
 
+    @property
+    def targets(self) -> np.ndarray:
+        """An array indicating whether each PSM is a target."""
+        return self.data[self.target_column].values.astype(bool)
 
-def _fit_model(train_set, estimator, train_fdr, max_iter, fold):
-    """Fit the classifier with th train_set, evaluate on test"""
-    LOGGER.info("Starting fold %i...", fold)
-    classifier = Classifier(estimator)
-    classifier.fit(train_set, train_fdr=train_fdr, max_iter=max_iter)
-    return classifier
+    def update_labels(self,
+                      scores: np.ndarray,
+                      fdr_threshold: float = 0.01,
+                      desc: bool = True) \
+            -> np.ndarray:
+        """
+        Return the label for each PSM, given it's score.
+
+        This method is used during model training to define positive
+        examples, which are traditionally the target PSMs that fall
+        within a specified FDR threshold.
+
+        Parameters
+        ----------
+        scores : numpy.ndarray
+            The score used to rank the PSMs.
+
+        fdr_threshold : float
+            The false discovery rate threshold to use.
+
+        desc : bool
+            Are higher scores better?
+
+        Returns
+        -------
+        np.ndarray
+            The label of each PSM, where 1 indicates a positive example,
+            -1 indicates a negative example, and 0 removes the PSM from
+            training. Typically, 0 is reserved for targets, below a
+            specified FDR threshold.
+        """
+        qvals = qvalues.tdc(scores, target=self.targets, desc=desc)
+        unlabeled = np.logical_and(qvals > fdr_threshold, self.targets)
+        new_labels = np.ones(len(qvals))
+        new_labels[~self.targets] = -1
+        new_labels[unlabeled] = 0
+        return new_labels
+
+    def assign_confidence(self, scores: np.ndarray,
+                          protein_database: None = None,
+                          desc: bool = True) \
+            -> LinearPsmConfidence:
+        """Assign Confidence for stuff"""
+        return LinearPsmConfidence(self, scores, protein_database, desc)

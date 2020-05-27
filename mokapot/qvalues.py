@@ -1,11 +1,15 @@
 """
 This module estimates q-values.
 """
+from typing import Tuple
+
 import numpy as np
 import pandas as pd
 import numba as nb
 
-def tdc(metric, target, desc=True):
+
+def tdc(metric: np.ndarray, target: np.ndarray, desc: bool = True) \
+        -> np.ndarray:
     """
     Estimate q-values using target decoy competition.
 
@@ -110,9 +114,113 @@ def tdc(metric, target, desc=True):
     return qvals
 
 
+def crosslink_tdc(metric: np.ndarray, num_targets: np.ndarray,
+                  desc: bool = True) -> np.ndarray:
+    """
+    Estimate q-values using the Walzthoeni et al method.
+
+    This q-value method is specifically for cross-linked peptides.
+
+    Parameters
+    ----------
+    num_targets : numpy.ndarray
+        The number of target sequences in the cross-linked pair.
+
+    metric : numpy.ndarray
+        The metric to used to rank elements.
+
+    desc : bool
+        Is a higher metric better?
+
+    Returns
+    -------
+    numpy.ndarray
+        A 1D array of q-values in the same order as `num_targets` and
+        `metric`.
+    """
+    if isinstance(metric, pd.Series):
+        metric = metric.values
+
+    if isinstance(num_targets, pd.Series):
+        num_targets = num_targets.values
+
+    msg = "'{}' must be a 1D numpy.ndarray or pandas.Series"
+    if not isinstance(metric, np.ndarray) or len(metric.shape) != 1:
+        raise ValueError(msg.format("metric"))
+
+    if not isinstance(num_targets, np.ndarray) or len(num_targets.shape) != 1:
+        raise ValueError(msg.format("num_targets"))
+
+    if not isinstance(desc, bool):
+        raise ValueError("'desc' must be boolean (True or False)")
+
+    if metric.shape[0] != num_targets.shape[0]:
+        raise ValueError("'metric' and 'num_targets' must be the same length.")
+
+    if desc:
+        srt_idx = np.argsort(-metric)
+    else:
+        srt_idx = np.argsort(metric)
+
+    metric = metric[srt_idx]
+    num_targets = num_targets[srt_idx]
+    num_total = np.ones(len(num_targets)).cumsum()
+    cum_targets = (num_targets == 2).astype(int).cumsum()
+    one_decoy = (num_targets == 1).astype(int).cumsum()
+    two_decoy = (num_targets == 0).astype(int).cumsum()
+
+    fdr = np.divide((one_decoy - two_decoy), cum_targets,
+                    out=np.ones_like(cum_targets, dtype=float),
+                    where=(cum_targets != 0))
+
+    fdr[fdr < 0] = 0
+
+    # Calculate q-values
+    unique_metric, indices = np.unique(metric, return_counts=True)
+
+    # Flip arrays to loop from worst to best score
+    fdr = np.flip(fdr)
+    num_total = np.flip(num_total)
+    if not desc:
+        unique_metric = np.flip(unique_metric)
+        indices = np.flip(indices)
+
+    qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
+    qvals = np.flip(qvals)
+    qvals = qvals[np.argsort(srt_idx)]
+
+    return qvals
+
+
 @nb.njit
-def _fdr2qvalue(fdr, num_total, met, indices):
-    """Quickly turn a list of FDRs to q-values"""
+def _fdr2qvalue(fdr: np.ndarray, num_total: np.ndarray,
+                met: np.ndarray, indices: Tuple[np.ndarray]) \
+        -> np.ndarray:
+    """
+    Quickly turn a list of FDRs to q-values.
+
+    All of the inputs are assumed to be sorted.
+
+    Parameters
+    ----------
+    fdr : numpy.ndarray
+        A vector of all unique FDR values.
+
+    num_total : numpy.ndarray
+        A vector of the cumulative number of PSMs at each score.
+
+    met : numpy.ndarray
+        A vector of the scores for each PSM.
+
+    indices : tuple of numpy.ndarray
+        Tuple where the vector at index i indicates the PSMs that
+        shared the unique FDR value in `fdr`.
+
+    Returns
+    -------
+    numpy.ndarray
+        A vector of q-values.
+    """
     min_q = 1
     qvals = np.ones(len(fdr))
     group_fdr = np.ones(len(fdr))
