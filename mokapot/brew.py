@@ -3,7 +3,7 @@ Defines a function to run the Percolator algorithm.
 """
 import logging
 import copy
-from Typing import Tuple
+from typing import Tuple
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -73,8 +73,8 @@ def brew(psms: PsmDataset,
     all_idx = set(range(len(psms.data)))
     test_idx = psms.split(folds)
 
-    train_sets = [psms.iloc[tuple(all_idx - set(i))] for i in test_idx]
-    test_sets = [psms.iloc[i] for i in test_idx]
+    train_sets = [psms.data.iloc[tuple(all_idx - set(i))] for i in test_idx]
+    test_sets = [psms.data.iloc[i] for i in test_idx]
 
     # Create args for map:
     map_args = [_fit_model,
@@ -94,10 +94,10 @@ def brew(psms: PsmDataset,
         models = [c for c in map_fun(*map_args)]
 
     scores = [_predict(p, m, test_fdr) for p, m in zip(models, test_sets)]
-    
-    scores = np.concatenate(scores)
+    test_idx = sum(test_idx, tuple())
+    scores = np.concatenate(scores)[test_idx]
 
-    return psm_results, classifiers
+    return psms.assign_confidence(scores, None, desc=True)
 
 
 # Utility Functions -----------------------------------------------------------
@@ -106,7 +106,7 @@ def _predict(psms: PsmDataset, model: Model, test_fdr: float):
     return psms.calibrate_scores(model.predict(psms), fdr_threshold=test_fdr)
 
 def _fit_model(train_set: PsmDataset, model: Model, train_fdr: float,
-               max_iter: int, fold: int) -> Model:
+               max_iter: int) -> Model:
     """
     Fit the estimator using the training data.
 

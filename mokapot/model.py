@@ -18,7 +18,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Constants -------------------------------------------------------------------
 MODEL_TYPES = Union[base.BaseEstimator, ms.GridSearchCV, ms.RandomizedSearchCV]
-PERC_GRID = [{0: neg, 1: pos} for neg in (0.1, 1, 10) for pos in (0.1, 1, 10)]
+PERC_GRID = {"class_weight": [{0: neg, 1: pos} for neg in (0.1, 1, 10) for pos in (0.1, 1, 10)]}
 
 # Classes ---------------------------------------------------------------------
 class Model():
