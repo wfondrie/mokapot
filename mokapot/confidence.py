@@ -29,7 +29,7 @@ class PsmConfidence():
         """
         Initialize a PsmConfidence object.
         """
-        self.data = psms.metadata
+        self.data = psms.metadata.sample(frac=1)
         self.data[len(psms.columns)] = scores
         self.score_column = self.data.columns[-1]
 
@@ -44,7 +44,7 @@ class PsmConfidence():
     def to_txt(self, fileroot: str, sep: str = "\t"):
         """Save the results to files"""
         for level, qvals in self.qvalues.items():
-            pd.to_csv(qvals, f"{fileroot}.{level}.txt", sep="\t")
+            qvals.to_csv(f"{fileroot}.{level}.txt", sep="\t", index=False)
 
     def _perform_tdc(self, psm_columns: Tuple[str, ...]) -> None:
         """Conduct TDC, stuff"""
@@ -96,11 +96,9 @@ class PsmConfidence():
         qvals = qvals.groupby(["mokapot q-value"]).max().reset_index()
         qvals = qvals[["mokapot q-value", "num"]]
 
-        if True: #dat.qvalues[0]:
-            zero = pd.DataFrame({"mokapot q-value": qvals["mokapot q-value"][0],
-                                 "num": 0},
-                                index=[-1])
-            qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
+        zero = pd.DataFrame({"mokapot q-value": qvals["mokapot q-value"][0],
+                             "num": 0}, index=[-1])
+        qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
 
         xmargin = threshold * 0.05
         ymax = qvals.num[qvals["mokapot q-value"] <= (threshold + xmargin)].max()
@@ -122,7 +120,6 @@ class PsmConfidence():
 class LinearPsmConfidence(PsmConfidence):
     """Assign confidence to a set of linear PSMs"""
     def __init__(self, psms: LinearPsmDataset, scores: np.ndarray,
-                 protein_database: None = None,
                  desc: bool = True) -> None:
         """Initialize a a LinearPsmConfidence object"""
         super().__init__(psms, scores)
@@ -132,14 +129,10 @@ class LinearPsmConfidence(PsmConfidence):
         self.peptide_columns = psms.peptide_columns + psms.experiment_columns
 
         self._perform_tdc(self.psm_columns)
+        self._assign_confidence(desc=desc)
 
-        if protein_database is None:
-            self._assign_confidence(protein=False, desc=desc)
-        else:
-            # TODO picked-protein grouping.
-            self._assign_confidence(protein=True, desc=desc)
 
-    def _assign_confidence(self, protein: bool, desc: bool) -> None:
+    def _assign_confidence(self, desc: bool) -> None:
         """
         Assign confidence to PSMs
         """
@@ -165,10 +158,6 @@ class LinearPsmConfidence(PsmConfidence):
                                                                   scores[~targets])
 
             self.qvalues[level] = data
-
-        if protein:
-            # TODO picked-protein FDR.
-            pass
 
 
 # Functions -------------------------------------------------------------------

@@ -108,7 +108,7 @@ def brew(psms: PsmDataset,
     rev_idx = np.argsort(sum(test_idx, [])).tolist()
     scores = np.concatenate(scores)[rev_idx]
 
-    return psms.assign_confidence(scores, None, desc=True)
+    return psms.assign_confidence(scores, desc=True)
 
 
 # Utility Functions -----------------------------------------------------------
