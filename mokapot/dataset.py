@@ -22,6 +22,8 @@ LOGGER = logging.getLogger(__name__)
 class PsmDataset(ABC):
     """
     Store a collection of PSMs and their features.
+
+    :meta private:
     """
     @property
     @abstractmethod
