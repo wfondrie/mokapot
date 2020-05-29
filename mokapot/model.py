@@ -74,7 +74,7 @@ class Model():
     def fit(self, psms: PsmDataset, train_fdr: float = 0.01,
             max_iter: int = 10) -> None:
         """Fit an SVM model using the Percolator procedure"""
-        best_feat, feat_pass, feat_labels = psms.find_best_feature(train_fdr)
+        best_feat, feat_pass, feat_labels = psms._find_best_feature(train_fdr)
 
         # Normalize Features
         self.feature_names = psms.feature_columns
@@ -108,7 +108,7 @@ class Model():
             scores = model.decision_function(norm_feat)
 
             # Update target
-            target = psms.update_labels(scores, fdr_threshold=train_fdr)
+            target = psms._update_labels(scores, fdr_threshold=train_fdr)
             num_passed.append((target == 1).sum())
             print(iter_targ.sum())
 

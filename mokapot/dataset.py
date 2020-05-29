@@ -5,7 +5,7 @@ normalize a collection of PSMs in PIN (Percolator INput) format.
 from __future__ import annotations
 import logging
 import random
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -17,6 +17,8 @@ from mokapot.confidence import PsmConfidence, LinearPsmConfidence
 
 LOGGER = logging.getLogger(__name__)
 
+STR_TUP = Union[str, Tuple[str, ...]]
+STR_TUP_OPT = Optional[Union[str, Tuple[str, ...]]]
 
 # Classes ---------------------------------------------------------------------
 class PsmDataset(ABC):
@@ -38,10 +40,10 @@ class PsmDataset(ABC):
         return
 
     @abstractmethod
-    def update_labels(self,
-                      scores: np.ndarray,
-                      fdr_threshold: float = 0.01,
-                      desc: bool = True) \
+    def _update_labels(self,
+                       scores: np.ndarray,
+                       fdr_threshold: float = 0.01,
+                       desc: bool = True) \
             -> np.ndarray:
         """
         Return the label for each PSM, given it's score.
@@ -73,10 +75,10 @@ class PsmDataset(ABC):
 
     def __init__(self,
                  psms: pd.DataFrame,
-                 spectrum_columns: Union[str, Tuple[str, ...]],
-                 experiment_columns: Union[str, Tuple[str, ...], None],
-                 feature_columns: Union[str, Tuple[str, ...], None],
-                 other_columns: Union[str, Tuple[str, ...], None]) \
+                 spectrum_columns: STR_TUP,
+                 experiment_columns: STR_TUP_OPT,
+                 feature_columns: STR_TUP_OPT,
+                 other_columns: STR_TUP_OPT) \
             -> None:
         """Initialize an object"""
         self.data = psms
@@ -142,7 +144,7 @@ class PsmDataset(ABC):
         """The columns of the dataset."""
         return self.data.columns.tolist()
 
-    def find_best_feature(self, fdr_threshold: float) \
+    def _find_best_feature(self, fdr_threshold: float) \
             -> Tuple[str, int, np.ndarray]:
         """
         Find the best feature to separate targets from decoys at the
@@ -166,7 +168,7 @@ class PsmDataset(ABC):
         best_positives = 0
         new_labels = None
         for desc in (True, False):
-            labs = self.features.apply(self.update_labels,
+            labs = self.features.apply(self._update_labels,
                                        fdr_threshold=fdr_threshold,
                                        desc=desc)
 
@@ -184,16 +186,16 @@ class PsmDataset(ABC):
 
         return best_feat, best_positives, new_labels
 
-    def calibrate_scores(self, scores: np.ndarray, fdr_threshold: float,
+    def _calibrate_scores(self, scores: np.ndarray, fdr_threshold: float,
                          desc: bool = True) -> np.ndarray:
         """Calibrate scores"""
-        labels = self.update_labels(scores, fdr_threshold, desc)
+        labels = self._update_labels(scores, fdr_threshold, desc)
         target_score = np.min(scores[labels == 1])
         decoy_score = np.median(scores[labels == -1])
 
         return (scores - target_score) / (target_score - decoy_score)
 
-    def split(self, folds: int) -> Tuple[Tuple[int, ...], ...]:
+    def _split(self, folds: int) -> Tuple[Tuple[int, ...], ...]:
         """
         Get the indices for random, even splits of the dataset.
 
@@ -271,11 +273,11 @@ class LinearPsmDataset(PsmDataset):
     def __init__(self,
                  psms: pd.DataFrame,
                  target_column: str,
-                 spectrum_columns: Union[str, Tuple[str, ...]] = "scan",
-                 peptide_columns: Union[str, Tuple[str, ...]] = "peptide",
-                 protein_column: str = "protein",
-                 experiment_columns: Union[str, Tuple[str, ...], None] = None,
-                 feature_columns: Union[str, Tuple[str, ...], None] = None) \
+                 spectrum_columns: STR_TUP,
+                 peptide_columns: STR_TUP,
+                 protein_column: str,
+                 experiment_columns: STR_TUP_OPT = None,
+                 feature_columns: STR_TUP_OPT = None) \
             -> None:
         """Initialize a PsmDataset object."""
         self.target_column = target_column
@@ -304,10 +306,10 @@ class LinearPsmDataset(PsmDataset):
         """An array indicating whether each PSM is a target."""
         return self.data[self.target_column].values.astype(bool)
 
-    def update_labels(self,
-                      scores: np.ndarray,
-                      fdr_threshold: float = 0.01,
-                      desc: bool = True) \
+    def _update_labels(self,
+                       scores: np.ndarray,
+                       fdr_threshold: float = 0.01,
+                       desc: bool = True) \
             -> np.ndarray:
         """
         Return the label for each PSM, given it's score.
@@ -389,27 +391,22 @@ class CrossLinkedPsmDataset(PsmDataset):
     """
     def __init__(self,
                  psms: pd.DataFrame,
-                 target_column: str,
-                 spectrum_columns: Union[str, Tuple[str, ...]] = "scan",
-                 peptide_columns: Union[str, Tuple[str, ...]] = "peptide",
-                 protein_column: str = "protein",
-                 experiment_columns: Union[str, Tuple[str, ...], None] = None,
-                 feature_columns: Union[str, Tuple[str, ...], None] = None) \
+                 spectrum_columns: STR_TUP,
+                 target_columns: Tuple[str, str],
+                 peptide_columns: Tuple[STR_TUP, STR_TUP],
+                 protein_columns: Tuple[str, str],
+                 experiment_columns: STR_TUP_OPT = None,
+                 feature_columns: STR_TUP_OPT = None) \
             -> None:
         """Initialize a PsmDataset object."""
-        self.target_column = target_column
-        self.peptide_columns = utils.tuplize(peptide_columns)
-        self.protein_column = utils.tuplize(protein_column)
-
-        # Some error checking:
-        if len(self.protein_column) > 1:
-            raise ValueError("Only one column can be used for "
-                             "'protein_column'.")
+        self.target_columns = utils.tuplize(target_columns)
+        self.peptide_columns = tuple(utils.tuplize(c) for c in peptide_columns)
+        self.protein_columns = tuple(utils.tuplize(c) for c in protein_columns)
 
         # Finish initialization
-        other_columns = sum([utils.tuplize(self.target_column),
-                             self.peptide_columns,
-                             self.protein_column],
+        other_columns = sum([self.target_columns,
+                             *self.peptide_columns,
+                             *self.protein_columns],
                             tuple())
 
         super().__init__(psms=psms,
@@ -421,9 +418,10 @@ class CrossLinkedPsmDataset(PsmDataset):
     @property
     def targets(self) -> np.ndarray:
         """An array indicating whether each PSM is a target."""
-        return self.data[self.target_column].values.astype(bool)
+        bool_targs = self.data.loc[:, self.target_columns].astype(bool)
+        return bool_targs.sum(axis=1).values
 
-    def update_labels(self,
+    def _update_labels(self,
                       scores: np.ndarray,
                       fdr_threshold: float = 0.01,
                       desc: bool = True) \
@@ -454,7 +452,8 @@ class CrossLinkedPsmDataset(PsmDataset):
             training. Typically, 0 is reserved for targets, below a
             specified FDR threshold.
         """
-        qvals = qvalues.tdc(scores, target=self.targets, desc=desc)
+        qvals = qvalues.crosslink_tdc(scores, num_targets=self.targets,
+                                      desc=desc)
         unlabeled = np.logical_and(qvals > fdr_threshold, self.targets)
         new_labels = np.ones(len(qvals))
         new_labels[~self.targets] = -1
@@ -462,6 +461,6 @@ class CrossLinkedPsmDataset(PsmDataset):
         return new_labels
 
     def assign_confidence(self, scores: np.ndarray, desc: bool = True) \
-            -> LinearPsmConfidence:
+            -> CrossLinkedPsmConfidence:
         """Assign Confidence for stuff"""
-        return LinearPsmConfidence(self, scores, desc)
+        return CrossLinkedPsmConfidence(self, scores, desc)

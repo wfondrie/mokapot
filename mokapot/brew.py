@@ -71,7 +71,7 @@ def brew(psms: PsmDataset,
     and proteins.
     """
     all_idx = set(range(len(psms.data)))
-    test_idx = psms.split(folds)
+    test_idx = psms._split(folds)
     test = sum(test_idx, [])
 
     train_sets = []
@@ -114,7 +114,7 @@ def brew(psms: PsmDataset,
 # Utility Functions -----------------------------------------------------------
 def _predict(psms: PsmDataset, model: Model, test_fdr: float):
     """Return calibrated scores for the PSMs"""
-    return psms.calibrate_scores(model.predict(psms), fdr_threshold=test_fdr)
+    return psms._calibrate_scores(model.predict(psms), fdr_threshold=test_fdr)
 
 def _fit_model(train_set: PsmDataset, model: Model, train_fdr: float,
                max_iter: int) -> Model:
