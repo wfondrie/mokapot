@@ -29,7 +29,8 @@ class PsmConfidence():
         """
         Initialize a PsmConfidence object.
         """
-        self.data = psms.metadata.sample(frac=1)
+        #self.data = psms.metadata.sample(frac=1)
+        self.data = psms.metadata
         self.data[len(psms.columns)] = scores
         self.score_column = self.data.columns[-1]
 
@@ -163,5 +164,9 @@ class LinearPsmConfidence(PsmConfidence):
 # Functions -------------------------------------------------------------------
 def _groupby_max(df: pd.DataFrame, by_cols: Tuple[str, ...], max_col: str):
     """Quickly get the indices for the maximum value of col"""
-    by = list(by_cols)
-    return df.sort_values(by+[max_col], axis=0).drop_duplicates(by, keep="last").index
+    idx = df.sample(frac=1) \
+            .sort_values(list(by_cols)+[max_col], axis=0) \
+            .drop_duplicates(list(by_cols), keep="last") \
+            .index
+
+    return idx
