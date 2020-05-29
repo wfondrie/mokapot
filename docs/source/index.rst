@@ -6,11 +6,16 @@
 mokapot
 =======
 
+
 This is some random text...
 
 .. toctree::
    :maxdepth: 2
    :caption: mokapot
 
-   Introduction <self>
+   mokapot <self>
+   getting_started.rst
+   vignettes/index.rst
    api/index.rst
+   cli.rst
+   
