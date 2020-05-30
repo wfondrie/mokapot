@@ -161,6 +161,50 @@ class LinearPsmConfidence(PsmConfidence):
             self.qvalues[level] = data
 
 
+class CrossLinkPsmConfidence(PsmConfidence):
+    """Assign confidence to a set of CrossLinked PSMs"""
+    def __init__(self, psms: LinearPsmDataset, scores: np.ndarray,
+                 desc: bool = True) -> None:
+        """Initialize a a LinearPsmConfidence object"""
+        super().__init__(psms, scores)
+        self.data[len(self.data.columns)] = psms.targets
+        self.target_column = self.data.columns[-1]
+        self.psm_columns = psms.spectrum_columns + psms.experiment_columns
+        self.peptide_columns = psms.peptide_columns + psms.experiment_columns
+
+        self._perform_tdc(self.psm_columns)
+        self._assign_confidence(desc=desc)
+
+    def _assign_confidence(self, desc: bool) -> None:
+        """
+        Assign confidence to PSMs
+        """
+        peptide_idx = _groupby_max(self.data, self.peptide_columns,
+                                   self.score_column)
+
+        peptides = self.data.loc[peptide_idx]
+
+        for level, data in zip(("psms", "peptides"), (self.data, peptides)):
+            scores = data.loc[:, self.score_column].values
+            targets = data.loc[:, self.target_column].astype(bool).values
+            data["mokapot q-value"] = qvalues.crosslink_tdc(scores, targets,
+                                                            desc)
+
+            data = data.loc[targets, :] \
+                       .sort_values(self.score_column, ascending=(not desc)) \
+                       .reset_index(drop=True) \
+                       .drop(self.target_column, axis=1) \
+                       .rename(columns={self.score_column: "mokapot score"})
+
+            target_scores = scores[targets]
+            decoy_scores = scores[~targets]
+            _, data["mokapot PEP"] = qvality.getQvaluesFromScores(scores[targets == 2],
+                                                                  scores[~targets])
+
+            self.qvalues[level] = data
+
+
+
 # Functions -------------------------------------------------------------------
 def _groupby_max(df: pd.DataFrame, by_cols: Tuple[str, ...], max_col: str):
     """Quickly get the indices for the maximum value of col"""
