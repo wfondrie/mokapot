@@ -9,9 +9,9 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from mokapot.model import Model
-from mokapot.dataset import PsmDataset
-from mokapot.confidence import PsmConfidence
+from .model import Model
+from .dataset import PsmDataset
+from .confidence import PsmConfidence
 
 LOGGER = logging.getLogger(__name__)
 

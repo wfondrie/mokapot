@@ -12,9 +12,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
 
-import mokapot.qvalues as qvalues
+import qvalues
 if TYPE_CHECKING:
-    from mokapot.dataset import PsmDataset, LinearPsmDataset
+    from .dataset import PsmDataset, LinearPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 

@@ -6,8 +6,8 @@ from typing import Tuple, Union
 
 import pandas as pd
 
-import mokapot.utils as utils
-from mokapot.dataset import LinearPsmDataset
+import utils
+from .dataset import LinearPsmDataset
 
 
 # Functions -------------------------------------------------------------------
