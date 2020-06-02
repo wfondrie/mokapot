@@ -11,9 +11,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 
-import mokapot.qvalues as qvalues
-import mokapot.utils as utils
-from mokapot.confidence import PsmConfidence, LinearPsmConfidence
+from . import qvalues
+from . import utils
+from .confidence import PsmConfidence, LinearPsmConfidence
 
 LOGGER = logging.getLogger(__name__)
 

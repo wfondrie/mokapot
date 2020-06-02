@@ -11,7 +11,7 @@ import sklearn.svm as svm
 import sklearn.model_selection as ms
 from sklearn.exceptions import NotFittedError
 
-import utils
+from . import utils
 from .dataset import PsmDataset
 
 LOGGER = logging.getLogger(__name__)

@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
 
-import qvalues
+from . import qvalues
 if TYPE_CHECKING:
     from .dataset import PsmDataset, LinearPsmDataset
 

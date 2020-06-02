@@ -6,7 +6,7 @@ from typing import Tuple, Union
 
 import pandas as pd
 
-import utils
+from . import utils
 from .dataset import LinearPsmDataset
 
 
