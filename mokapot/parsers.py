@@ -5,6 +5,7 @@ import gzip
 from typing import Tuple, Union
 
 import pandas as pd
+from tqdm import tqdm
 
 from . import utils
 from .dataset import LinearPsmDataset
@@ -80,7 +81,7 @@ def _parse_pin(pin_file):
     with fopen(pin_file, "r") as pin:
         header = pin.readline()
         header = header.replace("\n", "").split("\t")
-        rows = [l.replace("\n", "").split("\t", len(header)-1) for l in pin]
+        rows = [l.replace("\n", "").split("\t", len(header)-1) for l in tqdm(pin)]
 
     pin_df = pd.DataFrame(columns=header, data=rows)
     return pin_df.apply(pd.to_numeric, errors="ignore")

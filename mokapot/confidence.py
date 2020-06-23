@@ -1,6 +1,18 @@
 """
-A class to estimate and store confidence information about a collection
-of PSMs
+One of the primary purposes of mokapot is to assign confidence estimates to PSMs.
+This task is accomplished by ranking PSMs according to a score or metric and
+using an appropriate confidence estimation procedure for the type of data
+(currently, linear and crosslinked PSMs are supported). In either case,
+mokapot can provide confidence estimates based any score, regardless of
+whether it was the result of a learned :py:func:`~mokapot.model.Model`
+instance or provided independently.
+
+The following classes store the confidence estimates for a dataset based on the
+provided score. In either case, they provide utilities to access, save, and
+plot these estimates for the various relevant levels (i.e. PSMs, peptides, and
+proteins). The :py:func:`LinearPsmConfidence` class is appropriate for most
+proteomics datasets, whereas the :py:func:`CrossLinkedPsmConfidence` is
+specifically designed for crosslinked peptides.
 """
 from __future__ import annotations
 import logging
@@ -14,7 +26,7 @@ from triqler import qvality
 
 from . import qvalues
 if TYPE_CHECKING:
-    from .dataset import PsmDataset, LinearPsmDataset
+    from .dataset import PsmDataset, LinearPsmDataset, CrossLinkedPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,6 +36,8 @@ class PsmConfidence():
     """
     Estimate and store the statistical confidence for a collection of
     PSMs.
+
+    :meta private:
     """
     def __init__(self, psms: PsmDataset, scores: np.ndarray) -> None:
         """
@@ -161,7 +175,7 @@ class LinearPsmConfidence(PsmConfidence):
             self.qvalues[level] = data
 
 
-class CrossLinkPsmConfidence(PsmConfidence):
+class CrossLinkedPsmConfidence(PsmConfidence):
     """Assign confidence to a set of CrossLinked PSMs"""
     def __init__(self, psms: LinearPsmDataset, scores: np.ndarray,
                  desc: bool = True) -> None:

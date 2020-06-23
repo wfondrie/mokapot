@@ -85,20 +85,22 @@ class Model():
 
         # Initialize Model and Training Variables
         if hasattr(self._base_estimator, "estimator"):
+            logging.info("Selecting Hyper Parameters...")
             cv_samples = norm_feat[feat_labels.astype(bool), :]
             cv_targ = (feat_labels[feat_labels.astype(bool)]+1)/2
             self._base_estimator.fit(cv_samples, cv_targ)
             best_params = self._base_estimator.best_params_
             model = self._base_estimator.estimator
             model.set_params(**best_params)
-            print(best_params)
         else:
             model = base.clone(self._base_estimator)
 
         # Begin training loop
         target = feat_labels
         num_passed = []
-        for _ in range(max_iter):
+        logging.info("Beginning Training Loop...")
+        for i in range(max_iter):
+            logging.info(f"> Starting Iteration {i}...")
             # Fit the model
             samples = norm_feat[target.astype(bool), :]
             iter_targ = (target[target.astype(bool)]+1)/2
@@ -114,3 +116,4 @@ class Model():
 
         self.estimator = model
         self._trained = True
+        logging.info("Done training.")
