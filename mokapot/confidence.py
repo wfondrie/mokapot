@@ -56,10 +56,11 @@ class PsmConfidence():
         """The available confidence levels (i.e. PSMs, peptides, proteins)"""
         return tuple(self.qvalues.keys())
 
-    def to_txt(self, fileroot: str, sep: str = "\t"):
+    def to_txt(self, fileroot, sep="\t"):
         """Save the results to files"""
         for level, qvals in self.qvalues.items():
-            qvals.to_csv(f"{fileroot}.{level}.txt", sep="\t", index=False)
+            qvals.to_csv(f"{fileroot}.mokapot.{level}.txt", sep=sep,
+                         index=False)
 
     def _perform_tdc(self, psm_columns: Tuple[str, ...]) -> None:
         """Conduct TDC, stuff"""

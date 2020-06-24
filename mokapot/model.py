@@ -31,7 +31,8 @@ class Model():
         if estimator is None:
             svm_model = svm.LinearSVC(dual=False)
             estimator = ms.GridSearchCV(svm_model, param_grid=PERC_GRID,
-                                        refit=False)
+                                        refit=False,
+                                        cv=3)
 
         self.estimator = estimator
         self.feature_names = None
