@@ -69,6 +69,9 @@ def brew(psms,
         If a list, they will be in the same order as provided in the
         `psms` parameter.
     """
+    if model is None:
+        model = Model()
+
     # TODO: Add group FDR estimates.
     all_idx = set(range(len(psms.data)))
     test_idx = psms._split(folds)
