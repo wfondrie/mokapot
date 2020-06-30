@@ -99,8 +99,11 @@ def brew(psms,
         models = map_fun(*map_args)
 
     scores = [_predict(p, i, models, test_fdr) for p, i in zip(psms, test_idx)]
-    return [p.assign_confidence(s, desc=True) for p, s in zip(psms, scores)]
+    res = [p.assign_confidence(s, desc=True) for p, s in zip(psms, scores)]
+    if len(res) == 1:
+        return res[0]
 
+    return res
 
 # Utility Functions -----------------------------------------------------------
 def _make_train_sets(psms, test_idx):
