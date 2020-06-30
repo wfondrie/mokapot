@@ -88,7 +88,8 @@ def _parse_pin(pin_file):
                          usecols=lambda x: True,
                          lineterminator='\n',
                          header=None,
-                         low_memory=False)
+                         dtype=str,
+                         low_memory=True)
 
     pin_df.columns = pin_df.loc[0, :].values
     pin_df.drop(index=0, inplace=True)
