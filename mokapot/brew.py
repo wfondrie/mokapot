@@ -5,6 +5,7 @@ import logging
 import copy
 from concurrent.futures import ProcessPoolExecutor
 
+import pandas as pd
 import numpy as np
 
 from .model import Model
@@ -73,19 +74,13 @@ def brew(psms,
         model = Model()
 
     # TODO: Add group FDR estimates.
-    all_idx = set(range(len(psms.data)))
-    test_idx = psms._split(folds)
+    try:
+        iter(psms)
+    except TypeError:
+        psms = [psms]
 
-    train_sets = []
-    test_sets = []
-    for idx in test_idx:
-        train_set = copy.copy(psms)
-        train_set._data = psms.data.iloc[list(all_idx - set(idx)), :]
-        train_sets.append(train_set)
-
-        test_set = copy.copy(psms)
-        test_set._data = psms.data.iloc[list(idx), :]
-        test_sets.append(test_set)
+    test_idx = [p._split(folds) for p in psms]
+    train_sets = _make_train_sets(psms, test_idx)
 
     # Create args for map:
     map_args = [_fit_model,
@@ -103,28 +98,60 @@ def brew(psms,
 
         models = map_fun(*map_args)
 
-    scores = [_predict(p, m, test_fdr) for p, m in zip(test_sets, models)]
-    rev_idx = np.argsort(sum(test_idx, [])).tolist()
-    scores = np.concatenate(scores)[rev_idx]
-
-    return psms.assign_confidence(scores, desc=True)
+    scores = [_predict(p, i, models, test_fdr) for p, i in zip(psms, test_idx)]
+    return [p.assign_confidence(s, desc=True) for p, s in zip(psms, scores)]
 
 
 # Utility Functions -----------------------------------------------------------
-def _predict(psms, model, test_fdr):
+def _make_train_sets(psms, test_idx):
     """
-    Return calibrated scores for the PSMs.
+    Parameters
+    ----------
+    psms : list of PsmDataset
+        The PsmDataset to get a subset of.
+    test_idx : list of list of numpy.ndarray
+        The indicies of the test sets
+
+    Yields
+    ------
+    PsmDataset
+        The training set.
+    """
+    train_set = copy.copy(psms[0])
+    all_idx = [set(range(len(p.data))) for p in psms]
+    for idx in zip(*test_idx):
+        train_set._data = None
+        data = []
+        for i, j, dset in zip(idx, all_idx, psms):
+            data.append(dset.data.iloc[list(j - set(i)), :])
+
+        train_set._data = pd.concat(data, ignore_index=True)
+        yield train_set
+
+def _predict(dset, test_idx, models, test_fdr):
+    """
+    Return the new scores for the dataset
 
     Parameters
     ----------
-    psms : PsmDataset
-         The PsmDataset to use.
-    model : Model
-         The model to use.
-    test_fdr : float
-         The FDR use for calibration.
+    dset : PsmDataset
+        The dataset to rescore
+    test_idx : list of numpy.ndarray
+        The indicies of the test sets
+    models : list of Model
+        The models for each datasset.
+    test_fdr : the fdr to calibrate at.
     """
-    return psms._calibrate_scores(model.predict(psms), fdr_threshold=test_fdr)
+    test_set = copy.copy(dset)
+    scores = []
+    for fold, mod in zip(test_idx, models):
+        test_set._data = dset.data.iloc[list(fold), :]
+        s = test_set._calibrate_scores(mod.predict(test_set), test_fdr)
+        scores.append(s)
+
+    rev_idx = np.argsort(sum(test_idx, [])).tolist()
+    return np.concatenate(scores)[rev_idx]
+
 
 def _fit_model(train_set: PsmDataset, model: Model, train_fdr: float,
                max_iter: int) -> Model:

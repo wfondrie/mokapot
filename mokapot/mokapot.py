@@ -31,5 +31,5 @@ def main():
                         style="{", level=verbosity_dict[config.verbosity])
 
     dataset = read_pin(config.pin_files)
-    psms = brew(dataset)
+    psms = brew(dataset)[0]
     psms.to_txt(os.path.join(config.output_dir, config.fileroot))
