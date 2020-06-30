@@ -141,8 +141,8 @@ class LinearPsmConfidence(PsmConfidence):
         super().__init__(psms, scores)
         self.data[len(self.data.columns)] = psms.targets
         self.target_column = self.data.columns[-1]
-        self.psm_columns = psms.spectrum_columns + psms.experiment_columns
-        self.peptide_columns = psms.peptide_columns + psms.experiment_columns
+        self.psm_columns = psms._spectrum_columns
+        self.peptide_columns = psms._peptide_columns
 
         self._perform_tdc(self.psm_columns)
         self._assign_confidence(desc=desc)
@@ -184,8 +184,8 @@ class CrossLinkedPsmConfidence(PsmConfidence):
         super().__init__(psms, scores)
         self.data[len(self.data.columns)] = psms.targets
         self.target_column = self.data.columns[-1]
-        self.psm_columns = psms.spectrum_columns + psms.experiment_columns
-        self.peptide_columns = psms.peptide_columns + psms.experiment_columns
+        self.psm_columns = psms._spectrum_columns
+        self.peptide_columns = psms._peptide_columns
 
         self._perform_tdc(self.psm_columns)
         self._assign_confidence(desc=desc)

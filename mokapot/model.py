@@ -56,7 +56,7 @@ class Model():
         if not self._trained:
             raise NotFittedError("This model is untrained. Run fit() first.")
 
-        feat_names = psms.feature_columns
+        feat_names = psms._feature_columns
         if set(feat_names) != set(self.feature_names):
             raise ValueError("Features of the PsmDataset do not match the "
                              "features of this Model.")
@@ -78,7 +78,7 @@ class Model():
         best_feat, feat_pass, feat_labels = psms._find_best_feature(train_fdr)
 
         # Normalize Features
-        self.feature_names = psms.feature_columns
+        self.feature_names = psms._feature_columns
         self._train_mean = psms.features.mean(axis=0)
         self._train_std = psms.features.std(axis=0)
         norm_feat = utils.safe_divide((psms.features - self._train_mean),

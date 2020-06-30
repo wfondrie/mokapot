@@ -80,11 +80,11 @@ def brew(psms,
     test_sets = []
     for idx in test_idx:
         train_set = copy.copy(psms)
-        train_set.data = psms.data.iloc[list(all_idx - set(idx)), :]
+        train_set._data = psms.data.iloc[list(all_idx - set(idx)), :]
         train_sets.append(train_set)
 
         test_set = copy.copy(psms)
-        test_set.data = psms.data.iloc[list(idx), :]
+        test_set._data = psms.data.iloc[list(idx), :]
         test_sets.append(test_set)
 
     # Create args for map:
@@ -101,7 +101,6 @@ def brew(psms,
         else:
             map_fun = prc.map
 
-        #models = [c for c in map_fun(*map_args)]
         models = map_fun(*map_args)
 
     scores = [_predict(p, m, test_fdr) for p, m in zip(test_sets, models)]
