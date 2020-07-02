@@ -26,10 +26,9 @@ def main():
                       2: logging.INFO,
                       3: logging.DEBUG}
 
-    logging.basicConfig(format=("{asctime} [{levelname}] "
-                                "{module}.{funcName} : {message}"),
+    logging.basicConfig(format=("[{levelname}] {message}"),
                         style="{", level=verbosity_dict[config.verbosity])
 
     dataset = read_pin(config.pin_files)
-    psms = brew(dataset)[0]
+    psms = brew(dataset)
     psms.to_txt(os.path.join(config.output_dir, config.fileroot))

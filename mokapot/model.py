@@ -75,7 +75,10 @@ class Model():
     def fit(self, psms: PsmDataset, train_fdr: float = 0.01,
             max_iter: int = 10) -> None:
         """Fit an SVM model using the Percolator procedure"""
+        LOGGER.info("Finding best feature for initial split...")
         best_feat, feat_pass, feat_labels = psms._find_best_feature(train_fdr)
+        LOGGER.info("  - Selected %s with %i PSMs at q<=%g",
+                    best_feat, feat_pass, train_fdr)
 
         # Normalize Features
         self.feature_names = psms._feature_columns
@@ -86,22 +89,22 @@ class Model():
 
         # Initialize Model and Training Variables
         if hasattr(self._base_estimator, "estimator"):
-            logging.info("Selecting Hyper Parameters...")
+            LOGGER.info("Selecting hyperparameters...")
             cv_samples = norm_feat[feat_labels.astype(bool), :]
             cv_targ = (feat_labels[feat_labels.astype(bool)]+1)/2
             self._base_estimator.fit(cv_samples, cv_targ)
             best_params = self._base_estimator.best_params_
             model = self._base_estimator.estimator
             model.set_params(**best_params)
+            LOGGER.info("  - best parameters: %s", best_params)
         else:
             model = base.clone(self._base_estimator)
 
         # Begin training loop
         target = feat_labels
         num_passed = []
-        logging.info("Beginning Training Loop...")
+        LOGGER.info("Beginning training loop...")
         for i in range(max_iter):
-            logging.info(f"> Starting Iteration {i}...")
             # Fit the model
             samples = norm_feat[target.astype(bool), :]
             iter_targ = (target[target.astype(bool)]+1)/2
@@ -113,8 +116,9 @@ class Model():
             # Update target
             target = psms._update_labels(scores, fdr_threshold=train_fdr)
             num_passed.append((target == 1).sum())
-            print(iter_targ.sum())
+            LOGGER.info("  - Iteration %i: %i training PSMs passed.",
+                        i, iter_targ.sum())
 
         self.estimator = model
         self._trained = True
-        logging.info("Done training.")
+        LOGGER.info("Done training.")

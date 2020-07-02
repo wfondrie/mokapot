@@ -79,6 +79,8 @@ def brew(psms,
     except TypeError:
         psms = [psms]
 
+
+    LOGGER.info("Splitting PSMs into %i folds...", folds)
     test_idx = [p._split(folds) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
 
@@ -87,7 +89,8 @@ def brew(psms,
                 train_sets,
                 [copy.deepcopy(model) for _ in range(folds)],
                 [train_fdr]*folds,
-                [max_iter]*folds]
+                [max_iter]*folds,
+                range(folds)]
 
     # Train models in parallel
     with ProcessPoolExecutor(max_workers=max_workers) as prc:
@@ -131,6 +134,7 @@ def _make_train_sets(psms, test_idx):
         train_set._data = pd.concat(data, ignore_index=True)
         yield train_set
 
+
 def _predict(dset, test_idx, models, test_fdr):
     """
     Return the new scores for the dataset
@@ -157,7 +161,7 @@ def _predict(dset, test_idx, models, test_fdr):
 
 
 def _fit_model(train_set: PsmDataset, model: Model, train_fdr: float,
-               max_iter: int) -> Model:
+               max_iter: int, fold) -> Model:
     """
     Fit the estimator using the training data.
 
@@ -173,5 +177,7 @@ def _fit_model(train_set: PsmDataset, model: Model, train_fdr: float,
     max_iter : int
         The maximum number of iterations to run the algorithm.
     """
+    LOGGER.info("")
+    LOGGER.info("=== Analyzing Fold %i ===", fold+1)
     model.fit(train_set, train_fdr=train_fdr, max_iter=max_iter)
     return model

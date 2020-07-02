@@ -2,6 +2,7 @@
 This module contains the parsers for reading in PSMs
 """
 import gzip
+import logging
 
 import pandas as pd
 from tqdm import tqdm
@@ -9,6 +10,7 @@ from tqdm import tqdm
 from . import utils
 from .dataset import LinearPsmDataset
 
+LOGGER = logging.getLogger(__name__)
 
 # Functions -------------------------------------------------------------------
 def read_pin(pin_files):
@@ -42,6 +44,7 @@ def read_pin(pin_files):
         A :py:class:`~mokapot.dataset.LinearPsmDataset` object
         containing the PSMs from all of the PIN files.
     """
+    logging.info("Parsing PSMs...")
     pin_df = pd.concat([_parse_pin(f) for f in utils.tuplize(pin_files)])
 
     # Find all of the necessary columns, case-insensitive:
@@ -90,7 +93,7 @@ def _parse_pin(pin_file):
                          header=None,
                          dtype=str,
                          low_memory=True)
-
+    LOGGER.info("  - Reading PSMs from %s", pin_file)
     pin_df.columns = pin_df.loc[0, :].values
     pin_df.drop(index=0, inplace=True)
     return pin_df.apply(pd.to_numeric, errors="ignore").reset_index()
