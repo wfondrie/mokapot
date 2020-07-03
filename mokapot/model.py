@@ -105,7 +105,7 @@ class Model():
         feat = self.scaler.transform(psms.features.loc[:, self.features].values)
         return self.estimator.decision_function(feat)
 
-    def predict(self, psms: PsmDataset) -> np.ndarray:
+    def predict(self, psms):
         """Alias for `decision_function()`."""
         return self.decision_function(psms)
 

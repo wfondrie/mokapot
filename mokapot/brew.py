@@ -20,6 +20,7 @@ def brew(psms,
          train_fdr=0.01,
          test_fdr=0.01,
          max_iter=10,
+         direction=None,
          folds=3,
          max_workers=1):
     """
@@ -35,23 +36,28 @@ def brew(psms,
 
     Parameters
     ----------
-    psms : PsmDataset or list of PsmDataset
+    psms : PsmDataset object or list of PsmDataset objects
         One or more :doc:`PsmDataset <dataset>` objects. PSMs are
         aggregated across all of the collections for model training,
         but the confidence estimates are calculated and returned
         separately.
-    model : Model, optional
+    model : Model object, optional
         The :doc:`Model <model>` object to be fit. The default is
         `None`, which attempts to mimic the same support vector machine
         models used by Percolator.
     train_fdr : float, optional
-        The false-discovery rate threshold to define positive examples
-        during model training.
+        The maximum false discovery rate at which to consider a
+        target PSM as a positive example during model training.
     test_fdr : float, optional
         The false-discovery rate threshold to evaluate whether the
         learned models yield more PSMs than the best feature.
     max_iter : int, optional
         The maximum number of iterations to use for training.
+    direction : str or None, optional
+        The name of the feature to use as the initial direction for
+        ranking PSMs. The default, None, automatically selects the
+        feature that finds the most PSMs below the `train_fdr`. This
+        will be ignored in the case the model is already trained.
     folds : int, optional
         The number of cross-validation folds to use. PSMs originating
         from the same mass spectrum are always in the same fold.
@@ -63,7 +69,7 @@ def brew(psms,
 
     Returns
     -------
-    PsmConfidence or list of PsmConfidence
+    Confidence object or list of Confidence objects
         An object or a list of objects containing the
         :doc:`confidence estimates <confidence>` at various levels
         (i.e. PSMs, peptides) when assessed using the learned score.
@@ -73,7 +79,6 @@ def brew(psms,
     if model is None:
         model = Model()
 
-    # TODO: Add group FDR estimates.
     try:
         iter(psms)
     except TypeError:
@@ -90,6 +95,7 @@ def brew(psms,
                 [copy.deepcopy(model) for _ in range(folds)],
                 [train_fdr]*folds,
                 [max_iter]*folds,
+                [direction]*folds,
                 range(folds)]
 
     # Train models in parallel
@@ -160,8 +166,7 @@ def _predict(dset, test_idx, models, test_fdr):
     return np.concatenate(scores)[rev_idx]
 
 
-def _fit_model(train_set: PsmDataset, model: Model, train_fdr: float,
-               max_iter: int, fold) -> Model:
+def _fit_model(train_set, model, train_fdr, max_iter, direction, fold):
     """
     Fit the estimator using the training data.
 
@@ -179,5 +184,6 @@ def _fit_model(train_set: PsmDataset, model: Model, train_fdr: float,
     """
     LOGGER.info("")
     LOGGER.info("=== Analyzing Fold %i ===", fold+1)
-    model.fit(train_set, train_fdr=train_fdr, max_iter=max_iter)
+    model.fit(train_set, train_fdr=train_fdr, max_iter=max_iter,
+              direction=direction)
     return model

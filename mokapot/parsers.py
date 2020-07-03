@@ -96,4 +96,4 @@ def _parse_pin(pin_file):
     LOGGER.info("  - Reading PSMs from %s", pin_file)
     pin_df.columns = pin_df.loc[0, :].values
     pin_df.drop(index=0, inplace=True)
-    return pin_df.apply(pd.to_numeric, errors="ignore").reset_index()
+    return pin_df.apply(pd.to_numeric, errors="ignore").reset_index(drop=True)

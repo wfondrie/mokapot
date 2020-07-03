@@ -80,7 +80,6 @@ class PsmDataset(ABC):
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
-        self._feature_columns = feature_columns
 
         if other_columns is not None:
             other_columns = utils.tuplize(other_columns)
@@ -99,10 +98,16 @@ class PsmDataset(ABC):
 
         # Get the feature columns
         if feature_columns is None:
-            feature_columns = tuple(c for c in self.data.columns
-                                    if c not in used_columns)
+            self._feature_columns = tuple(c for c in self.data.columns
+                                          if c not in used_columns)
         else:
-            feature_columns = tuple(feature_columns)
+            self._feature_columns = utils.tuplize(feature_columns)
+
+        LOGGER.info("Using %i features:", len(self._feature_columns))
+        for i, feat in enumerate(self._feature_columns):
+            LOGGER.info("  (%i)\t%s", i+1, feat)
+
+        LOGGER.info("Found %i PSMs.", len(self._data))
 
     @property
     def data(self):
@@ -320,6 +325,8 @@ class LinearPsmDataset(PsmDataset):
                          other_columns=other_columns)
 
         self._data[target_column] = self._data[target_column].astype(bool)
+        LOGGER.info("  - %i target PSMs and %i decoy PSMs detected.",
+                    sum(self.targets), sum(~self.targets))
 
     @property
     def targets(self):
