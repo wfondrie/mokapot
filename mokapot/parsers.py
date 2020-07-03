@@ -11,7 +11,7 @@ from .dataset import LinearPsmDataset
 LOGGER = logging.getLogger(__name__)
 
 # Functions -------------------------------------------------------------------
-def read_pin(pin_files):
+def read_pin(pin_files, to_df=False):
     """
     Read Percolator input (PIN) tab-delimited files.
 
@@ -35,6 +35,8 @@ def read_pin(pin_files):
     ----------
     pin_files : str or tuple of str
         One or more PIN files to read.
+    to_df : bool
+        Return a pandas.DataFrame instead of a LinearPsmDataset.
 
     Returns
     -------
@@ -72,6 +74,9 @@ def read_pin(pin_files):
 
     # Convert labels to the correct format.
     pin_df[labels[0]] = (pin_df[labels[0]] + 1) / 2
+
+    if to_df:
+        return pin_df
 
     return LinearPsmDataset(psms=pin_df,
                             target_column=labels[0],
