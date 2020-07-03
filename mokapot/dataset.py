@@ -10,7 +10,7 @@ import pandas as pd
 
 from . import qvalues
 from . import utils
-from .confidence import LinearPsmConfidence, CrossLinkedPsmConfidence
+from .confidence import LinearConfidence, CrossLinkedConfidence
 
 LOGGER = logging.getLogger(__name__)
 
@@ -389,7 +389,7 @@ class LinearPsmDataset(PsmDataset):
             A :py:class:`LinearPsmConfidence` object storing the
             confidence for the provided PSMs.
         """
-        return LinearPsmConfidence(self, scores, desc)
+        return LinearConfidence(self, scores, desc)
 
 
 class CrossLinkedPsmDataset(PsmDataset):
@@ -514,4 +514,4 @@ class CrossLinkedPsmDataset(PsmDataset):
             A :py:class:`CrossLinkedPsmConfidence` object storing the
             confidence for the provided PSMs.
         """
-        return CrossLinkedPsmConfidence(self, scores, desc)
+        return CrossLinkedConfidence(self, scores, desc)

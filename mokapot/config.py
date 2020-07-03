@@ -12,6 +12,7 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
         text_list = text.splitlines(keepends=True)
         return "\n".join(_process_line(l, width, indent) for l in text_list)
 
+
 class Config():
     """
     The xenith configuration options.

@@ -79,7 +79,6 @@ class Model():
         else:
             self.scaler = base.clone(scaler)
 
-
     def decision_function(self, psms):
         """
         Score a collection of PSMs
@@ -143,9 +142,9 @@ class Model():
                         best_feat, feat_pass, train_fdr)
             start_labels = feat_labels
         elif self.is_trained:
-            scores = self.estimator.decision_function(psms)
+            scores = self.estimator.decision_function(psms.features)
             start_labels = psms._update_labels(scores, fdr_threshold=train_fdr)
-            LOGGER.info("  - The pretrained model found %i PSMs at q<=%g",
+            LOGGER.info("  - The pretrained model found %i PSMs at q<=%g.",
                         (start_labels == 1).sum(), train_fdr)
         else:
             desc_labels = psms._update_labels(psms.features[direction].values)
@@ -155,6 +154,9 @@ class Model():
                 start_labels = desc_labels
             else:
                 start_labels = asc_labels
+
+            LOGGER.info("  - Selected feature %s with %i PSMs at q<=%g.",
+                        direction, (start_labels == 1).sum(), train_fdr)
 
         # Normalize Features
         self.features = psms.features.columns.tolist()
