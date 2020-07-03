@@ -10,82 +10,120 @@ instance or provided independently.
 The following classes store the confidence estimates for a dataset based on the
 provided score. In either case, they provide utilities to access, save, and
 plot these estimates for the various relevant levels (i.e. PSMs, peptides, and
-proteins). The :py:func:`LinearPsmConfidence` class is appropriate for most
-proteomics datasets, whereas the :py:func:`CrossLinkedPsmConfidence` is
+proteins). The :py:func:`LinearConfidence` class is appropriate for most
+proteomics datasets, whereas the :py:func:`CrossLinkedConfidence` is
 specifically designed for crosslinked peptides.
 """
-from __future__ import annotations
+import os
 import logging
-import random
-from typing import Tuple, Union, Dict, TYPE_CHECKING
 
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
 
 from . import qvalues
-if TYPE_CHECKING:
-    from .dataset import PsmDataset, LinearPsmDataset, CrossLinkedPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
 
 # Classes ---------------------------------------------------------------------
-class PsmConfidence():
+class Confidence():
     """
     Estimate and store the statistical confidence for a collection of
     PSMs.
 
     :meta private:
     """
-    def __init__(self, psms: PsmDataset, scores: np.ndarray) -> None:
+    _level_labs = {"psms": "PSMs",
+                   "peptides": "Peptides",
+                   "proteins": "Proteins",
+                   "csms": "Cross-Linked PSMs",
+                   "peptide_pairs": "Peptide Pairs"}
+
+    def __init__(self, psms, scores):
         """
         Initialize a PsmConfidence object.
         """
-        #self.data = psms.metadata.sample(frac=1)
-        self.data = psms.metadata
-        self.data[len(psms.columns)] = scores
-        self.score_column = self.data.columns[-1]
+        self._data = psms.metadata
+        self._data[len(psms.columns)] = scores
+        self._score_column = self._data.columns[-1]
 
         # This attribute holds the results as DataFrames:
-        self.qvalues: Dict[str, pd.DataFrame] = {}
+        self._confidence_estimates = {}
+
+    def __getattr__(self, attr):
+        try:
+            return self._confidence_estimates[attr]
+        except KeyError:
+            raise AttributeError
 
     @property
-    def levels(self) -> Tuple[str, ...]:
-        """The available confidence levels (i.e. PSMs, peptides, proteins)"""
-        return tuple(self.qvalues.keys())
-
-    def to_txt(self, fileroot, sep="\t"):
-        """Save the results to files"""
-        for level, qvals in self.qvalues.items():
-            qvals.to_csv(f"{fileroot}.mokapot.{level}.txt", sep=sep,
-                         index=False)
-
-    def _perform_tdc(self, psm_columns: Tuple[str, ...]) -> None:
-        """Conduct TDC, stuff"""
-        psm_idx = _groupby_max(self.data, psm_columns, self.score_column)
-        self.data = self.data.loc[psm_idx]
-
-    def plot(self, level: str, threshold: float = 0.1,
-             ax: plt.Axes = None, **kwargs) -> plt.Axes:
+    def levels(self):
         """
-        Plot the accepted number of PSMs, peptides, or proteins over
+        The available levels for confidence estimates (i.e. PSMs,
+        peptides, proteins)
+        """
+        return list(self._confidence_estimates.keys())
+
+    def to_txt(self, dest_dir=None, file_root=None, sep="\t"):
+        """
+        Save confidence estimates delimited text files.
+
+        Parameters
+        ----------
+        dest_dir : str or None, optional
+            The directory in which to save the files. The default is the
+            current working directory.
+        file_root : str or None, optional
+            An optional prefix for the confidence estimate files.
+        sep : str
+            The delimiter to use.
+
+        Returns
+        -------
+        list of str
+            The paths to the saved files.
+        """
+        file_base = "mokapot"
+        if file_root is not None:
+            file_base = file_root + "." + file_base
+        if dest_dir is not None:
+            file_base = os.path.join(dest_dir, file_base)
+
+        out_files = []
+        for level, qvals in self._confidence_estimates.items():
+            out_file = file_base + f".{level}.txt"
+            qvals.to_csv(out_file, sep=sep, index=False)
+            out_files.append(out_file)
+
+        return out_files
+
+    def _perform_tdc(self, psm_columns):
+        """
+        Perform target-decoy competition.
+
+        Parameters
+        ----------
+        psm_columns : str or list of str
+            The columns that define a PSM.
+        """
+        psm_idx = _groupby_max(self._data, psm_columns, self._score_column)
+        self._data = self._data.loc[psm_idx]
+
+    def plot_qvalues(self, level, threshold=0.1, ax=None, **kwargs):
+        """
+        Plot the accepted number of PSMs, peptides, etc over
         a range of q-values.
 
         Parameters
         ----------
         level : str, optional
-            The level of q-values to report. Can be one of `"psms"`,
-            `"peptides"`, or `"proteins"`.
-
+            The level of q-values to report.
         threshold : float, optional
             Indicates the maximum q-value to plot.
-
         ax : matplotlib.pyplot.Axes, optional
             The matplotlib Axes on which to plot. If `None` the current
             Axes instance is used.
-
         **kwargs : dict, optional
             Arguments passed to matplotlib.pyplot.plot()
 
@@ -95,9 +133,6 @@ class PsmConfidence():
             A plot of the cumulative number of accepted target PSMs,
             peptides, or proteins.
         """
-        level_labs = {"psms": "PSMs",
-                      "peptides": "Peptides",
-                      "proteins": "Proteins"}
 
         if ax is None:
             ax = plt.gca()
@@ -105,7 +140,7 @@ class PsmConfidence():
             raise ValueError("'ax' must be a matplotlib Axes instance.")
 
         # Calculate cumulative targets at each q-value
-        qvals = self.qvalues[level].loc[:, ["mokapot q-value"]]
+        qvals = self._confidence_estimates[level].loc[:, ["mokapot q-value"]]
         qvals = qvals.sort_values(by="mokapot q-value", ascending=True)
         qvals["target"] = 1
         qvals["num"] = qvals["target"].cumsum()
@@ -127,101 +162,159 @@ class PsmConfidence():
 
         ax.set_xlim(0 - xmargin, threshold + xmargin)
         ax.set_xlabel("q-value")
-        ax.set_ylabel(f"Accepted {level_labs[level]}")
+        ax.set_ylabel(f"Accepted {self._level_labs[level]}")
 
         return ax.step(qvals["mokapot q-value"].values,
                        qvals.num.values, where="post", **kwargs)
 
 
-class LinearPsmConfidence(PsmConfidence):
-    """Assign confidence to a set of linear PSMs"""
-    def __init__(self, psms: LinearPsmDataset, scores: np.ndarray,
-                 desc: bool = True) -> None:
-        """Initialize a a LinearPsmConfidence object"""
-        super().__init__(psms, scores)
-        self.data[len(self.data.columns)] = psms.targets
-        self.target_column = self.data.columns[-1]
-        self.psm_columns = psms._spectrum_columns
-        self.peptide_columns = psms._peptide_columns
+class LinearConfidence(Confidence):
+    """
+    Assign confidence estimates to a set of PSMs
 
-        self._perform_tdc(self.psm_columns)
+    Estimate q-values and posterior error probabilities (PEPs) for PSMs
+    and peptides when ranked by the provided scores.
+
+    Parameters
+    ----------
+    psms : LinearPsmDataset object
+        A collection of PSMs.
+    scores : np.ndarray
+        A vector containing the score of each PSM.
+    desc : bool
+        Are higher scores better?
+
+    Attributes
+    ----------
+    psms : pandas.DataFrame
+        Confidence estimates for PSMs in the dataset.
+    peptides : pandas.DataFrame
+        Confidence estimates for peptide in the dataset.
+    """
+    def __init__(self, psms, scores, desc=True):
+        """Initialize a a LinearPsmConfidence object"""
+        LOGGER.info("=== Assigning Confidence ===")
+        super().__init__(psms, scores)
+        self._data[len(self._data.columns)] = psms.targets
+        self._target_column = self._data.columns[-1]
+        self._psm_columns = psms._spectrum_columns
+        self._peptide_columns = psms._peptide_columns
+
+        LOGGER.info("Performing target-decoy competition...")
+        LOGGER.info("Keeping the best match per %s columns...",
+                    "+".join(self._psm_columns))
+
+        self._perform_tdc(self._psm_columns)
+        LOGGER.info("  - Found %i PSMs from unique spectra.",
+                    len(self._data))
+
         self._assign_confidence(desc=desc)
 
-
-    def _assign_confidence(self, desc: bool) -> None:
+    def _assign_confidence(self, desc=True):
         """
-        Assign confidence to PSMs
+        Assign confidence to PSMs and peptides.
+
+        Parameters
+        ----------
+        desc : bool
+            Are higher scores better?
         """
-        peptide_idx = _groupby_max(self.data, self.peptide_columns,
-                                   self.score_column)
+        peptide_idx = _groupby_max(self._data, self._peptide_columns,
+                                   self._score_column)
 
-        peptides = self.data.loc[peptide_idx]
+        peptides = self._data.loc[peptide_idx]
+        LOGGER.info("  - Found %i unique peptides.", len(peptides))
 
-        for level, data in zip(("psms", "peptides"), (self.data, peptides)):
-            scores = data.loc[:, self.score_column].values
-            targets = data.loc[:, self.target_column].astype(bool).values
+        for level, data in zip(("psms", "peptides"), (self._data, peptides)):
+            scores = data.loc[:, self._score_column].values
+            targets = data.loc[:, self._target_column].astype(bool).values
+
+            LOGGER.info("Assiging q-values to %s.", self._level_labs[level])
             data["mokapot q-value"] = qvalues.tdc(scores, targets, desc)
 
             data = data.loc[targets, :] \
-                       .sort_values(self.score_column, ascending=(not desc)) \
+                       .sort_values(self._score_column, ascending=(not desc)) \
                        .reset_index(drop=True) \
-                       .drop(self.target_column, axis=1) \
-                       .rename(columns={self.score_column: "mokapot score"})
+                       .drop(self._target_column, axis=1) \
+                       .rename(columns={self._score_column: "mokapot score"})
 
-            target_scores = scores[targets]
-            decoy_scores = scores[~targets]
-            _, data["mokapot PEP"] = qvality.getQvaluesFromScores(scores[targets],
-                                                                  scores[~targets])
+            LOGGER.info("Assiging PEPs to %s.", self._level_labs[level])
+            _, pep = qvality.getQvaluesFromScores(scores[targets],
+                                                  scores[~targets])
+            data["mokapot PEP"] = pep
+            self._confidence_estimates[level] = data
 
-            self.qvalues[level] = data
 
+class CrossLinkedConfidence(Confidence):
+    """
+    Assign confidence estimates to a set of cross-linked PSMs
 
-class CrossLinkedPsmConfidence(PsmConfidence):
-    """Assign confidence to a set of CrossLinked PSMs"""
-    def __init__(self, psms: LinearPsmDataset, scores: np.ndarray,
-                 desc: bool = True) -> None:
-        """Initialize a a LinearPsmConfidence object"""
+    Estimate q-values and posterior error probabilities (PEPs) for
+    cross-linked PSMs (CSMs) and the peptide pairs when ranked by the
+    provided scores.
+
+    Parameters
+    ----------
+    psms : CrossLinkedPsmDataset object
+        A collection of cross-linked PSMs.
+    scores : np.ndarray
+        A vector containing the score of each PSM.
+    desc : bool
+        Are higher scores better?
+
+    Attributes
+    ----------
+    csms : pandas.DataFrame
+        Confidence estimates for cross-linked PSMs in the dataset.
+    peptide_pairs : pandas.DataFrame
+        Confidence estimates for peptide pairs in the dataset.
+    """
+    def __init__(self, psms, scores, desc=True):
+        """Initialize a CrossLinkedConfidence object"""
         super().__init__(psms, scores)
-        self.data[len(self.data.columns)] = psms.targets
-        self.target_column = self.data.columns[-1]
-        self.psm_columns = psms._spectrum_columns
-        self.peptide_columns = psms._peptide_columns
+        self._data[len(self._data.columns)] = psms.targets
+        self._target_column = self._data.columns[-1]
+        self._psm_columns = psms._spectrum_columns
+        self._peptide_columns = psms._peptide_columns
 
-        self._perform_tdc(self.psm_columns)
+        self._perform_tdc(self._psm_columns)
         self._assign_confidence(desc=desc)
 
-    def _assign_confidence(self, desc: bool) -> None:
+    def _assign_confidence(self, desc=True):
         """
-        Assign confidence to PSMs
+        Assign confidence to PSMs and peptides.
+
+        Parameters
+        ----------
+        desc : bool
+            Are higher scores better?
         """
-        peptide_idx = _groupby_max(self.data, self.peptide_columns,
-                                   self.score_column)
+        peptide_idx = _groupby_max(self._data, self._peptide_columns,
+                                   self._score_column)
 
-        peptides = self.data.loc[peptide_idx]
+        peptides = self._data.loc[peptide_idx]
+        levels = ("csms", "peptide_pairs")
 
-        for level, data in zip(("psms", "peptides"), (self.data, peptides)):
-            scores = data.loc[:, self.score_column].values
-            targets = data.loc[:, self.target_column].astype(bool).values
+        for level, data in zip(levels, (self._data, peptides)):
+            scores = data.loc[:, self._score_column].values
+            targets = data.loc[:, self._target_column].astype(bool).values
             data["mokapot q-value"] = qvalues.crosslink_tdc(scores, targets,
                                                             desc)
 
             data = data.loc[targets, :] \
-                       .sort_values(self.score_column, ascending=(not desc)) \
+                       .sort_values(self._score_column, ascending=(not desc)) \
                        .reset_index(drop=True) \
-                       .drop(self.target_column, axis=1) \
-                       .rename(columns={self.score_column: "mokapot score"})
+                       .drop(self._target_column, axis=1) \
+                       .rename(columns={self._score_column: "mokapot score"})
 
-            target_scores = scores[targets]
-            decoy_scores = scores[~targets]
-            _, data["mokapot PEP"] = qvality.getQvaluesFromScores(scores[targets == 2],
-                                                                  scores[~targets])
-
-            self.qvalues[level] = data
-
+            _, pep = qvality.getQvaluesFromScores(scores[targets == 2],
+                                                  scores[~targets])
+            data["mokapot PEP"] = pep
+            self._confidence_estimates[level] = data
 
 
 # Functions -------------------------------------------------------------------
-def _groupby_max(df: pd.DataFrame, by_cols: Tuple[str, ...], max_col: str):
+def _groupby_max(df, by_cols, max_col):
     """Quickly get the indices for the maximum value of col"""
     idx = df.sample(frac=1) \
             .sort_values(list(by_cols)+[max_col], axis=0) \

@@ -1,11 +1,9 @@
 """
 This module contains the parsers for reading in PSMs
 """
-import gzip
 import logging
 
 import pandas as pd
-from tqdm import tqdm
 
 from . import utils
 from .dataset import LinearPsmDataset

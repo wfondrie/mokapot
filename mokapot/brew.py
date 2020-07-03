@@ -9,7 +9,6 @@ import pandas as pd
 import numpy as np
 
 from .model import Model
-from .dataset import PsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -84,7 +83,6 @@ def brew(psms,
     except TypeError:
         psms = [psms]
 
-
     LOGGER.info("Splitting PSMs into %i folds...", folds)
     test_idx = [p._split(folds) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
@@ -108,11 +106,14 @@ def brew(psms,
         models = map_fun(*map_args)
 
     scores = [_predict(p, i, models, test_fdr) for p, i in zip(psms, test_idx)]
+
+    LOGGER.info("")
     res = [p.assign_confidence(s, desc=True) for p, s in zip(psms, scores)]
     if len(res) == 1:
         return res[0]
 
     return res
+
 
 # Utility Functions -----------------------------------------------------------
 def _make_train_sets(psms, test_idx):
