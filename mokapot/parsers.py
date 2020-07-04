@@ -45,7 +45,8 @@ def read_pin(pin_files, to_df=False):
         containing the PSMs from all of the PIN files.
     """
     logging.info("Parsing PSMs...")
-    pin_df = pd.concat([_parse_pin(f) for f in utils.tuplize(pin_files)])
+    pin_df = pd.concat([read_percolator(f)
+                        for f in utils.tuplize(pin_files)])
 
     # Find all of the necessary columns, case-insensitive:
     specid = tuple(c for c in pin_df.columns if c.lower() == "specid")
@@ -87,16 +88,32 @@ def read_pin(pin_files, to_df=False):
 
 
 # Utility Functions -----------------------------------------------------------
-def _parse_pin(pin_file):
-    """Parse a Percolator INput formatted file."""
-    pin_df = pd.read_csv(pin_file,
+def read_percolator(perc_file):
+    """
+    Read a Percolator tab-delimited file.
+
+    Percolator input format (PIN) files and the Percolator result files
+    are tab-delimited, but also have a tab-delimited protein list as the
+    final column. This function parses the file and returns a DataFrame.
+
+    Parameters
+    ----------
+    perc_file : str
+        The file to parse.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame of the parsed data.
+    """
+    LOGGER.info("Reading %s...", perc_file)
+    pin_df = pd.read_csv(perc_file,
                          sep="\t",
                          usecols=lambda x: True,
                          lineterminator='\n',
                          header=None,
                          dtype=str,
                          low_memory=True)
-    LOGGER.info("  - Reading PSMs from %s", pin_file)
     pin_df.columns = pin_df.loc[0, :].values
     pin_df.drop(index=0, inplace=True)
     return pin_df.apply(pd.to_numeric, errors="ignore").reset_index(drop=True)
