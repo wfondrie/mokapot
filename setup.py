@@ -26,7 +26,12 @@ setuptools.setup(
     license="Apache 2.0",
     entry_points={"console_scripts": ["mokapot = mokapot.mokapot:main"]},
     classifiers=CATAGORIES,
-    install_requires=["numpy", "pandas", "scikit-learn", "numba", "triqler"],
+    install_requires=["numpy",
+                      "pandas",
+                      "scikit-learn",
+                      "numba",
+                      "triqler",
+                      "matplotlib"],
     use_scm_version=True,
     setup_requires=["setuptools_scm"]
 )
