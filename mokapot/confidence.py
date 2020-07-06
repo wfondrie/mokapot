@@ -183,6 +183,9 @@ class LinearConfidence(Confidence):
         A vector containing the score of each PSM.
     desc : bool
         Are higher scores better?
+    eval_fdr : float
+        The FDR threshold at which to report performance. This parameter
+        has no affect on the analysis itself, only logging messages.
 
     Attributes
     ----------
@@ -191,7 +194,7 @@ class LinearConfidence(Confidence):
     peptides : pandas.DataFrame
         Confidence estimates for peptide in the dataset.
     """
-    def __init__(self, psms, scores, desc=True):
+    def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
         """Initialize a a LinearPsmConfidence object"""
         LOGGER.info("=== Assigning Confidence ===")
         super().__init__(psms, scores)
@@ -199,6 +202,7 @@ class LinearConfidence(Confidence):
         self._target_column = self._data.columns[-1]
         self._psm_columns = psms._spectrum_columns
         self._peptide_columns = psms._peptide_columns
+        self._eval_fdr = eval_fdr
 
         LOGGER.info("Performing target-decoy competition...")
         LOGGER.info("Keeping the best match per %s columns...",
@@ -225,11 +229,11 @@ class LinearConfidence(Confidence):
         peptides = self._data.loc[peptide_idx]
         LOGGER.info("  - Found %i unique peptides.", len(peptides))
 
-        for level, data in zip(("psms", "peptides"), (self._data, peptides)):
+        for level, data in zip(("PSMs", "peptides"), (self._data, peptides)):
             scores = data.loc[:, self._score_column].values
             targets = data.loc[:, self._target_column].astype(bool).values
 
-            LOGGER.info("Assiging q-values to %s.", self._level_labs[level])
+            LOGGER.info("Assiging q-values to %s.", level)
             data["mokapot q-value"] = qvalues.tdc(scores, targets, desc)
 
             data = data.loc[targets, :] \
@@ -238,11 +242,15 @@ class LinearConfidence(Confidence):
                        .drop(self._target_column, axis=1) \
                        .rename(columns={self._score_column: "mokapot score"})
 
-            LOGGER.info("Assiging PEPs to %s.", self._level_labs[level])
+            LOGGER.info("  - Found %i %s with q<%g",
+                        (data["mokapot q-value"] < self._eval_fdr).sum(),
+                        level, self._eval_fdr)
+
+            LOGGER.info("Assiging PEPs to %s.", level)
             _, pep = qvality.getQvaluesFromScores(scores[targets],
                                                   scores[~targets])
             data["mokapot PEP"] = pep
-            self._confidence_estimates[level] = data
+            self._confidence_estimates[level.lower()] = data
 
 
 class CrossLinkedConfidence(Confidence):

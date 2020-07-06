@@ -4,6 +4,7 @@ This module defines the model classes to used mokapot.
 import logging
 
 import numpy as np
+import pandas as pd
 import sklearn.base as base
 import sklearn.svm as svm
 import sklearn.model_selection as ms
@@ -195,6 +196,13 @@ class Model():
                         i, num_passed[i])
 
         self.estimator = model
+
+        weights = _get_weights(self.estimator, self.features)
+        if weights is not None:
+            LOGGER.info("Normalized feature weights in the learned model:")
+            for line in weights:
+                LOGGER.info("    %s", line)
+
         self.is_trained = True
         LOGGER.info("Done training.")
 
@@ -214,3 +222,41 @@ class DummyScaler():
 
     def transform(self, x):
         return x
+
+
+# Functions -------------------------------------------------------------------
+def _get_weights(model, features):
+    """
+    If the model is a linear model, parse the weights to a DataFrame.
+
+    Parameters
+    ----------
+    model : estimator
+        An sklearn linear_model object
+    features : list of str
+        The feature names, in order.
+
+    Returns
+    -------
+    list of str
+        The weights associated with each feature.
+    """
+    try:
+        weights = model.coef_
+        print(weights.shape)
+        intercept = model.intercept_
+        assert weights.shape[0] == 1
+        assert weights.shape[1] == len(features)
+        assert len(intercept) == 1
+        weights = list(weights.flatten())
+    except (AttributeError, AssertionError):
+        return None
+
+    col_width = max([len(f) for f in features]) + 2
+    txt_out = ["Feature" + " " * (col_width - 7) + "Weight"]
+    for weight, feature in zip(weights, features):
+        space = " " * (col_width - len(feature))
+        txt_out.append(feature + space + str(weight))
+
+    txt_out.append("intercept" + " " * (col_width - 9) + str(intercept[0]))
+    return txt_out
