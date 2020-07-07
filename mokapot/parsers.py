@@ -48,6 +48,9 @@ def read_pin(pin_files, to_df=False):
     pin_df = pd.concat([read_percolator(f)
                         for f in utils.tuplize(pin_files)])
 
+    print(pin_df.head())
+    print(pin_df.columns)
+
     # Find all of the necessary columns, case-insensitive:
     specid = tuple(c for c in pin_df.columns if c.lower() == "specid")
     peptides = tuple(c for c in pin_df.columns if c.lower() == "peptide")
