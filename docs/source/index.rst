@@ -10,10 +10,11 @@ mokapot
 This is some random text...
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: mokapot
+   :titlesonly:
 
-   mokapot <self>
+   Overview <self>
    getting_started.rst
    vignettes/index.rst
    api/index.rst

@@ -12,7 +12,13 @@
 #
 import os
 import sys
+import subprocess
 sys.path.insert(0, os.path.abspath(os.path.join("..", "..")))
+
+try:
+    import numpydoc
+except ModuleNotFoundError:
+    subprocess.run(["pip", "install", "numpydoc"], check=True)
 
 
 # -- Project information -----------------------------------------------------
@@ -36,12 +42,28 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx.ext.coverage",
     "sphinx.ext.viewcode",
-    #"sphinx.ext.napoleon"
-    "numpydoc"
+    "numpydoc",
+    "sphinx_rtd_theme",
+    "sphinx.ext.intersphinx",
+    "sphinxarg.ext"
 ]
 
 autosummary_generate = True
-#napoleon_use_ivar = True
+autodoc_default_options = {
+    'members': True,
+    "inherited-members": True,
+    "member-order": "bysource"
+}
+
+numpydoc_show_class_members = True
+numpydoc_show_inherited_class_members = True
+numpydoc_attributes_as_param_list = True
+intersphinx_mapping = {
+    "pandas": ("https://pandas.pydata.org/docs", None),
+    "sklearn": ("https://scikit-learn.org/stable", None),
+    "numpy": ("https://docs.scipy.org/doc/numpy", None),
+    "matplotlib": ("https://matplotlib.org", None)
+}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -57,9 +79,13 @@ exclude_patterns = ["build", "Thumbs.db", ".DS_Store"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'pydata_sphinx_theme'
+html_theme = "sphinx_rtd_theme"
+#html_theme = "alabaster"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+master_doc = "index"
+source_suffix = ".rst"

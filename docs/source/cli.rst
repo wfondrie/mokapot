@@ -1,4 +1,7 @@
 Command Line Interface
 ----------------------
 
-blah blah blah
+.. argparse::
+   :module: mokapot.config
+   :func: _parser
+   :prog: mokapot

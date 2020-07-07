@@ -2,8 +2,9 @@ Python API
 ==========
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :hidden:
+   :titlesonly:
 
    Overview <self>
    functions.rst
@@ -28,22 +29,20 @@ Model
 
    Model
 
-PsmDataset
-----------
+Datasets
+--------
 .. currentmodule:: mokapot.dataset
 .. autosummary::
    :nosignatures:
 
    LinearPsmDataset
-   CrossLinkedPsmDataset
+   .. CrossLinkedPsmDataset
 
-PsmConfidence
--------------
+Confidence Estimates
+--------------------
 .. currentmodule:: mokapot.confidence
 .. autosummary::
    :nosignatures:
 
-   LinearPsmConfidence
-
-
-CrossLinkedPsmConfidence
+   LinearConfidence
+   .. CrossLinkedConfidence

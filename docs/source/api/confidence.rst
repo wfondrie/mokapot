@@ -1,6 +1,3 @@
-PsmConfidence
-=============
-
+Confidence Estimation
+=====================
 .. automodule:: mokapot.confidence
-   :members:
-   :inherited-members:
