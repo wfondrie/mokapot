@@ -48,9 +48,6 @@ def read_pin(pin_files, to_df=False):
     pin_df = pd.concat([read_percolator(f)
                         for f in utils.tuplize(pin_files)])
 
-    print(pin_df.head())
-    print(pin_df.columns)
-
     # Find all of the necessary columns, case-insensitive:
     specid = tuple(c for c in pin_df.columns if c.lower() == "specid")
     peptides = tuple(c for c in pin_df.columns if c.lower() == "peptide")
@@ -117,8 +114,7 @@ def read_percolator(perc_file):
                          header=None,
                          dtype=str,
                          low_memory=True)
+
     pin_df.columns = pin_df.loc[0, :].values
-    #pin_df.columns = pin_df.loc[0, :].str.replace(r"\r", "").values
     pin_df.drop(index=0, inplace=True)
-    print(pin_df.iloc[:, -1].str.endswith(r"\r").sum())
     return pin_df.apply(pd.to_numeric, errors="ignore").reset_index(drop=True)
