@@ -117,6 +117,7 @@ def read_percolator(perc_file):
                          header=None,
                          dtype=str,
                          low_memory=True)
+    pin_df.columns = pin_df.loc[0, :].values
     #pin_df.columns = pin_df.loc[0, :].str.replace(r"\r", "").values
     pin_df.drop(index=0, inplace=True)
     print(pin_df.iloc[:, -1].str.endswith(r"\r").sum())
