@@ -113,11 +113,11 @@ def read_percolator(perc_file):
     pin_df = pd.read_csv(perc_file,
                          sep="\t",
                          usecols=lambda x: True,
-                         lineterminator="\n",
+                         #lineterminator="\n",
                          header=None,
                          dtype=str,
                          low_memory=True)
-    pin_df.columns = pin_df.loc[0, :].str.replace(r"\r", "").values
+    #pin_df.columns = pin_df.loc[0, :].str.replace(r"\r", "").values
     pin_df.drop(index=0, inplace=True)
     print(pin_df.iloc[:, -1].str.endswith(r"\r").sum())
     return pin_df.apply(pd.to_numeric, errors="ignore").reset_index(drop=True)
