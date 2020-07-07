@@ -1,17 +1,21 @@
 """
-This module defines the model classes to used mokapot.
+mokapot implements an algorithm for training machine learning models to
+distinguish high-scoring target peptide-spectrum matches (PSMs) from
+decoy PSMs using an iterative procedure. It is the :py:class:`Model`
+class that contains this logic. A :py:class:`Model` instance can be
+created from any object with a scikit-learn estimator interface,
+allowing a wide variety of models to be used. Once initialized,
+the :py:meth:`Model.fit` method trains the underyling classifier
+using :doc:`a collection of PSMs <dataset>` with this iterative
+approach.
 """
 import logging
 
-import numpy as np
-import pandas as pd
 import sklearn.base as base
 import sklearn.svm as svm
 import sklearn.model_selection as ms
 import sklearn.preprocessing as pp
 from sklearn.exceptions import NotFittedError
-
-from .dataset import PsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,11 +32,12 @@ class Model():
 
     A linear support vector machine (SVM) model is used by default in an
     attempt emulate the SVM models in Percolator. Alternatively, any
-    classifier with a scikit-learn estimator interface can be used,
-    assuming that it defines the canonical `fit()` and
-    `decision_function()` methods. This class also supports hyper
-    parameter optimization using the scikit-learn `GridSearchCV` and
-    `RandomizedSearchCV` classes.
+    classifier with a `scikit-learn estimator interface
+    <https://scikit-learn.org/stable/developers/develop.html#estimators>`_
+    can be used. This class also supports hyper parameter optimization
+    using classes from the :py:mod:`sklearn.model_selection`
+    module, such as the :py:class:`~sklearn.model_selection.GridSearchCV`
+    and :py:class:`~sklearn.model_selection.RandomizedSearchCV` classes.
 
     Parameters
     ----------
@@ -41,11 +46,14 @@ class Model():
         estimator interface.
     scaler : scaler object or "as-is", optional
         Defines how features are normalized before model fitting and
-        prediction. The default, None, subtracts the mean and scales
-        to unit variance using `sklearn.preprocessing.StandardScaler`.
-        Other scalers should follow the scikit-learn transformer
-        interface, implementing `fit_transform` and `transform` methods.
-        Alternatively, the string "as-is" leaves the features in
+        prediction. The default, :code:`None`, subtracts the mean and scales
+        to unit variance using
+        :py:class:`sklearn.preprocessing.StandardScaler`.
+        Other scalers should follow the `scikit-learn transformer
+        interface
+        <https://scikit-learn.org/stable/developers/develop.html#apis-of-scikit-learn-objects>`_
+        , implementing :code:`fit_transform()` and :code:`transform()` methods.
+        Alternatively, the string :code:`"as-is"` leaves the features in
         their original scale.
 
     Attributes
@@ -55,10 +63,10 @@ class Model():
     scaler : scaler object
         The scaler used to normalize features.
     features : list of str or None
-        The features used to fit the model. None if the model has yet
-        to be trained.
+        The name of the features used to fit the model. None if the
+        model has yet to be trained.
     is_trained : bool
-        Indicates if the model has bee trained.
+        Indicates if the model has been trained.
     """
     def __init__(self, estimator=None, scaler=None):
         """Initialize a Model object"""
@@ -87,7 +95,7 @@ class Model():
         Parameters
         ----------
         psms : PsmDataset object
-            The collection of PSMs to score.
+            :doc:`A collection of PSMs <dataset>` to score.
 
         Returns
         -------
@@ -106,7 +114,7 @@ class Model():
         return self.estimator.decision_function(feat)
 
     def predict(self, psms):
-        """Alias for `decision_function()`."""
+        """Alias for :py:meth:`decision_function`."""
         return self.decision_function(psms)
 
     def fit(self, psms, train_fdr=0.01, max_iter=10, direction=None):
@@ -123,7 +131,8 @@ class Model():
         Parameters
         ----------
         psms : PsmDataset object
-            A collection of PSMs from which to train the model.
+            :doc:`A collection of PSMs <dataset>` from which to train
+            the model.
         train_fdr : float, optional
             The maximum false discovery rate at which to consider a
             target PSM as a positive example.
@@ -131,8 +140,9 @@ class Model():
             The number of iterations to perform.
         direction : str or None, optional
             The name of the feature to use as the initial direction for
-            ranking PSMs. The default, None, automatically selects the
-            feature that finds the most PSMs below the `train_fdr`. This
+            ranking PSMs. The default, :code:`None`, automatically
+            selects the feature that finds the most PSMs below the
+            `train_fdr`. This
             will be ignored in the case the model is already trained.
         """
         # Choose the initial direction
@@ -227,7 +237,7 @@ class DummyScaler():
 # Functions -------------------------------------------------------------------
 def _get_weights(model, features):
     """
-    If the model is a linear model, parse the weights to a DataFrame.
+    If the model is a linear model, parse the weights to a list of strings.
 
     Parameters
     ----------
@@ -243,7 +253,6 @@ def _get_weights(model, features):
     """
     try:
         weights = model.coef_
-        print(weights.shape)
         intercept = model.intercept_
         assert weights.shape[0] == 1
         assert weights.shape[1] == len(features)

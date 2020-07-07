@@ -1,6 +1,22 @@
 """
-This module contains the classes and methods needed to import, validate and
-normalize a collection of PSMs in PIN (Percolator INput) format.
+The :py:class:`LinearPsmDataset` and :py:class:`CrossLinkedPsmDataset`
+classes are used to define collections peptide-spectrum matches. The
+:py:class:`LinearPsmDataset` class is suitable for most types of
+data-dependent acquisition proteomics experiments, whereas the
+:py:class:`CrossLinkedPsmDataset` is specifically designed for
+collections of cross-linked PSMs (CSMs) originating from
+cross-linking proteomics experiments.
+
+Although either class can be constructed from a
+:py:ref:`pandas.DataFrame`, it is often easier to load the PSMs directly
+from a file in the `Percolator tab-delimited format
+<https://github.com/percolator/percolator/wiki/Interface#tab-delimited-file-format>`_
+(also known as the Percolator input format, or "PIN") using the
+:py:func:`mokapot.read_pin` function.
+
+Instances of these classes are required to train a
+:py:class:`mokapot.model.Model` object, use the :py:func:`mokapot.brew`
+function, or :doc:`assign confidence estimates <confidence>`.
 """
 import logging
 from abc import ABC, abstractmethod
@@ -111,7 +127,7 @@ class PsmDataset(ABC):
 
     @property
     def data(self):
-        """The full collection of PSMs."""
+        """The full collection of PSMs as a :py:class:`pandas.DataFrame`."""
         return self._data
 
     @property
@@ -127,14 +143,14 @@ class PsmDataset(ABC):
 
     @property
     def features(self):
-        """A pandas DataFrame of the features."""
+        """A :py:class:`pandas.DataFrame` of the features."""
         return self.data.loc[:, self._feature_columns]
 
     @property
     def spectra(self):
         """
-        A pandas DataFrame of the columns that uniquely identify a
-        mass spectrum.
+        A :py:class:`pandas.DataFrame` of the columns that uniquely
+        identify a mass spectrum.
         """
         return self.data.loc[:, self._spectrum_columns]
 
@@ -255,7 +271,7 @@ class PsmDataset(ABC):
 class LinearPsmDataset(PsmDataset):
     """Store and analyze a collection of PSMs
 
-    This class stores a collection of PSMs from typical, data-dependent
+    This class stores a collection of PSMs from data-dependent
     acquisition proteomics experiments and defines the necessary fields
     for mokapot analysis.
 
@@ -365,30 +381,42 @@ class LinearPsmDataset(PsmDataset):
         new_labels[unlabeled] = 0
         return new_labels
 
-    def assign_confidence(self, scores, desc=True):
+    def assign_confidence(self, scores=None, desc=True, eval_fdr=0.01):
         """
         Assign confidence to PSMs and peptides.
 
         Two forms of confidence estimates are calculated: q-values,
-        which are the minimum false discovery rate at which a given PSMs
-        would be accepted, and posterior error probabilities (PEPs),
-        which probability that the given PSM is incorrect. For more
-        information see the :doc:`PsmConfidence <confidence>`
-        page.
+        which are the minimum false discovery rate (FDR) at which a
+        given PSMs would be accepted, and posterior error probabilities
+        (PEPs), which probability that the given PSM is incorrect. For
+        more information see the :doc:`Confidence Estimation
+        <confidence>` page.
 
         Parameters
         ----------
         scores : numpy.ndarray
-            The scores used to rank the PSMs.
+            The scores used to rank the PSMs. The default,
+            :code:`None`, uses the feature that accepts the most
+            PSMs at an FDR of `eval_fdr`.
         desc : bool
             Are higher scores better?
+        eval_fdr : float
+            The FDR threshold at which to report and evaluate
+            performance. If `scores` is not :code:`None`, this
+            parameter has no affect on the analysis itself, only on
+            logging messages.
 
         Returns
         -------
-        LinearPsmConfidence
-            A :py:class:`LinearPsmConfidence` object storing the
-            confidence for the provided PSMs.
+        LinearConfidence
+            A :py:class:`LinearConfidence` object storing the
+            confidence estimates for the collection of PSMs.
         """
+        if scores is None:
+            feat, _, _ = self._find_best_feature(eval_fdr)
+            LOGGER.info("Selected %s as the best feature.", feat)
+            scores = self.features[feat].values
+
         return LinearConfidence(self, scores, desc)
 
 
@@ -426,6 +454,8 @@ class CrossLinkedPsmDataset(PsmDataset):
         The column(s) specifying the feature(s) for mokapot analysis. If
         `None`, these are assumed to be all columns not specified in the
         previous parameters.
+
+    :meta private:
     """
     def __init__(self,
                  psms: pd.DataFrame,

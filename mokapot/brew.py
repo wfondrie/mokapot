@@ -36,26 +36,26 @@ def brew(psms,
     Parameters
     ----------
     psms : PsmDataset object or list of PsmDataset objects
-        One or more :doc:`PsmDataset <dataset>` objects. PSMs are
-        aggregated across all of the collections for model training,
-        but the confidence estimates are calculated and returned
-        separately.
+        One or more :doc:`collections of PSMs <dataset>` objects.
+        PSMs are aggregated across all of the collections for model
+        training, but the confidence estimates are calculated and
+        returned separately.
     model : Model object, optional
-        The :doc:`Model <model>` object to be fit. The default is
-        `None`, which attempts to mimic the same support vector machine
-        models used by Percolator.
+        The :py:class:`mokapot.Model` object to be fit. The default is
+        :code:`None`, which attempts to mimic the same support vector
+        machine models used by Percolator.
     train_fdr : float, optional
         The maximum false discovery rate at which to consider a
         target PSM as a positive example during model training.
     test_fdr : float, optional
-        The false-discovery rate threshold to evaluate whether the
-        learned models yield more PSMs than the best feature.
+        The false-discovery rate threshold at which to evaluate
+        the learned models.
     max_iter : int, optional
-        The maximum number of iterations to use for training.
+        The number of iterations to use for training.
     direction : str or None, optional
         The name of the feature to use as the initial direction for
-        ranking PSMs. The default, None, automatically selects the
-        feature that finds the most PSMs below the `train_fdr`. This
+        ranking PSMs. The default, :code`None`, automatically selects
+        the feature that finds the most PSMs below the `train_fdr`. This
         will be ignored in the case the model is already trained.
     folds : int, optional
         The number of cross-validation folds to use. PSMs originating

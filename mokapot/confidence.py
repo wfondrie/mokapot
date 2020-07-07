@@ -2,9 +2,9 @@
 One of the primary purposes of mokapot is to assign confidence estimates to PSMs.
 This task is accomplished by ranking PSMs according to a score or metric and
 using an appropriate confidence estimation procedure for the type of data
-(currently, linear and crosslinked PSMs are supported). In either case,
+(currently, linear and cross-linked PSMs are supported). In either case,
 mokapot can provide confidence estimates based any score, regardless of
-whether it was the result of a learned :py:func:`~mokapot.model.Model`
+whether it was the result of a learned :py:func:`mokapot.model.Model`
 instance or provided independently.
 
 The following classes store the confidence estimates for a dataset based on the
@@ -60,14 +60,13 @@ class Confidence():
     @property
     def levels(self):
         """
-        The available levels for confidence estimates (i.e. PSMs,
-        peptides, proteins)
+        The available levels for confidence estimates.
         """
         return list(self._confidence_estimates.keys())
 
     def to_txt(self, dest_dir=None, file_root=None, sep="\t"):
         """
-        Save confidence estimates delimited text files.
+        Save confidence estimates to delimited text files.
 
         Parameters
         ----------
@@ -125,15 +124,14 @@ class Confidence():
             The matplotlib Axes on which to plot. If `None` the current
             Axes instance is used.
         **kwargs : dict, optional
-            Arguments passed to matplotlib.pyplot.plot()
+            Arguments passed to :py:func:`matplotlib.pyplot.plot`.
 
         Returns
         -------
         matplotlib.pyplot.Axes
-            A plot of the cumulative number of accepted target PSMs,
-            peptides, or proteins.
+            An :py:class:`matplotlib.axes.Axes` with the cumulative
+            number of accepted target PSMs or peptides.
         """
-
         if ax is None:
             ax = plt.gca()
         elif not isinstance(ax, plt.Axes):
@@ -189,10 +187,11 @@ class LinearConfidence(Confidence):
 
     Attributes
     ----------
+    levels : list of str
     psms : pandas.DataFrame
         Confidence estimates for PSMs in the dataset.
     peptides : pandas.DataFrame
-        Confidence estimates for peptide in the dataset.
+        Confidence estimates for peptides in the dataset.
     """
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
         """Initialize a a LinearPsmConfidence object"""
