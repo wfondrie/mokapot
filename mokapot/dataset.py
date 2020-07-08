@@ -8,7 +8,7 @@ collections of cross-linked PSMs (CSMs) originating from
 cross-linking proteomics experiments.
 
 Although either class can be constructed from a
-:py:ref:`pandas.DataFrame`, it is often easier to load the PSMs directly
+:py:class:`pandas.DataFrame`, it is often easier to load the PSMs directly
 from a file in the `Percolator tab-delimited format
 <https://github.com/percolator/percolator/wiki/Interface#tab-delimited-file-format>`_
 (also known as the Percolator input format, or "PIN") using the
