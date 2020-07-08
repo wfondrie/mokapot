@@ -25,16 +25,17 @@ setuptools.setup(
     license="Apache 2.0",
     entry_points={"console_scripts": ["mokapot = mokapot.mokapot:main"]},
     classifiers=CATAGORIES,
-    install_requires=["numpy",
-                      "pandas",
-                      "scikit-learn",
-                      "numba",
-                      "triqler",
-                      "matplotlib"],
+    install_requires=["numpy>=1.18.1",
+                      "pandas>=1.0.3",
+                      "scikit-learn>=0.22.1",
+                      "numba>=0.48.0",
+                      "triqler>=0.3.0",
+                      "matplotlib>=3.1.3"],
     use_scm_version=True,
     setup_requires=["setuptools-scm"],
     extras_require={
-        "docs":  ["numpydoc",
-                  "sphinx-argparse"]
+        "docs":  ["numpydoc>=1.0.0",
+                  "sphinx-argparse>=0.2.5",
+                  "sphinx-rtd-theme>=0.5.0"]
     }
 )
