@@ -89,3 +89,14 @@ html_static_path = ['_static']
 
 master_doc = "index"
 source_suffix = ".rst"
+
+html_theme_options = {
+    "style_nav_header_background": "#343131",
+    "logo_only": True
+}
+
+html_css_files = [
+    "custom.css",
+]
+
+html_logo = "_static/mokapot_logo_light.png"

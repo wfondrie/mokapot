@@ -15,8 +15,9 @@ def read_pin(pin_files, to_df=False):
     """
     Read Percolator input (PIN) tab-delimited files.
 
-    Read PSMs from one or more Percolator Input (PIN), aggregating them
-    into a single :py:class:`~mokapot.dataset.LinearPsmDataset`. For
+    Read PSMs from one or more Percolator input (PIN) tab-delmited
+    files, aggregating them into a single
+    :py:class:`~mokapot.dataset.LinearPsmDataset`. For
     more details about the PIN file format, see the
     `Percolator documentation <https://github.com/percolator/percolator/
     wiki/Interface#tab-delimited-file-format>`_.
@@ -36,7 +37,8 @@ def read_pin(pin_files, to_df=False):
     pin_files : str or tuple of str
         One or more PIN files to read.
     to_df : bool
-        Return a pandas.DataFrame instead of a LinearPsmDataset.
+        Return a :py:class:`pandas.DataFrame` instead of a
+        py:class:`~mokapot.dataset.LinearPsmDataset`.
 
     Returns
     -------

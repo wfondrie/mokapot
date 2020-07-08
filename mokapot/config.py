@@ -4,6 +4,7 @@ from the command line.
 """
 import argparse
 import textwrap
+from mokapot import __version__
 
 
 class MokapotHelpFormatter(argparse.HelpFormatter):
@@ -30,10 +31,53 @@ class Config():
 
 def _parser():
     """The parser"""
-    desc = ("mokapot")
-    docs = "blah"
-    parser = argparse.ArgumentParser(description=desc, epilog=docs,
+    desc = ("mokapot: Fast and flexible semi-supervised learning for "
+            "peptide detection.\n" +
+            ("="*80 + "\n") +
+            f"Version {__version__}\n\n"
+            "Official code website: https://github.com/wfondrie/mokapot\n\n"
+            "More documentation and examples: https://mokapot.readthedocs.io")
+
+    parser = argparse.ArgumentParser(description=desc,
                                      formatter_class=MokapotHelpFormatter)
+
+    parser.add_argument("pin_files", type=str, nargs="+",
+                        help=("A collection of PSMs in the Percolator tab-"
+                              "delimited format."))
+
+    parser.add_argument("-o", "--dest_dir", type=str,
+                        help=("The directory in which to write the result "
+                              "files. Defaults to the current working "
+                              "directory"))
+
+    parser.add_argument("-r", "--file_root", type=str,
+                        help="The prefix added to all file names.")
+
+    parser.add_argument("--train_fdr", default=0.01, type=float,
+                        help=("The maximum false discovery rate at which to "
+                              "consider a target PSM as a positive example "
+                              "during model training."))
+
+    parser.add_argument("--test_fdr", default=0.01, type=float,
+                        help=("The false-discovery rate threshold at which to "
+                              "evaluate the learned models."))
+
+    parser.add_argument("--max_iter", default=10, type=int,
+                        help=("The number of iterations to use for training."))
+
+    parser.add_argument("--seed", type=int, default=1,
+                        help=("An integer to use as the random seed."))
+
+    parser.add_argument("--direction", type=str,
+                        help=("The name of the feature to use as the initial "
+                              "direction for ranking PSMs. The default "
+                              "automatically selects the feature that finds "
+                              "the most PSMs below the `train_fdr`."))
+
+    parser.add_argument("--folds", type=int, default=3,
+                        help=("The number of cross-validation folds to use. "
+                              "PSMs originating from the same mass spectrum "
+                              "are always in the same fold."))
 
     parser.add_argument("-v", "--verbosity",
                         default=2,
@@ -44,23 +88,6 @@ def _parser():
                               "messages, including all those at a lower "
                               "verbosity: 0-errors, 1-warnings, 2-messages"
                               ", 3-debug info."))
-
-    parser.add_argument("pin_files", type=str, nargs="+",
-                        help=("A collection of PSMs in Percolator input "
-                              "format"))
-
-    parser.add_argument("-o", "--output_dir", default=".", type=str,
-                        help=("The directory in which to write the result "
-                              "files"))
-
-    parser.add_argument("-r", "--fileroot", type=str,
-                        default="mokapot",
-                        help="The prefix added to all file names.")
-
-    parser.add_argument("-s", "--seed",
-                        type=int,
-                        default=1,
-                        help=("An integer to use as the random seed."))
 
     return parser
 
