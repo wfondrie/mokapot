@@ -1,3 +1,20 @@
+.. image:: https://github.com/wfondrie/mokapot/workflows/PyPI/badge.svg
+   :target: https://github.com/wfondrie/mokapot/actions?query=workflow%3A%22Publish+to+PyPI%22 
+   :alt: PyPI
+
+.. image:: https://github.com/wfondrie/mokapot/workflows/tests/badge.svg
+   :target: https://github.com/wfondrie/mokapot/actions?query=workflow%3Atests
+   :alt: tests
+
+.. image:: https://readthedocs.org/projects/mokapot/badge/?version=latest
+   :target: https://mokapot.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
+
+.. image:: https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg
+   :target: http://spacemacs.org
+   :alt: Built with Spacemacs
+
+
 Getting Started
 ---------------
 
@@ -80,7 +97,7 @@ Basic Usage
 Before you can use mokapot, you need PSMs assigned by a search engine available
 in the `Percolator tab-delimited file format
 <https://github.com/percolator/percolator/wiki/Interface#tab-delimited-file-format>`_
-(often referred to as Percolator input, or "PIN", file format). These files can
+(often referred to as the Percolator input, or "PIN", file format). These files can
 be generated from various search engines, such as `Comet
 <http://comet-ms.sourceforge.net/>`_ or `Tide
 <http://crux.ms/commands/tide-search.html>`_ (which is part of the `Crux mass
