@@ -1,9 +1,13 @@
 """
 Initialize the mokapot package.
 """
-from pkg_resources import get_distribution
+from pkg_resources import get_distribution, DistributionNotFound
 
-__version__ = get_distribution(__name__).version
+try:
+    __version__ = get_distribution(__name__).version
+except DistributionNotFound:
+     # package is not installed
+    pass
 
 from mokapot.dataset import LinearPsmDataset
 from mokapot.model import Model
