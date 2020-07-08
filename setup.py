@@ -15,7 +15,6 @@ CATAGORIES = ["Programming Language :: Python :: 3",
 
 setuptools.setup(
     name="mokapot",
-    version="0.0.1",
     author="William E. Fondrie",
     author_email="fondriew@gmail.com",
     description=DESC,
