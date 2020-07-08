@@ -30,5 +30,11 @@ def main():
                         style="{", level=verbosity_dict[config.verbosity])
 
     dataset = read_pin(config.pin_files)
-    psms = brew(dataset)
-    psms.to_txt(os.path.join(config.output_dir, config.fileroot))
+    psms = brew(dataset,
+                train_fdr=config.train_fdr,
+                test_fdr=config.test_fdr,
+                max_iter=config.max_iter,
+                direction=config.direction,
+                folds=config.folds)
+
+    psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)

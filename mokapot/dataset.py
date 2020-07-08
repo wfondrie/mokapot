@@ -417,7 +417,7 @@ class LinearPsmDataset(PsmDataset):
             LOGGER.info("Selected %s as the best feature.", feat)
             scores = self.features[feat].values
 
-        return LinearConfidence(self, scores, desc)
+        return LinearConfidence(self, scores, eval_fdr=eval_fdr, desc=desc)
 
 
 class CrossLinkedPsmDataset(PsmDataset):

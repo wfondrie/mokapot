@@ -108,7 +108,9 @@ def brew(psms,
     scores = [_predict(p, i, models, test_fdr) for p, i in zip(psms, test_idx)]
 
     LOGGER.info("")
-    res = [p.assign_confidence(s, desc=True) for p, s in zip(psms, scores)]
+    res = [p.assign_confidence(s, eval_fdr=test_fdr, desc=True)
+           for p, s in zip(psms, scores)]
+
     if len(res) == 1:
         return res[0]
 
