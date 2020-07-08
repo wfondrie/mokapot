@@ -62,6 +62,7 @@ mokapot also depends on several Python packages:
 - `pandas <https://pandas.pydata.org/>`_
 - `Matplotlib <https://matplotlib.org/>`_
 - `scikit-learn <https://scikit-learn.org/stable/>`_
+- `Numba <http://numba.pydata.org/>`_
 - `triqler <https://github.com/statisticalbiotechnology/triqler>`_
 
 
