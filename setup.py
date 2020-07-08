@@ -32,5 +32,9 @@ setuptools.setup(
                       "triqler",
                       "matplotlib"],
     use_scm_version=True,
-    setup_requires=["setuptools_scm"]
+    setup_requires=["setuptools-scm"],
+    extras_require={
+        "docs":  ["numpydoc",
+                  "sphinx-argparse"]
+    }
 )
