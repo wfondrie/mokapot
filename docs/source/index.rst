@@ -8,6 +8,12 @@ re-scores them, and yields statistical measures---confidence estimates, such as
 q-values and posterior error probabilities---indicating their quality.
 
 
+.. note::
+
+   mokapot is still in active development and some features (such as
+   cross-linking support) will be enabled and documented in the near future.
+
+
 Introduction
 ------------
 
