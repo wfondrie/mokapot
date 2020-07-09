@@ -1,4 +1,4 @@
-<img src="https://github.com/wfondrie/mokapot/static/mokapot_logo_dark.svg" width=300>  
+<img src="https://raw.githubusercontent.com/wfondrie/mokapot/master/static/mokapot_logo_dark.svg" width=300>  
 
 ---
 
