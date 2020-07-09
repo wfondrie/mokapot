@@ -1,5 +1,5 @@
-.. image:: https://github.com/wfondrie/mokapot/workflows/PyPI/badge.svg
-   :target: https://github.com/wfondrie/mokapot/actions?query=workflow%3APyPI 
+.. image:: https://badge.fury.io/py/mokapot.svg
+   :target: https://badge.fury.io/py/mokapot
    :alt: PyPI
 
 .. image:: https://github.com/wfondrie/mokapot/workflows/tests/badge.svg

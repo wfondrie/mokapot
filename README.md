@@ -2,7 +2,7 @@
 
 ---
 
-[![PyPI](https://github.com/wfondrie/mokapot/workflows/PyPI/badge.svg)](https://github.com/wfondrie/mokapot/actions?query=workflow%3APyPI)
+[![PyPI version](https://badge.fury.io/py/mokapot.svg)](https://badge.fury.io/py/mokapot)
 [![tests](https://github.com/wfondrie/mokapot/workflows/tests/badge.svg)](https://github.com/wfondrie/mokapot/actions?query=workflow%3Atests)
 [![Documentation Status](https://readthedocs.org/projects/mokapot/badge/?version=latest)](https://mokapot.readthedocs.io/en/latest/?badge=latest)
 [![Built with Spacemacs](https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg)](http://spacemacs.org)  
