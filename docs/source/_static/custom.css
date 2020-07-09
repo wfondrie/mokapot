@@ -14,6 +14,11 @@ a {
     color: #24B8A0;
 }
 
+/** Mobile nav-bar **/
+.wy-nav-top {
+    background: #24B8A0;
+}
+
 /** Signature text **/
 html.writer-html4 .rst-content dl:not(.docutils)>dt,
 html.writer-html5 .rst-content dl[class]:not(.option-list):not(.field-list):not(.footnote):not(.glossary):not(.simple)>dt {
