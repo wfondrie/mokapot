@@ -37,6 +37,7 @@ setuptools.setup(
         "docs":  ["numpydoc>=1.0.0",
                   "sphinx-argparse>=0.2.5",
                   "sphinx-rtd-theme>=0.5.0",
-                  "nbsphinx>=0.7.1"]
+                  "nbsphinx>=0.7.1",
+                  "ipykernel>=5.3.0"]
     }
 )
