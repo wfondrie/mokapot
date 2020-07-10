@@ -83,6 +83,15 @@ def brew(psms,
     except TypeError:
         psms = [psms]
 
+    # Check that all of the datasets have the same features:
+    feat_set = set(psms[0].features.columns)
+    if not all([set(p.features.columns) == feat_set for p in psms]):
+        raise ValueError("All collections of PSMs must use the same features.")
+
+    if len(psms) > 1:
+        LOGGER.info("")
+        LOGGER.info("Found %i total PSMs.", sum([len(p.data) for p in psms]))
+
     LOGGER.info("Splitting PSMs into %i folds...", folds)
     test_idx = [p._split(folds) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
@@ -103,7 +112,7 @@ def brew(psms,
         else:
             map_fun = prc.map
 
-        models = map_fun(*map_args)
+        models = list(map_fun(*map_args))
 
     scores = [_predict(p, i, models, test_fdr) for p, i in zip(psms, test_idx)]
 
