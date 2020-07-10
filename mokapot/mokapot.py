@@ -1,6 +1,7 @@
 """
 This is the command line interface for mokapot
 """
+import os
 import sys
 import logging
 
@@ -35,13 +36,32 @@ def main():
     logging.info("")
     logging.info("Starting Analysis")
     logging.info("=================")
+
     np.random.seed(config.seed)
-    dataset = read_pin(config.pin_files)
-    psms = brew(dataset,
+
+    if config.aggregate or isinstance(config.pin_files, str):
+        datasets = read_pin(config.pin_files)
+    else:
+        datasets = [read_pin(f) for f in config.pin_files]
+        prefixes = [os.path.splitext(os.path.basename(f))[0]
+                    for f in config.pin_files]
+
+    psms = brew(datasets,
                 train_fdr=config.train_fdr,
                 test_fdr=config.test_fdr,
                 max_iter=config.max_iter,
                 direction=config.direction,
                 folds=config.folds)
 
-    psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)
+    if config.aggregate or isinstance(config.pin_files, str):
+        psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)
+    else:
+        for dat, prefix in zip(psms, prefixes):
+            if config.file_root is not None:
+                prefix = ".".join([config.file_root, prefix])
+
+            dat.to_txt(dest_dir=config.dest_dir, file_root=prefix)
+
+
+if __name__ == "__main__":
+    main()

@@ -45,7 +45,7 @@ def _parser():
                         help=("A collection of PSMs in the Percolator tab-"
                               "delimited format."))
 
-    parser.add_argument("-o", "--dest_dir", type=str,
+    parser.add_argument("-d", "--dest_dir", type=str,
                         help=("The directory in which to write the result "
                               "files. Defaults to the current working "
                               "directory"))
@@ -74,6 +74,14 @@ def _parser():
                               "automatically selects the feature that finds "
                               "the most PSMs below the `train_fdr`."))
 
+    parser.add_argument("--aggregate", default=False, action="store_true",
+                        help=("If used, PSMs from multiple PIN files will be "
+                              "aggregated and analyzed together. Otherwise, "
+                              "a joint model will be trained, but confidence "
+                              "estimates will be calculated separately for "
+                              "each PIN file. This flag only has an effect"
+                              "when multiple PIN files are provided."))
+
     parser.add_argument("--folds", type=int, default=3,
                         help=("The number of cross-validation folds to use. "
                               "PSMs originating from the same mass spectrum "
@@ -88,6 +96,9 @@ def _parser():
                               "messages, including all those at a lower "
                               "verbosity: 0-errors, 1-warnings, 2-messages"
                               ", 3-debug info."))
+
+    parser.add_argument("--version", default="false", action="store_true",
+                        help=("Print mokapot version information."))
 
     return parser
 
