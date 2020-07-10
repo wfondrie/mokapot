@@ -1,6 +1,6 @@
 Vignettes
 ---------
-Here are some cool examples of mokapot in action.
+Here are some examples of mokapot in action:
 
 .. toctree::
    :maxdepth: 1
@@ -8,3 +8,4 @@ Here are some cool examples of mokapot in action.
 
    percolator_comparison
    basic_python_api
+   joint_models
