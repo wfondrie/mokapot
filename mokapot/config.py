@@ -79,7 +79,7 @@ def _parser():
                               "aggregated and analyzed together. Otherwise, "
                               "a joint model will be trained, but confidence "
                               "estimates will be calculated separately for "
-                              "each PIN file. This flag only has an effect"
+                              "each PIN file. This flag only has an effect "
                               "when multiple PIN files are provided."))
 
     parser.add_argument("--folds", type=int, default=3,
@@ -96,9 +96,6 @@ def _parser():
                               "messages, including all those at a lower "
                               "verbosity: 0-errors, 1-warnings, 2-messages"
                               ", 3-debug info."))
-
-    parser.add_argument("--version", default="false", action="store_true",
-                        help=("Print mokapot version information."))
 
     return parser
 
