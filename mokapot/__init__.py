@@ -12,4 +12,4 @@ except DistributionNotFound:
 from mokapot.dataset import LinearPsmDataset
 from mokapot.model import Model
 from mokapot.brew import brew
-from mokapot.parsers import read_pin
+from mokapot.parsers import read_pin, read_percolator

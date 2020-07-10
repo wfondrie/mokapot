@@ -45,8 +45,11 @@ extensions = [
     "numpydoc",
     "sphinx_rtd_theme",
     "sphinx.ext.intersphinx",
-    "sphinxarg.ext"
+    "sphinxarg.ext",
+    "nbsphinx"
 ]
+
+nbsphinx_execute = 'never'
 
 autosummary_generate = True
 autodoc_default_options = {

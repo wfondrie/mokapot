@@ -34,7 +34,7 @@ def _parser():
     desc = ("mokapot: Fast and flexible semi-supervised learning for "
             "peptide detection.\n" +
             ("="*80 + "\n") +
-            f"Version {__version__}\n\n"
+            f"Version {__version__}\n"
             "Official code website: https://github.com/wfondrie/mokapot\n\n"
             "More documentation and examples: https://mokapot.readthedocs.io")
 

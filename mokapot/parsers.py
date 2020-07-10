@@ -112,7 +112,6 @@ def read_percolator(perc_file):
     pin_df = pd.read_csv(perc_file,
                          sep="\t",
                          usecols=lambda x: True,
-                         #lineterminator="\n",
                          header=None,
                          dtype=str,
                          low_memory=True)

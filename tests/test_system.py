@@ -16,10 +16,10 @@ logging.basicConfig(level=logging.INFO)
 
 def test_compare_to_percolator():
     """Test that mokapot get almost the same answer as Percolator"""
-    dat = mokapot.read_pin(os.path.join("tests", "data", "kim_100k.pin"))
+    dat = mokapot.read_pin(os.path.join("data", "phospho_rep1.pin"))
     res = mokapot.brew(dat)
 
-    perc_path = os.path.join("tests", "data", "kim_100k.percolator.{l}.txt")
+    perc_path = os.path.join("data", "percolator.{l}.txt")
     perc_res = {l: mokapot.parsers.read_percolator(perc_path.format(l=l))
                 for l in ["psms", "peptides"]}
 
