@@ -103,10 +103,10 @@ be generated from various search engines, such as `Comet
 <http://crux.ms/commands/tide-search.html>`_ (which is part of the `Crux mass
 spectrometry toolkit <http://crux.ms>`_).
 
-If you need an example file to get started with, a 100,000 PSM sample of the Kim
-*et al.* draft human proteome dataset is available to download from the mokapot
-repository, `kim_100k.pin
-<https://github.com/wfondrie/mokapot/raw/master/tests/data/kim_100k.pin>`_. This
+If you need an example file to get started with, a selection of PSMs from
+Hogrebe et al. [1]_ is available to download from the mokapot
+repository, `phospho_rep1.pin
+<https://github.com/wfondrie/mokapot/raw/master/tests/data/phoshpo_rep1.pin>`_. This
 is the file we'll use in the examples below.
 
 
@@ -117,7 +117,7 @@ Simple mokapot analyses can be performed from the command line:
 
 .. code-block:: bash
 
-   $ mokapot kim_100k.pin
+   $ mokapot phospho_rep1.pin
 
 That's it. Your results will be saved in your working directory as two
 tab-delimited files, `mokapot.psms.txt` and `mokapot.peptides.txt`. For a full
@@ -139,7 +139,7 @@ Then, conduct your mokapot analysis:
 .. code-block:: Python
 
    >>> import mokapot
-   >>> psms = mokapot.read_pin("kim_100k.pin")
+   >>> psms = mokapot.read_pin("phospho_rep1.pin")
    >>> results = mokapot.brew(psms)
    >>> results.to_txt()
 
@@ -148,6 +148,12 @@ conducted in Python. Additionally, a great deal more flexibility is available
 when using mokapot from the Python interpreter. For more details, see the
 :doc:`Python API <api/index>`.
 
+
+ .. [1] Hogrebe, Alexander, et al. "Benchmarking common quantification strategies
+       for large-scale phosphoproteomics." Nature communications 9.1 (2018):
+       1-13.
+
+ 
 .. toctree::
    :hidden:
    :maxdepth: 1

@@ -17,6 +17,7 @@ specifically designed for crosslinked peptides.
 import os
 import logging
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
@@ -111,8 +112,10 @@ class Confidence():
 
     def plot_qvalues(self, level, threshold=0.1, ax=None, **kwargs):
         """
-        Plot the accepted number of PSMs, peptides, etc over
-        a range of q-values.
+        Plot the cumulative number of discoveries over range of q-values.
+
+        The available levels can be found using
+        :py:meth:`~mokapot.confidence.Confidence.levels` attribute.
 
         Parameters
         ----------
@@ -132,38 +135,12 @@ class Confidence():
             An :py:class:`matplotlib.axes.Axes` with the cumulative
             number of accepted target PSMs or peptides.
         """
-        if ax is None:
-            ax = plt.gca()
-        elif not isinstance(ax, plt.Axes):
-            raise ValueError("'ax' must be a matplotlib Axes instance.")
-
-        # Calculate cumulative targets at each q-value
-        qvals = self._confidence_estimates[level].loc[:, ["mokapot q-value"]]
-        qvals = qvals.sort_values(by="mokapot q-value", ascending=True)
-        qvals["target"] = 1
-        qvals["num"] = qvals["target"].cumsum()
-        qvals = qvals.groupby(["mokapot q-value"]).max().reset_index()
-        qvals = qvals[["mokapot q-value", "num"]]
-
-        zero = pd.DataFrame({"mokapot q-value": qvals["mokapot q-value"][0],
-                             "num": 0}, index=[-1])
-        qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
-
-        xmargin = threshold * 0.05
-        ymax = qvals.num[qvals["mokapot q-value"] <= (threshold + xmargin)].max()
-        ymargin = ymax * 0.05
-
-        # Set margins
-        curr_ylims = ax.get_ylim()
-        if curr_ylims[1] < ymax + ymargin:
-            ax.set_ylim(0 - ymargin, ymax + ymargin)
-
-        ax.set_xlim(0 - xmargin, threshold + xmargin)
+        ax = plot_qvalues(self._confidence_estimates[level]["mokapot q-value"],
+                          threshold=threshold, ax=ax, **kwargs)
         ax.set_xlabel("q-value")
         ax.set_ylabel(f"Accepted {self._level_labs[level]}")
 
-        return ax.step(qvals["mokapot q-value"].values,
-                       qvals.num.values, where="post", **kwargs)
+        return ax
 
 
 class LinearConfidence(Confidence):
@@ -321,6 +298,62 @@ class CrossLinkedConfidence(Confidence):
 
 
 # Functions -------------------------------------------------------------------
+def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
+    """
+    Plot the cumulative number of discoveries over range of q-values.
+
+    Parameters
+    ----------
+    qvalues : numpy.ndarray
+        The q-values to plot.
+    threshold : float, optional
+        Indicates the maximum q-value to plot.
+    ax : matplotlib.pyplot.Axes, optional
+        The matplotlib Axes on which to plot. If `None` the current
+        Axes instance is used.
+    **kwargs : dict, optional
+        Arguments passed to :py:func:`matplotlib.axes.Axes.plot`.
+
+    Returns
+    -------
+    matplotlib.pyplot.Axes
+        An :py:class:`matplotlib.axes.Axes` with the cumulative
+        number of accepted target PSMs or peptides.
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    # Calculate cumulative targets at each q-value
+    qvals = pd.Series(qvalues, name="qvalue")
+    qvals = qvals.sort_values(ascending=True).to_frame()
+    qvals["target"] = 1
+    qvals["num"] = qvals["target"].cumsum()
+    qvals = qvals.groupby(["qvalue"]).max().reset_index()
+    qvals = qvals[["qvalue", "num"]]
+
+    zero = pd.DataFrame({"qvalue": qvals["qvalue"][0],
+                        "num": 0}, index=[-1])
+    qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
+
+    xmargin = threshold * 0.05
+    ymax = qvals.num[qvals["qvalue"] <= (threshold + xmargin)].max()
+    ymargin = ymax * 0.05
+
+    # Set margins
+    curr_ylims = ax.get_ylim()
+    if curr_ylims[1] < ymax + ymargin:
+        ax.set_ylim(0 - ymargin, ymax + ymargin)
+
+    ax.set_xlim(0 - xmargin, threshold + xmargin)
+    ax.set_xlabel("q-value")
+    ax.set_ylabel(f"Discoveries")
+
+    ax.step(qvals["qvalue"].values,
+            qvals.num.values, where="post", **kwargs)
+
+    return ax
+
+
 def _groupby_max(df, by_cols, max_col):
     """Quickly get the indices for the maximum value of col"""
     idx = df.sample(frac=1) \

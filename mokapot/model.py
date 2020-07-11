@@ -10,6 +10,7 @@ using :doc:`a collection of PSMs <dataset>` with this iterative
 approach.
 """
 import logging
+import pickle
 
 import sklearn.base as base
 import sklearn.svm as svm
@@ -87,6 +88,31 @@ class Model():
             self.scaler = pp.StandardScaler()
         else:
             self.scaler = base.clone(scaler)
+
+    def save(self, out_file):
+        """
+        Save the model to a file.
+
+        Parameters
+        ----------
+        out_file : str
+            The name of the file for the saved model.
+
+        Returns
+        -------
+        str
+            The output file name.
+
+        Note
+        ----
+        Because classes may change between mokapot and scikit-learn
+        versions, a saved model may not work when either is changed
+        from the version that created the model.
+        """
+        with open(out_file, "wb+") as out:
+            pickle.dump(self, out)
+
+        return out_file
 
     def decision_function(self, psms):
         """
@@ -235,6 +261,49 @@ class DummyScaler():
 
 
 # Functions -------------------------------------------------------------------
+def save_model(model, out_file):
+    """
+    Save a :py:class:`mokapot.model.Model` object to a file.
+
+    Parameters
+    ----------
+    out_file : str
+        The name of the file for the saved model.
+
+    Returns
+    -------
+    str
+        The output file name.
+
+    Note
+    ----
+    Because classes may change between mokapot and scikit-learn versions,
+    a saved model may not work when either is changed from the version
+    that created the model.
+    """
+    return model.save(out_file)
+
+
+def load_model(model_file):
+    """
+    Load a saved :py:class:`mokapot.model.Model` object.
+
+    Parameters
+    ----------
+    model_file : str
+        The name of file from which to load the model.
+
+    Returns
+    -------
+    mokapot.model.Model
+        The loaded :py:class:`mokapot.model.Model` object.
+    """
+    with open(model_file, "rb") as mod_in:
+        model = pickle.load(mod_in)
+
+    return model
+
+
 def _get_weights(model, features):
     """
     If the model is a linear model, parse the weights to a list of strings.
