@@ -56,6 +56,8 @@ class Model():
         , implementing :code:`fit_transform()` and :code:`transform()` methods.
         Alternatively, the string :code:`"as-is"` leaves the features in
         their original scale.
+    is_trained : bool, optional
+        Indicates if the model has already been trained.
 
     Attributes
     ----------
@@ -69,7 +71,7 @@ class Model():
     is_trained : bool
         Indicates if the model has been trained.
     """
-    def __init__(self, estimator=None, scaler=None):
+    def __init__(self, estimator=None, scaler=None, is_trained=False):
         """Initialize a Model object"""
         if estimator is None:
             svm_model = svm.LinearSVC(dual=False)
@@ -79,7 +81,7 @@ class Model():
 
         self.estimator = base.clone(estimator)
         self.features = None
-        self.is_trained = False
+        self.is_trained = is_trained
         self._base_params = self.estimator.get_params()
 
         if scaler == "as-is":
@@ -88,6 +90,7 @@ class Model():
             self.scaler = pp.StandardScaler()
         else:
             self.scaler = base.clone(scaler)
+
 
     def save(self, out_file):
         """
@@ -182,7 +185,7 @@ class Model():
 
         # Choose the initial direction
         LOGGER.info("Finding initial direction...")
-        best_feat, feat_pass, feat_labels = psms._find_best_feature(train_fdr)
+        best_feat, feat_pass, feat_labels, _ = psms._find_best_feature(train_fdr)
         if direction is None and not self.is_trained:
             LOGGER.info("  - Selected feature %s with %i PSMs at q<=%g.",
                         best_feat, feat_pass, train_fdr)
@@ -239,6 +242,11 @@ class Model():
             num_passed.append((target == 1).sum())
             LOGGER.info("  - Iteration %i: %i training PSMs passed.",
                         i, num_passed[i])
+
+        # If the model performs worse than what was initialized:
+        if (num_passed[-1] < (start_labels == 1).sum()
+                or num_passed[-1] < feat_pass):
+            raise RuntimeError("Model performs worse after training.")
 
         self.estimator = model
 

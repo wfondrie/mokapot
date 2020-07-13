@@ -197,11 +197,12 @@ class PsmDataset(ABC):
                 best_positives = num_passing
                 best_feat = feat_idx
                 new_labels = labs.loc[:, feat_idx].values
+                best_desc = desc
 
         if best_feat is None:
             raise RuntimeError("No PSMs found below the fdr_threshold.")
 
-        return best_feat, best_positives, new_labels
+        return best_feat, best_positives, new_labels, best_desc
 
     def _calibrate_scores(self, scores, fdr_threshold, desc=True):
         """
@@ -422,7 +423,7 @@ class LinearPsmDataset(PsmDataset):
             confidence estimates for the collection of PSMs.
         """
         if scores is None:
-            feat, _, _ = self._find_best_feature(eval_fdr)
+            feat, _, _, _ = self._find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
             scores = self.features[feat].values
 

@@ -114,9 +114,44 @@ def brew(psms,
 
         models = list(map_fun(*map_args))
 
-    scores = [_predict(p, i, models, test_fdr) for p, i in zip(psms, test_idx)]
+    # Determine if the models need to be reset:
+    reset = any([m[1] for m in models])
+    if reset:
+        # If we reset, just use the original model on all the folds:
+        scores = [p._calibrate_scores(model.predict(p), test_fdr)
+                  for p in psms]
+    else:
+        # If we don't reset, assign scores to each fold:
+        models = [m for m, _ in models]
+        scores = [_predict(p, i, models, test_fdr)
+                  for p, i in zip(psms, test_idx)]
+
+    # Find which is best: the learned model, the best feature, or
+    # a pretrained model.
+    best_feats = [p._find_best_feature(test_fdr) for p in psms]
+    feat_total = sum([best_feat[1] for best_feat in best_feats])
+
+    preds = [p._update_labels(s, test_fdr) for p, s in zip(psms, scores)]
+    pred_total = sum([(pred == 1).sum() for pred in preds])
+
+    # Here, f[0] is the name of the best feature, and f[3] is a boolean
+    if feat_total > pred_total:
+        using_best_feat = True
+        scores = [p[f[0]].values * int(f[3]) for p, f in zip(psms, best_feats)]
+    else:
+        using_best_feat = False
+
+    if using_best_feat:
+        logging.warning("Learned model did not improve over best feature. "
+                        "Now scoring by the best feature for each collection."
+                        "of PSMs.")
+    elif reset:
+        logging.warning("Learned model did not improve upon the pretrained "
+                        "input model. Now re-scoring each collection of PSMs "
+                        "using the original model.")
 
     LOGGER.info("")
+    print(scores[0])
     res = [p.assign_confidence(s, eval_fdr=test_fdr, desc=True)
            for p, s in zip(psms, scores)]
 
@@ -164,7 +199,8 @@ def _predict(dset, test_idx, models, test_fdr):
     test_idx : list of numpy.ndarray
         The indicies of the test sets
     models : list of Model
-        The models for each datasset.
+        The models for each dataset and whether it
+        was reset or not.
     test_fdr : the fdr to calibrate at.
     """
     test_set = copy.copy(dset)
@@ -186,16 +222,36 @@ def _fit_model(train_set, model, train_fdr, max_iter, direction, fold):
     ----------
     train_set : PsmDataset
         A PsmDataset that specifies the training data
-    model : Model
+    models : tuple of Model
         A Classifier to train.
     train_fdr : float
         The FDR threshold used to define positive examples during the
         Percolator algorithm.
     max_iter : int
         The maximum number of iterations to run the algorithm.
+
+    Returns
+    -------
+    model : mokapot.model.Model
+        The trained model.
+    reset : bool
+        Whether the models should be reset to their original parameters.
     """
     LOGGER.info("")
     LOGGER.info("=== Analyzing Fold %i ===", fold+1)
-    model.fit(train_set, train_fdr=train_fdr, max_iter=max_iter,
-              direction=direction)
-    return model
+    reset = False
+
+    try:
+        model.fit(train_set,
+                  train_fdr=train_fdr,
+                  max_iter=max_iter,
+                  direction=direction)
+
+    except RuntimeError as msg:
+        if msg != "Model performs worse after training.":
+            raise
+
+        if model.is_trained:
+            reset = True
+
+    return model, reset
