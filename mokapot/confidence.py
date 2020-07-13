@@ -190,6 +190,15 @@ class LinearConfidence(Confidence):
 
         self._assign_confidence(desc=desc)
 
+    def __repr__(self):
+        """How to print the class"""
+        pass_psms = (self.psms["mokapot q-value"] <= self._eval_fdr).sum()
+        pass_peps = (self.peptides["mokapot q-value"] <= self._eval_fdr).sum()
+
+        return ("A mokapot.confidence.LinearConfidence object:\n"
+                f"\t- PSMs at q<={self._eval_fdr:g}: {pass_psms}\n"
+                f"\t- Peptides at q<={self._eval_fdr:g}: {pass_peps}")
+
     def _assign_confidence(self, desc=True):
         """
         Assign confidence to PSMs and peptides.

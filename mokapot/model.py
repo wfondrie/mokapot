@@ -84,7 +84,6 @@ class Model():
         self.estimator = base.clone(estimator)
         self.features = None
         self.is_trained = is_trained
-        self._base_params = self.estimator.get_params()
 
         if scaler == "as-is":
             self.scaler = DummyScaler()
@@ -93,6 +92,14 @@ class Model():
         else:
             self.scaler = base.clone(scaler)
 
+    def __repr__(self):
+        """How to print the class"""
+        trained = {True: "A trained", False: "An untrained"}
+
+        return (f"{trained[self.is_trained]} mokapot.model.Model object:\n"
+                f"\testimator: {self.estimator}\n"
+                f"\tscaler: {self.scaler}\n"
+                f"\tfeatures: {self.features}")
 
     def save(self, out_file):
         """

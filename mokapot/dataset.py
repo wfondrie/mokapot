@@ -309,9 +309,9 @@ class LinearPsmDataset(PsmDataset):
     metadata : pandas.DataFrame
     features : pandas.DataFrame
     spectra : pandas.DataFrame
+    peptides: pandas.DataFrame
     targets : numpy.ndarray
     columns : list of str
-
     """
     def __init__(self,
                  psms,
@@ -349,15 +349,30 @@ class LinearPsmDataset(PsmDataset):
 
         if not num_targets:
             raise ValueError("No target PSMs were detected.")
-        elif not num_decoys:
+        if not num_decoys:
             raise ValueError("No decoy PSMs were detected.")
-        elif not len(self.data):
+        if not self.data.shape[0]:
             raise ValueError("No PSMs were detected.")
+
+    def __repr__(self):
+        """How to print the class"""
+        return (f"A mokapot.dataset.LinearPsmDataset with {len(self.data)} "
+                "PSMs:\n"
+                f"\t- target PSMs: {self.targets.sum()}\n"
+                f"\t- decoy PSMs: {self.targets.sum()}\n"
+                f"\t- unique spectra: {len(self.spectra.drop_duplicates())}\n"
+                f"\t- unique peptides: {len(self.peptides.drop_duplicates())}\n"
+                f"\t- features: {self._feature_columns}")
 
     @property
     def targets(self):
         """An array indicating whether each PSM is a target sequence."""
         return self.data[self._target_column].values
+
+    @property
+    def peptides(self):
+        """A :py:class:`pandas.DataFrame` of peptide columns."""
+        return self.data.loc[:, self._peptide_columns]
 
     def _update_labels(self, scores, fdr_threshold=0.01, desc=True):
         """
