@@ -341,8 +341,17 @@ class LinearPsmDataset(PsmDataset):
                          other_columns=other_columns)
 
         self._data[target_column] = self._data[target_column].astype(bool)
+        num_targets = sum(self.targets)
+        num_decoys = sum(~self.targets)
         LOGGER.info("  - %i target PSMs and %i decoy PSMs detected.",
-                    sum(self.targets), sum(~self.targets))
+                    num_targets, num_targets)
+
+        if not num_targets:
+            raise ValueError("No target PSMs were detected.")
+        elif not num_decoys:
+            raise ValueError("No decoy PSMs were detected.")
+        elif not len(self.data):
+            raise ValueError("No PSMs were detected.")
 
     @property
     def targets(self):

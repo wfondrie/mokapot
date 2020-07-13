@@ -171,6 +171,15 @@ class Model():
             `train_fdr`. This
             will be ignored in the case the model is already trained.
         """
+        if not sum(psms.targets):
+            raise ValueError("No target PSMs were available for training.")
+        elif not sum(~psms.targets):
+            raise ValueError("No decoy PSMs were available for training.")
+        elif len(psms.data) <= 200:
+            logging.warning("Few PSMs are available for model training (%i). "
+                            "The learned models may be unstable.",
+                            len(psms.data))
+
         # Choose the initial direction
         LOGGER.info("Finding initial direction...")
         best_feat, feat_pass, feat_labels = psms._find_best_feature(train_fdr)

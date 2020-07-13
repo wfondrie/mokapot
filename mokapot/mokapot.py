@@ -39,7 +39,7 @@ def main():
 
     np.random.seed(config.seed)
 
-    if config.aggregate or isinstance(config.pin_files, str):
+    if config.aggregate or len(config.pin_files) == 1:
         datasets = read_pin(config.pin_files)
     else:
         datasets = [read_pin(f) for f in config.pin_files]
@@ -53,7 +53,7 @@ def main():
                 direction=config.direction,
                 folds=config.folds)
 
-    if config.aggregate or isinstance(config.pin_files, str):
+    if config.aggregate or len(config.pin_files) == 1:
         psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)
     else:
         for dat, prefix in zip(psms, prefixes):
