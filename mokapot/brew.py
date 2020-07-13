@@ -137,13 +137,14 @@ def brew(psms,
     # Here, f[0] is the name of the best feature, and f[3] is a boolean
     if feat_total > pred_total:
         using_best_feat = True
-        scores = [p[f[0]].values * int(f[3]) for p, f in zip(psms, best_feats)]
+        scores = [p.data[f[0]].values * int(f[3])
+                  for p, f in zip(psms, best_feats)]
     else:
         using_best_feat = False
 
     if using_best_feat:
         logging.warning("Learned model did not improve over best feature. "
-                        "Now scoring by the best feature for each collection."
+                        "Now scoring by the best feature for each collection "
                         "of PSMs.")
     elif reset:
         logging.warning("Learned model did not improve upon the pretrained "
@@ -151,7 +152,6 @@ def brew(psms,
                         "using the original model.")
 
     LOGGER.info("")
-    print(scores[0])
     res = [p.assign_confidence(s, eval_fdr=test_fdr, desc=True)
            for p, s in zip(psms, scores)]
 
