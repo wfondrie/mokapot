@@ -49,11 +49,11 @@ extensions = [
     "nbsphinx"
 ]
 
-nbsphinx_execute = 'never'
+nbsphinx_execute = "never"
 
 autosummary_generate = True
 autodoc_default_options = {
-    'members': True,
+    "members": True,
     "inherited-members": True,
     "member-order": "bysource"
 }
