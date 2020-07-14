@@ -164,3 +164,4 @@ when using mokapot from the Python interpreter. For more details, see the
    vignettes/index.rst
    api/index.rst
    cli.rst
+   FAQ <faq.rst>
