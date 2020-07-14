@@ -120,11 +120,14 @@ def brew(psms,
         # If we reset, just use the original model on all the folds:
         scores = [p._calibrate_scores(model.predict(p), test_fdr)
                   for p in psms]
-    else:
+    elif all([m[0].is_trained for m in models]):
         # If we don't reset, assign scores to each fold:
         models = [m for m, _ in models]
         scores = [_predict(p, i, models, test_fdr)
                   for p, i in zip(psms, test_idx)]
+    else:
+        # If model training has failed
+        scores = [np.zeros(len(p.data)) for p in psms]
 
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
@@ -143,7 +146,7 @@ def brew(psms,
         using_best_feat = False
 
     if using_best_feat:
-        logging.warning("Learned model did not improve over best feature. "
+        logging.warning("Learned model did not improve over the best feature. "
                         "Now scoring by the best feature for each collection "
                         "of PSMs.")
     elif reset:
@@ -248,7 +251,7 @@ def _fit_model(train_set, model, train_fdr, max_iter, direction, fold):
                   direction=direction)
 
     except RuntimeError as msg:
-        if msg != "Model performs worse after training.":
+        if str(msg) != "Model performs worse after training.":
             raise
 
         if model.is_trained:

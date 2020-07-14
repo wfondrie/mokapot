@@ -205,9 +205,11 @@ class Model():
             LOGGER.info("  - The pretrained model found %i PSMs at q<=%g.",
                         (start_labels == 1).sum(), train_fdr)
         else:
-            desc_labels = psms._update_labels(psms.features[direction].values)
+            desc_labels = psms._update_labels(psms.features[direction].values,
+                                              train_fdr, desc=True)
             asc_labels = psms._update_labels(psms.features[direction].values,
-                                             desc=False)
+                                             train_fdr, desc=False)
+
             if (desc_labels == 1).sum() >= (asc_labels == 1).sum():
                 start_labels = desc_labels
             else:
@@ -215,6 +217,10 @@ class Model():
 
             LOGGER.info("  - Selected feature %s with %i PSMs at q<=%g.",
                         direction, (start_labels == 1).sum(), train_fdr)
+
+        if not (start_labels == 1).sum():
+            raise RuntimeError(f"No PSMs accepted at train_fdr={train_fdr}. "
+                               "Consider changing it to a higher value.")
 
         # Normalize Features
         self.features = psms.features.columns.tolist()
