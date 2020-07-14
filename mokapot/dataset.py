@@ -59,7 +59,7 @@ class PsmDataset(ABC):
         return
 
     @abstractmethod
-    def _update_labels(self, scores, fdr_threshold, desc):
+    def _update_labels(self, scores, eval_fdr, desc):
         """
         Return the label for each PSM, given it's score.
 
@@ -71,7 +71,7 @@ class PsmDataset(ABC):
         ----------
         scores : numpy.ndarray
             The score used to rank the PSMs.
-        fdr_threshold : float
+        eval_fdr : float
             The false discovery rate threshold to use.
         desc : bool
             Are higher scores better?
@@ -90,9 +90,10 @@ class PsmDataset(ABC):
                  psms,
                  spectrum_columns,
                  feature_columns,
-                 other_columns):
+                 other_columns,
+                 copy_data):
         """Initialize an object"""
-        self._data = psms
+        self._data = psms.copy(deep=copy_data)
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
@@ -159,14 +160,14 @@ class PsmDataset(ABC):
         """The columns of the dataset."""
         return self.data.columns.tolist()
 
-    def _find_best_feature(self, fdr_threshold):
+    def _find_best_feature(self, eval_fdr):
         """
         Find the best feature to separate targets from decoys at the
         specified false-discovery rate threshold.
 
         Parameters
         ----------
-        fdr_threshold : float
+        eval_fdr : float
             The false-discovery rate threshold used to define the
             best feature.
 
@@ -180,13 +181,15 @@ class PsmDataset(ABC):
         labels : numpy.ndarray
             The new labels defining positive and negative examples when
             the best feature is used.
+        desc : bool
+            Are high scores better for the best feature?
         """
         best_feat = None
         best_positives = 0
         new_labels = None
         for desc in (True, False):
             labs = self.features.apply(self._update_labels,
-                                       fdr_threshold=fdr_threshold,
+                                       eval_fdr=eval_fdr,
                                        desc=desc)
 
             num_passing = (labs == 1).sum()
@@ -200,11 +203,11 @@ class PsmDataset(ABC):
                 best_desc = desc
 
         if best_feat is None:
-            raise RuntimeError("No PSMs found below the fdr_threshold.")
+            raise RuntimeError("No PSMs found below the 'eval_fdr'.")
 
         return best_feat, best_positives, new_labels, best_desc
 
-    def _calibrate_scores(self, scores, fdr_threshold, desc=True):
+    def _calibrate_scores(self, scores, eval_fdr, desc=True):
         """
         Calibrate scores as described in Granholm et al. [1]_
 
@@ -217,7 +220,7 @@ class PsmDataset(ABC):
         ----------
         scores : numpy.ndarray
             The scores for each PSM.
-        fdr_threshold: float
+        eval_fdr: float
             The FDR threshold to use for calibration
         desc: bool
             Are higher scores better?
@@ -227,7 +230,7 @@ class PsmDataset(ABC):
         numpy.ndarray
             An array of calibrated scores.
         """
-        labels = self._update_labels(scores, fdr_threshold, desc)
+        labels = self._update_labels(scores, eval_fdr, desc)
         target_score = np.min(scores[labels == 1])
         decoy_score = np.median(scores[labels == -1])
 
@@ -302,6 +305,11 @@ class LinearPsmDataset(PsmDataset):
         The column(s) specifying the feature(s) for mokapot analysis. If
         `None`, these are assumed to be all columns not specified in the
         previous parameters.
+    copy_data : bool, optional
+        If true, a deep copy of `psms` is created, so that changes to the
+        original collection of PSMs is not propagated to this object. This
+        uses more memory, but is safer since it prevents accidental
+        modification of the underlying data.
 
     Attributes
     ----------
@@ -319,7 +327,8 @@ class LinearPsmDataset(PsmDataset):
                  spectrum_columns,
                  peptide_columns,
                  protein_column,
-                 feature_columns=None):
+                 feature_columns=None,
+                 copy_data=True):
         """Initialize a PsmDataset object."""
         self._target_column = target_column
         self._peptide_columns = utils.tuplize(peptide_columns)
@@ -339,7 +348,8 @@ class LinearPsmDataset(PsmDataset):
         super().__init__(psms=psms,
                          spectrum_columns=spectrum_columns,
                          feature_columns=feature_columns,
-                         other_columns=other_columns)
+                         other_columns=other_columns,
+                         copy_data=copy_data)
 
         self._data[target_column] = self._data[target_column].astype(bool)
         num_targets = sum(self.targets)
@@ -374,7 +384,7 @@ class LinearPsmDataset(PsmDataset):
         """A :py:class:`pandas.DataFrame` of peptide columns."""
         return self.data.loc[:, self._peptide_columns]
 
-    def _update_labels(self, scores, fdr_threshold=0.01, desc=True):
+    def _update_labels(self, scores, eval_fdr=0.01, desc=True):
         """
         Return the label for each PSM, given it's score.
 
@@ -386,7 +396,7 @@ class LinearPsmDataset(PsmDataset):
         ----------
         scores : numpy.ndarray
             The score used to rank the PSMs.
-        fdr_threshold : float
+        eval_fdr : float
             The false discovery rate threshold to use.
         desc : bool
             Are higher scores better?
@@ -400,7 +410,8 @@ class LinearPsmDataset(PsmDataset):
             specified FDR threshold.
         """
         qvals = qvalues.tdc(scores, target=self.targets, desc=desc)
-        unlabeled = np.logical_and(qvals > fdr_threshold, self.targets)
+        print(qvals)
+        unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
         new_labels = np.ones(len(qvals))
         new_labels[~self.targets] = -1
         new_labels[unlabeled] = 0
@@ -513,7 +524,7 @@ class CrossLinkedPsmDataset(PsmDataset):
         bool_targs = self.data.loc[:, self._target_columns].astype(bool)
         return bool_targs.sum(axis=1).values
 
-    def _update_labels(self, scores, fdr_threshold=0.01, desc=True):
+    def _update_labels(self, scores, eval_fdr=0.01, desc=True):
         """
         Return the label for each PSM, given it's score.
 
@@ -525,7 +536,7 @@ class CrossLinkedPsmDataset(PsmDataset):
         ----------
         scores : numpy.ndarray
             The score used to rank the PSMs.
-        fdr_threshold : float
+        eval_fdr : float
             The false discovery rate threshold to use.
         desc : bool
             Are higher scores better?
@@ -540,7 +551,7 @@ class CrossLinkedPsmDataset(PsmDataset):
         """
         qvals = qvalues.crosslink_tdc(scores, num_targets=self.targets,
                                       desc=desc)
-        unlabeled = np.logical_and(qvals > fdr_threshold, self.targets)
+        unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
         new_labels = np.ones(len(qvals))
         new_labels[~self.targets] = -1
         new_labels[unlabeled] = 0

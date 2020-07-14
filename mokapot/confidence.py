@@ -227,8 +227,8 @@ class LinearConfidence(Confidence):
                        .drop(self._target_column, axis=1) \
                        .rename(columns={self._score_column: "mokapot score"})
 
-            LOGGER.info("  - Found %i %s with q<%g",
-                        (data["mokapot q-value"] < self._eval_fdr).sum(),
+            LOGGER.info("  - Found %i %s with q<=%g",
+                        (data["mokapot q-value"] <= self._eval_fdr).sum(),
                         level, self._eval_fdr)
 
             LOGGER.info("Assiging PEPs to %s.", level)

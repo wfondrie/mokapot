@@ -86,7 +86,8 @@ def read_pin(pin_files, to_df=False):
                             spectrum_columns=spectra,
                             peptide_columns=peptides,
                             protein_column=proteins[0],
-                            feature_columns=features)
+                            feature_columns=features,
+                            copy_data=False)
 
 
 # Utility Functions -----------------------------------------------------------

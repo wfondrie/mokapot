@@ -1,15 +1,12 @@
 """
 This module estimates q-values.
 """
-from typing import Tuple
-
 import numpy as np
 import pandas as pd
 import numba as nb
 
 
-def tdc(metric: np.ndarray, target: np.ndarray, desc: bool = True) \
-        -> np.ndarray:
+def tdc(scores, target, desc=True):
     """
     Estimate q-values using target decoy competition.
 
@@ -26,18 +23,18 @@ def tdc(metric: np.ndarray, target: np.ndarray, desc: bool = True) \
     rate is estimated as:
 
     ...math:
-        E\{FDR(t)\} = \frac{|\{d_i > t; i=1, ..., m_d\}| + 1}
-        {\{|f_i > t; i=1, ..., m_f|\}}
+        E\\{FDR(t)\\} = \frac{|\\{d_i > t; i=1, ..., m_d\\}| + 1}
+        {\\{|f_i > t; i=1, ..., m_f|\\}}
 
     The reported q-value for each PSM is the minimum FDR at which that
     PSM would be accepted.
 
     Parameters
     ----------
-    metric : numpy.ndarray
-        A 1D array containing the score to rank by (`float`)
+    scores : numpy.ndarray of float
+        A 1D array containing the score to rank by
 
-    target : numpy.ndarray
+    target : numpy.ndarray of bool
         A 1D array indicating if the entry is from a target or decoy
         hit. This should be boolean, where `True` indicates a target
         and `False` indicates a decoy. `target[i]` is the label for
@@ -52,40 +49,25 @@ def tdc(metric: np.ndarray, target: np.ndarray, desc: bool = True) \
     -------
     numpy.ndarray
         A 1D array with the estimated q-value for each entry. The
-        array is the same length as the `metric` and `target` arrays.
+        array is the same length as the `scores` and `target` arrays.
     """
-    # Check arguments
-    if isinstance(metric, pd.Series):
-        metric = metric.values
-
-    if isinstance(target, pd.Series):
-        target = target.values
-
-    msg = "'{}' must be a 1D numpy.ndarray or pandas.Series"
-    if not isinstance(metric, np.ndarray) or len(metric.shape) != 1:
-        raise ValueError(msg.format("metric"))
-
-    if not isinstance(target, np.ndarray) or len(target.shape) != 1:
-        raise ValueError(msg.format("target"))
-
-    if not isinstance(desc, bool):
-        raise ValueError("'desc' must be boolean (True or False)")
-
-    if metric.shape[0] != target.shape[0]:
-        raise ValueError("'metric' and 'target' must be the same length")
+    scores = np.array(scores)
 
     try:
         target = np.array(target, dtype=bool)
     except ValueError:
         raise ValueError("'target' should be boolean.")
 
+    if scores.shape[0] != target.shape[0]:
+        raise ValueError("'scores' and 'target' must be the same length")
+
     # Sort and estimate FDR
     if desc:
-        srt_idx = np.argsort(-metric)
+        srt_idx = np.argsort(-scores)
     else:
-        srt_idx = np.argsort(metric)
+        srt_idx = np.argsort(scores)
 
-    metric = metric[srt_idx]
+    scores = scores[srt_idx]
     target = target[srt_idx]
     cum_targets = target.cumsum()
     cum_decoys = ((target-1)**2).cumsum()
@@ -97,7 +79,7 @@ def tdc(metric: np.ndarray, target: np.ndarray, desc: bool = True) \
                     where=(cum_targets != 0))
 
     # Calculate q-values
-    unique_metric, indices = np.unique(metric, return_counts=True)
+    unique_metric, indices = np.unique(scores, return_counts=True)
 
     # Some arrays need to be flipped so that we can loop through from
     # worse to best score.
@@ -114,8 +96,7 @@ def tdc(metric: np.ndarray, target: np.ndarray, desc: bool = True) \
     return qvals
 
 
-def crosslink_tdc(metric: np.ndarray, num_targets: np.ndarray,
-                  desc: bool = True) -> np.ndarray:
+def crosslink_tdc(scores, num_targets, desc=True):
     """
     Estimate q-values using the Walzthoeni et al method.
 
@@ -138,31 +119,21 @@ def crosslink_tdc(metric: np.ndarray, num_targets: np.ndarray,
         A 1D array of q-values in the same order as `num_targets` and
         `metric`.
     """
-    if isinstance(metric, pd.Series):
-        metric = metric.values
+    scores = np.array(scores, dtype=np.float)
+    num_targets = np.array(num_targets, dtype=np.int)
 
-    if isinstance(num_targets, pd.Series):
-        num_targets = num_targets.values
+    if num_targets.max() > 2 or num_targets.min() < 0:
+        raise ValueError("'num_targets' must be 0, 1, or 2.")
 
-    msg = "'{}' must be a 1D numpy.ndarray or pandas.Series"
-    if not isinstance(metric, np.ndarray) or len(metric.shape) != 1:
-        raise ValueError(msg.format("metric"))
-
-    if not isinstance(num_targets, np.ndarray) or len(num_targets.shape) != 1:
-        raise ValueError(msg.format("num_targets"))
-
-    if not isinstance(desc, bool):
-        raise ValueError("'desc' must be boolean (True or False)")
-
-    if metric.shape[0] != num_targets.shape[0]:
-        raise ValueError("'metric' and 'num_targets' must be the same length.")
+    if scores.shape[0] != num_targets.shape[0]:
+        raise ValueError("'scores' and 'num_targets' must be the same length.")
 
     if desc:
-        srt_idx = np.argsort(-metric)
+        srt_idx = np.argsort(-scores)
     else:
-        srt_idx = np.argsort(metric)
+        srt_idx = np.argsort(scores)
 
-    metric = metric[srt_idx]
+    scores = scores[srt_idx]
     num_targets = num_targets[srt_idx]
     num_total = np.ones(len(num_targets)).cumsum()
     cum_targets = (num_targets == 2).astype(int).cumsum()
@@ -176,7 +147,7 @@ def crosslink_tdc(metric: np.ndarray, num_targets: np.ndarray,
     fdr[fdr < 0] = 0
 
     # Calculate q-values
-    unique_metric, indices = np.unique(metric, return_counts=True)
+    unique_metric, indices = np.unique(scores, return_counts=True)
 
     # Flip arrays to loop from worst to best score
     fdr = np.flip(fdr)
@@ -193,9 +164,7 @@ def crosslink_tdc(metric: np.ndarray, num_targets: np.ndarray,
 
 
 @nb.njit
-def _fdr2qvalue(fdr: np.ndarray, num_total: np.ndarray,
-                met: np.ndarray, indices: Tuple[np.ndarray]) \
-        -> np.ndarray:
+def _fdr2qvalue(fdr, num_total, met, indices):
     """
     Quickly turn a list of FDRs to q-values.
 

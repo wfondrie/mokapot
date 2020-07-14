@@ -201,7 +201,7 @@ class Model():
             start_labels = feat_labels
         elif self.is_trained:
             scores = self.estimator.decision_function(psms.features)
-            start_labels = psms._update_labels(scores, fdr_threshold=train_fdr)
+            start_labels = psms._update_labels(scores, eval_fdr=train_fdr)
             LOGGER.info("  - The pretrained model found %i PSMs at q<=%g.",
                         (start_labels == 1).sum(), train_fdr)
         else:
@@ -253,7 +253,7 @@ class Model():
             scores = model.decision_function(norm_feat)
 
             # Update target
-            target = psms._update_labels(scores, fdr_threshold=train_fdr)
+            target = psms._update_labels(scores, eval_fdr=train_fdr)
             num_passed.append((target == 1).sum())
             LOGGER.info("  - Iteration %i: %i training PSMs passed.",
                         i, num_passed[i])
