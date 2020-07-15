@@ -415,7 +415,6 @@ class LinearPsmDataset(PsmDataset):
             specified FDR threshold.
         """
         qvals = qvalues.tdc(scores, target=self.targets, desc=desc)
-        print(qvals)
         unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
         new_labels = np.ones(len(qvals))
         new_labels[~self.targets] = -1
