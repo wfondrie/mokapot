@@ -21,7 +21,7 @@ def test_linear_init():
     dset = mokapot.LinearPsmDataset(dat,
                                     target_column="target",
                                     spectrum_columns="spectrum",
-                                    peptide_columns="peptide",
+                                    peptide_column="peptide",
                                     protein_column="protein",
                                     feature_columns=None,
                                     copy_data=True)
@@ -56,7 +56,7 @@ def test_update_labels():
     dset = mokapot.LinearPsmDataset(DAT1,
                                     target_column="target",
                                     spectrum_columns="spectrum",
-                                    peptide_columns="peptide",
+                                    peptide_column="peptide",
                                     protein_column="protein",
                                     feature_columns=None,
                                     copy_data=True)

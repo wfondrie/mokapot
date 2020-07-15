@@ -292,10 +292,11 @@ class LinearPsmDataset(PsmDataset):
         The column(s) that collectively identify unique mass spectra.
         Multiple columns can be useful to avoid combining scans from
         multiple mass spectrometry runs.
-    peptide_columns : str or tuple of str
-        The column(s) that collectively define a peptide. Multiple
-        columns may be useful if sequence and modifications are provided
-        as separate columns.
+    peptide_column : str
+        The column that defines a unique peptide. Modifications should
+        indicated either in square brackets :code:`[]` or parentheses
+        :code:`()`. The exact modification format within those entities
+        does not matter, so long as it is consistent.
     protein_column : str
         The column that specifies which protein(s) the detected peptide
         might have originated from. This column should contain a
@@ -317,7 +318,7 @@ class LinearPsmDataset(PsmDataset):
     metadata : pandas.DataFrame
     features : pandas.DataFrame
     spectra : pandas.DataFrame
-    peptides: pandas.DataFrame
+    peptides : pandas.DataFrame
     targets : numpy.ndarray
     columns : list of str
     """
@@ -325,13 +326,13 @@ class LinearPsmDataset(PsmDataset):
                  psms,
                  target_column,
                  spectrum_columns,
-                 peptide_columns,
+                 peptide_column,
                  protein_column,
                  feature_columns=None,
                  copy_data=True):
         """Initialize a PsmDataset object."""
         self._target_column = target_column
-        self._peptide_columns = utils.tuplize(peptide_columns)
+        self._peptide_column = utils.tuplize(peptide_column)
         self._protein_column = utils.tuplize(protein_column)
 
         # Some error checking:
@@ -339,9 +340,13 @@ class LinearPsmDataset(PsmDataset):
             raise ValueError("Only one column can be used for "
                              "'protein_column'.")
 
+        if len(self._peptide_column) > 1:
+            raise ValueError("Only one column can be used for "
+                             "'peptide_column'")
+
         # Finish initialization
         other_columns = sum([utils.tuplize(self._target_column),
-                             self._peptide_columns,
+                             self._peptide_column,
                              self._protein_column],
                             tuple())
 
@@ -381,8 +386,8 @@ class LinearPsmDataset(PsmDataset):
 
     @property
     def peptides(self):
-        """A :py:class:`pandas.DataFrame` of peptide columns."""
-        return self.data.loc[:, self._peptide_columns]
+        """A :py:class:`pandas.DataFrame` of the peptide column."""
+        return self.data.loc[:, self._peptide_column]
 
     def _update_labels(self, scores, eval_fdr=0.01, desc=True):
         """

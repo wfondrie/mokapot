@@ -177,7 +177,7 @@ class LinearConfidence(Confidence):
         self._data[len(self._data.columns)] = psms.targets
         self._target_column = self._data.columns[-1]
         self._psm_columns = psms._spectrum_columns
-        self._peptide_columns = psms._peptide_columns
+        self._peptide_column = psms._peptide_column
         self._eval_fdr = eval_fdr
 
         LOGGER.info("Performing target-decoy competition...")
@@ -208,7 +208,7 @@ class LinearConfidence(Confidence):
         desc : bool
             Are higher scores better?
         """
-        peptide_idx = _groupby_max(self._data, self._peptide_columns,
+        peptide_idx = _groupby_max(self._data, self._peptide_column,
                                    self._score_column)
 
         peptides = self._data.loc[peptide_idx]
@@ -268,7 +268,7 @@ class CrossLinkedConfidence(Confidence):
         self._data[len(self._data.columns)] = psms.targets
         self._target_column = self._data.columns[-1]
         self._psm_columns = psms._spectrum_columns
-        self._peptide_columns = psms._peptide_columns
+        self._peptide_column = psms._peptide_column
 
         self._perform_tdc(self._psm_columns)
         self._assign_confidence(desc=desc)
