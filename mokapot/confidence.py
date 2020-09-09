@@ -17,7 +17,6 @@ specifically designed for crosslinked peptides.
 import os
 import logging
 
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
@@ -41,13 +40,15 @@ class Confidence():
                    "csms": "Cross-Linked PSMs",
                    "peptide_pairs": "Peptide Pairs"}
 
-    def __init__(self, psms, scores):
+    def __init__(self, psms, scores, desc):
         """
         Initialize a PsmConfidence object.
         """
         self._data = psms.metadata
-        self._data[len(psms.columns)] = scores
-        self._score_column = self._data.columns[-1]
+        self._score_column = _new_column("score", self._data)
+
+        # Flip sign of scores if not descending
+        self._data[self._score_column] = scores * (desc*2 - 1)
 
         # This attribute holds the results as DataFrames:
         self._confidence_estimates = {}
@@ -108,7 +109,7 @@ class Confidence():
             The columns that define a PSM.
         """
         psm_idx = _groupby_max(self._data, psm_columns, self._score_column)
-        self._data = self._data.loc[psm_idx]
+        self._data = self._data.loc[psm_idx, :]
 
     def plot_qvalues(self, level, threshold=0.1, ax=None, **kwargs):
         """
@@ -173,9 +174,9 @@ class LinearConfidence(Confidence):
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
         """Initialize a a LinearPsmConfidence object"""
         LOGGER.info("=== Assigning Confidence ===")
-        super().__init__(psms, scores)
-        self._data[len(self._data.columns)] = psms.targets
-        self._target_column = self._data.columns[-1]
+        super().__init__(psms, scores, desc)
+        self._target_column = _new_column("target", self._data)
+        self._data[self._target_column] = psms.targets
         self._psm_columns = psms._spectrum_columns
         self._peptide_column = psms._peptide_column
         self._eval_fdr = eval_fdr
@@ -185,7 +186,7 @@ class LinearConfidence(Confidence):
                     "+".join(self._psm_columns))
 
         self._perform_tdc(self._psm_columns)
-        LOGGER.info("  - Found %i PSMs from unique spectra.",
+        LOGGER.info("\t- Found %i PSMs from unique spectra.",
                     len(self._data))
 
         self._assign_confidence(desc=desc)
@@ -218,19 +219,26 @@ class LinearConfidence(Confidence):
             scores = data.loc[:, self._score_column].values
             targets = data.loc[:, self._target_column].astype(bool).values
 
+            # Estimate q-values and assign to dataframe
             LOGGER.info("Assiging q-values to %s.", level)
             data["mokapot q-value"] = qvalues.tdc(scores, targets, desc)
 
+            # Make output tables pretty
             data = data.loc[targets, :] \
                        .sort_values(self._score_column, ascending=(not desc)) \
                        .reset_index(drop=True) \
                        .drop(self._target_column, axis=1) \
                        .rename(columns={self._score_column: "mokapot score"})
 
-            LOGGER.info("  - Found %i %s with q<=%g",
+            # Set scores to be the correct sign again:
+            data["mokapot score"] = data["mokapot score"] * (desc*2 - 1)
+
+            # Logging update on q-values
+            LOGGER.info("\t- Found %i %s with q<=%g",
                         (data["mokapot q-value"] <= self._eval_fdr).sum(),
                         level, self._eval_fdr)
 
+            # Calculate PEPs
             LOGGER.info("Assiging PEPs to %s.", level)
             _, pep = qvality.getQvaluesFromScores(scores[targets],
                                                   scores[~targets])
@@ -264,7 +272,7 @@ class CrossLinkedConfidence(Confidence):
     """
     def __init__(self, psms, scores, desc=True):
         """Initialize a CrossLinkedConfidence object"""
-        super().__init__(psms, scores)
+        super().__init__(psms, scores, desc)
         self._data[len(self._data.columns)] = psms.targets
         self._target_column = self._data.columns[-1]
         self._psm_columns = psms._spectrum_columns
@@ -365,9 +373,21 @@ def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
 
 def _groupby_max(df, by_cols, max_col):
     """Quickly get the indices for the maximum value of col"""
-    idx = df.sample(frac=1) \
-            .sort_values(list(by_cols)+[max_col], axis=0) \
-            .drop_duplicates(list(by_cols), keep="last") \
-            .index
+    idx = (df.sample(frac=1)
+             .sort_values(list(by_cols)+[max_col], axis=0)
+             .drop_duplicates(list(by_cols), keep="last")
+             .index)
 
     return idx
+
+
+def _new_column(name, df):
+    """Add a new column, ensuring a unique name"""
+    new_name = name
+    cols = set(df.columns)
+    i = 0
+    while new_name in cols:
+        new_name = name + "_" + str(i)
+        i += 1
+
+    return new_name
