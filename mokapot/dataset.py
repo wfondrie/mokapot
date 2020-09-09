@@ -374,7 +374,7 @@ class LinearPsmDataset(PsmDataset):
         return (f"A mokapot.dataset.LinearPsmDataset with {len(self.data)} "
                 "PSMs:\n"
                 f"\t- target PSMs: {self.targets.sum()}\n"
-                f"\t- decoy PSMs: {self.targets.sum()}\n"
+                f"\t- decoy PSMs: {(~self.targets).sum()}\n"
                 f"\t- unique spectra: {len(self.spectra.drop_duplicates())}\n"
                 f"\t- unique peptides: {len(self.peptides.drop_duplicates())}\n"
                 f"\t- features: {self._feature_columns}")
@@ -453,7 +453,7 @@ class LinearPsmDataset(PsmDataset):
             confidence estimates for the collection of PSMs.
         """
         if scores is None:
-            feat, _, _, _ = self._find_best_feature(eval_fdr)
+            feat, _, _, desc = self._find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
             scores = self.features[feat].values
 
