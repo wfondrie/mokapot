@@ -45,6 +45,6 @@ setuptools.setup(
             "nbsphinx>=0.7.1",
             "ipykernel>=5.3.0",
         ],
-        "dev": ["pre-commit>=2.7.1", "black>=19.10b0",],
+        "dev": ["pre-commit>=2.7.1", "black>=19.10b0"],
     },
 )
