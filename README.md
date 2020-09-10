@@ -9,18 +9,17 @@
 
 
 
-Fast and flexible semi-supervised learning for peptide detection in Python using
-the [Percolator](http://percolator.ms) algorithm.  
+Fast and flexible semi-supervised learning for peptide detection.  
 
 mokapot is fundamentally a Python implementation of the semi-supervised learning
-algorithm introduced by Percolator. We developed mokapot to add additional
+algorithm first introduced by Percolator. We developed mokapot to add additional
 flexibility to our analyses, whether to try something experimental---such as
 swapping Percolator's linear support vector machine classifier for a non-linear,
 gradient boosting classifier---or to train a joint model across experiments
 while retaining valid, per-experiment confidence estimates. We designed mokapot
 to be extensible and support the analysis of additional types of proteomics
 data, such as cross-linked peptides from cross-linking mass spectrometry
-experiments. mokapot offers basic functionality from the command, but using
+experiments. mokapot offers basic functionality from the command line, but using
 mokapot as a Python package unlocks maximum flexibility.
 
 For more information, check out our
