@@ -47,8 +47,7 @@ def read_pin(pin_files, to_df=False):
         containing the PSMs from all of the PIN files.
     """
     logging.info("Parsing PSMs...")
-    pin_df = pd.concat([read_percolator(f)
-                        for f in utils.tuplize(pin_files)])
+    pin_df = pd.concat([read_percolator(f) for f in utils.tuplize(pin_files)])
 
     # Find all of the necessary columns, case-insensitive:
     specid = tuple(c for c in pin_df.columns if c.lower() == "specid")
@@ -56,11 +55,13 @@ def read_pin(pin_files, to_df=False):
     proteins = tuple(c for c in pin_df.columns if c.lower() == "proteins")
     labels = tuple(c for c in pin_df.columns if c.lower() == "label")
     other = tuple(c for c in pin_df.columns if c.lower() == "calcmass")
-    spectra = tuple(c for c in pin_df.columns
-                    if c.lower() in ["scannr", "expmass"])
+    spectra = tuple(
+        c for c in pin_df.columns if c.lower() in ["scannr", "expmass"]
+    )
 
-    nonfeat = sum([specid, spectra, peptides, proteins, labels, other],
-                  tuple())
+    nonfeat = sum(
+        [specid, spectra, peptides, proteins, labels, other], tuple()
+    )
 
     features = tuple(c for c in pin_df.columns if c not in nonfeat)
 
@@ -72,8 +73,10 @@ def read_pin(pin_files, to_df=False):
         raise ValueError("More than one protein column found in pin file.")
 
     if not all([specid, peptides, proteins, labels, spectra]):
-        raise ValueError("This PIN format is incompatible with mokapot. Please"
-                         " verify that the required columns are present.")
+        raise ValueError(
+            "This PIN format is incompatible with mokapot. Please"
+            " verify that the required columns are present."
+        )
 
     # Convert labels to the correct format.
     pin_df[labels[0]] = (pin_df[labels[0]] + 1) / 2
@@ -81,13 +84,15 @@ def read_pin(pin_files, to_df=False):
     if to_df:
         return pin_df
 
-    return LinearPsmDataset(psms=pin_df,
-                            target_column=labels[0],
-                            spectrum_columns=spectra,
-                            peptide_column=peptides,
-                            protein_column=proteins[0],
-                            feature_columns=features,
-                            copy_data=False)
+    return LinearPsmDataset(
+        psms=pin_df,
+        target_column=labels[0],
+        spectrum_columns=spectra,
+        peptide_column=peptides,
+        protein_column=proteins[0],
+        feature_columns=features,
+        copy_data=False,
+    )
 
 
 # Utility Functions -----------------------------------------------------------
@@ -110,12 +115,14 @@ def read_percolator(perc_file):
         A DataFrame of the parsed data.
     """
     LOGGER.info("Reading %s...", perc_file)
-    pin_df = pd.read_csv(perc_file,
-                         sep="\t",
-                         usecols=lambda x: True,
-                         header=None,
-                         dtype=str,
-                         low_memory=True)
+    pin_df = pd.read_csv(
+        perc_file,
+        sep="\t",
+        usecols=lambda x: True,
+        header=None,
+        dtype=str,
+        low_memory=True,
+    )
 
     pin_df.columns = pin_df.loc[0, :].values
     pin_df.drop(index=0, inplace=True)

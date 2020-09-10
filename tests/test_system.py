@@ -20,14 +20,19 @@ def test_compare_to_percolator():
     res = mokapot.brew(dat)
 
     perc_path = os.path.join("data", "percolator.{l}.txt")
-    perc_res = {l: mokapot.parsers.read_percolator(perc_path.format(l=l))
-                for l in ["psms", "peptides"]}
+    perc_res = {
+        l: mokapot.parsers.read_percolator(perc_path.format(l=l))
+        for l in ["psms", "peptides"]
+    }
 
     for level in ["psms", "peptides"]:
         logging.info("Testing level: %s", level)
-        perc = perc_res[level].rename(columns={"PSMId": "SpecId",
-                                               "peptide": "Peptide"})
+        perc = perc_res[level].rename(
+            columns={"PSMId": "SpecId", "peptide": "Peptide"}
+        )
         merged = pd.merge(res._confidence_estimates[level], perc)
 
         assert merged["mokapot q-value"].corr(merged["q-value"]) > 0.99
-        assert merged["mokapot PEP"].corr(merged["posterior_error_prob"]) > 0.99
+        assert (
+            merged["mokapot PEP"].corr(merged["posterior_error_prob"]) > 0.99
+        )

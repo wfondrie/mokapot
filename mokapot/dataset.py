@@ -38,6 +38,7 @@ class PsmDataset(ABC):
 
     :meta private:
     """
+
     @property
     @abstractmethod
     def targets(self):
@@ -86,12 +87,9 @@ class PsmDataset(ABC):
         """
         return
 
-    def __init__(self,
-                 psms,
-                 spectrum_columns,
-                 feature_columns,
-                 other_columns,
-                 copy_data):
+    def __init__(
+        self, psms, spectrum_columns, feature_columns, other_columns, copy_data
+    ):
         """Initialize an object"""
         self._data = psms.copy(deep=copy_data).reset_index(drop=True)
 
@@ -104,25 +102,26 @@ class PsmDataset(ABC):
             other_columns = ()
 
         # Check that all of the columns exist:
-        used_columns = sum([other_columns,
-                            self._spectrum_columns],
-                           tuple())
+        used_columns = sum([other_columns, self._spectrum_columns], tuple())
 
         missing_columns = [c not in self.data.columns for c in used_columns]
         if not missing_columns:
-            raise ValueError("The following specified columns were not found: "
-                             f"{missing_columns}")
+            raise ValueError(
+                "The following specified columns were not found: "
+                f"{missing_columns}"
+            )
 
         # Get the feature columns
         if feature_columns is None:
-            self._feature_columns = tuple(c for c in self.data.columns
-                                          if c not in used_columns)
+            self._feature_columns = tuple(
+                c for c in self.data.columns if c not in used_columns
+            )
         else:
             self._feature_columns = utils.tuplize(feature_columns)
 
         LOGGER.info("Using %i features:", len(self._feature_columns))
         for i, feat in enumerate(self._feature_columns):
-            LOGGER.info("  (%i)\t%s", i+1, feat)
+            LOGGER.info("  (%i)\t%s", i + 1, feat)
 
         LOGGER.info("Found %i PSMs.", len(self._data))
 
@@ -138,8 +137,9 @@ class PsmDataset(ABC):
     @property
     def _metadata_columns(self):
         """A list of the metadata columns"""
-        return tuple(c for c in self.data.columns
-                     if c not in self._feature_columns)
+        return tuple(
+            c for c in self.data.columns if c not in self._feature_columns
+        )
 
     @property
     def metadata(self):
@@ -192,9 +192,9 @@ class PsmDataset(ABC):
         best_positives = 0
         new_labels = None
         for desc in (True, False):
-            labs = self.features.apply(self._update_labels,
-                                       eval_fdr=eval_fdr,
-                                       desc=desc)
+            labs = self.features.apply(
+                self._update_labels, eval_fdr=eval_fdr, desc=desc
+            )
 
             num_passing = (labs == 1).sum()
             feat_idx = num_passing.idxmax()
@@ -267,7 +267,7 @@ class PsmDataset(ABC):
 
         # Split the data evenly
         num = len(scans) // folds
-        splits = [scans[i:i+num] for i in range(0, len(scans), num)]
+        splits = [scans[i : i + num] for i in range(0, len(scans), num)]
 
         if len(splits[-1]) < num:
             splits[-2] += splits[-1]
@@ -326,14 +326,17 @@ class LinearPsmDataset(PsmDataset):
     targets : numpy.ndarray
     columns : list of str
     """
-    def __init__(self,
-                 psms,
-                 target_column,
-                 spectrum_columns,
-                 peptide_column,
-                 protein_column,
-                 feature_columns=None,
-                 copy_data=True):
+
+    def __init__(
+        self,
+        psms,
+        target_column,
+        spectrum_columns,
+        peptide_column,
+        protein_column,
+        feature_columns=None,
+        copy_data=True,
+    ):
         """Initialize a PsmDataset object."""
         self._target_column = target_column
         self._peptide_column = utils.tuplize(peptide_column)
@@ -341,30 +344,41 @@ class LinearPsmDataset(PsmDataset):
 
         # Some error checking:
         if len(self._protein_column) > 1:
-            raise ValueError("Only one column can be used for "
-                             "'protein_column'.")
+            raise ValueError(
+                "Only one column can be used for " "'protein_column'."
+            )
 
         if len(self._peptide_column) > 1:
-            raise ValueError("Only one column can be used for "
-                             "'peptide_column'")
+            raise ValueError(
+                "Only one column can be used for " "'peptide_column'"
+            )
 
         # Finish initialization
-        other_columns = sum([utils.tuplize(self._target_column),
-                             self._peptide_column,
-                             self._protein_column],
-                            tuple())
+        other_columns = sum(
+            [
+                utils.tuplize(self._target_column),
+                self._peptide_column,
+                self._protein_column,
+            ],
+            tuple(),
+        )
 
-        super().__init__(psms=psms,
-                         spectrum_columns=spectrum_columns,
-                         feature_columns=feature_columns,
-                         other_columns=other_columns,
-                         copy_data=copy_data)
+        super().__init__(
+            psms=psms,
+            spectrum_columns=spectrum_columns,
+            feature_columns=feature_columns,
+            other_columns=other_columns,
+            copy_data=copy_data,
+        )
 
         self._data[target_column] = self._data[target_column].astype(bool)
         num_targets = sum(self.targets)
         num_decoys = sum(~self.targets)
-        LOGGER.info("  - %i target PSMs and %i decoy PSMs detected.",
-                    num_targets, num_targets)
+        LOGGER.info(
+            "  - %i target PSMs and %i decoy PSMs detected.",
+            num_targets,
+            num_targets,
+        )
 
         if not num_targets:
             raise ValueError("No target PSMs were detected.")
@@ -375,13 +389,15 @@ class LinearPsmDataset(PsmDataset):
 
     def __repr__(self):
         """How to print the class"""
-        return (f"A mokapot.dataset.LinearPsmDataset with {len(self.data)} "
-                "PSMs:\n"
-                f"\t- target PSMs: {self.targets.sum()}\n"
-                f"\t- decoy PSMs: {(~self.targets).sum()}\n"
-                f"\t- unique spectra: {len(self.spectra.drop_duplicates())}\n"
-                f"\t- unique peptides: {len(self.peptides.drop_duplicates())}\n"
-                f"\t- features: {self._feature_columns}")
+        return (
+            f"A mokapot.dataset.LinearPsmDataset with {len(self.data)} "
+            "PSMs:\n"
+            f"\t- target PSMs: {self.targets.sum()}\n"
+            f"\t- decoy PSMs: {(~self.targets).sum()}\n"
+            f"\t- unique spectra: {len(self.spectra.drop_duplicates())}\n"
+            f"\t- unique peptides: {len(self.peptides.drop_duplicates())}\n"
+            f"\t- features: {self._feature_columns}"
+        )
 
     @property
     def targets(self):
@@ -501,30 +517,41 @@ class CrossLinkedPsmDataset(PsmDataset):
 
     :meta private:
     """
-    def __init__(self,
-                 psms: pd.DataFrame,
-                 spectrum_columns,
-                 target_columns,
-                 peptide_columns,
-                 protein_columns,
-                 feature_columns=None):
+
+    def __init__(
+        self,
+        psms: pd.DataFrame,
+        spectrum_columns,
+        target_columns,
+        peptide_columns,
+        protein_columns,
+        feature_columns=None,
+    ):
         """Initialize a PsmDataset object."""
         self._target_columns = utils.tuplize(target_columns)
-        self._peptide_columns = tuple(utils.tuplize(c)
-                                      for c in peptide_columns)
-        self._protein_columns = tuple(utils.tuplize(c)
-                                      for c in protein_columns)
+        self._peptide_columns = tuple(
+            utils.tuplize(c) for c in peptide_columns
+        )
+        self._protein_columns = tuple(
+            utils.tuplize(c) for c in protein_columns
+        )
 
         # Finish initialization
-        other_columns = sum([self._target_columns,
-                             *self._peptide_columns,
-                             *self._protein_columns],
-                            tuple())
+        other_columns = sum(
+            [
+                self._target_columns,
+                *self._peptide_columns,
+                *self._protein_columns,
+            ],
+            tuple(),
+        )
 
-        super().__init__(psms=psms,
-                         spectrum_columns=spectrum_columns,
-                         feature_columns=feature_columns,
-                         other_columns=other_columns)
+        super().__init__(
+            psms=psms,
+            spectrum_columns=spectrum_columns,
+            feature_columns=feature_columns,
+            other_columns=other_columns,
+        )
 
     @property
     def targets(self):
@@ -557,8 +584,9 @@ class CrossLinkedPsmDataset(PsmDataset):
             training. Typically, 0 is reserved for targets, below a
             specified FDR threshold.
         """
-        qvals = qvalues.crosslink_tdc(scores, num_targets=self.targets,
-                                      desc=desc)
+        qvals = qvalues.crosslink_tdc(
+            scores, num_targets=self.targets, desc=desc
+        )
         unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
         new_labels = np.ones(len(qvals))
         new_labels[~self.targets] = -1

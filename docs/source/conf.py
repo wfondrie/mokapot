@@ -13,6 +13,7 @@
 import os
 import sys
 import subprocess
+
 sys.path.insert(0, os.path.abspath(os.path.join("..", "..")))
 
 try:
@@ -22,11 +23,12 @@ except ModuleNotFoundError:
 
 
 # -- Project information -----------------------------------------------------
-project = 'mokapot'
-copyright = '2020, William E. Fondrie'
-author = 'William E. Fondrie'
+project = "mokapot"
+copyright = "2020, William E. Fondrie"
+author = "William E. Fondrie"
 
 import mokapot
+
 version = str(mokapot.__version__)
 release = version
 
@@ -46,7 +48,7 @@ extensions = [
     "sphinx_rtd_theme",
     "sphinx.ext.intersphinx",
     "sphinxarg.ext",
-    "nbsphinx"
+    "nbsphinx",
 ]
 
 nbsphinx_execute = "never"
@@ -55,7 +57,7 @@ autosummary_generate = True
 autodoc_default_options = {
     "members": True,
     "inherited-members": True,
-    "member-order": "bysource"
+    "member-order": "bysource",
 }
 
 numpydoc_show_class_members = True
@@ -65,11 +67,11 @@ intersphinx_mapping = {
     "pandas": ("https://pandas.pydata.org/docs", None),
     "sklearn": ("https://scikit-learn.org/stable", None),
     "numpy": ("https://docs.scipy.org/doc/numpy", None),
-    "matplotlib": ("https://matplotlib.org", None)
+    "matplotlib": ("https://matplotlib.org", None),
 }
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -83,19 +85,19 @@ exclude_patterns = ["build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # a list of builtin themes.
 #
 html_theme = "sphinx_rtd_theme"
-#html_theme = "alabaster"
+# html_theme = "alabaster"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 master_doc = "index"
 source_suffix = ".rst"
 
 html_theme_options = {
     "style_nav_header_background": "#343131",
-    "logo_only": True
+    "logo_only": True,
 }
 
 html_css_files = [

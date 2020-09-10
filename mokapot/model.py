@@ -28,13 +28,15 @@ from sklearn.exceptions import NotFittedError
 LOGGER = logging.getLogger(__name__)
 
 # Constants -------------------------------------------------------------------
-PERC_GRID = {"class_weight": [{0: neg, 1: pos}
-                              for neg in (0.1, 1, 10)
-                              for pos in (0.1, 1, 10)]}
+PERC_GRID = {
+    "class_weight": [
+        {0: neg, 1: pos} for neg in (0.1, 1, 10) for pos in (0.1, 1, 10)
+    ]
+}
 
 
 # Classes ---------------------------------------------------------------------
-class Model():
+class Model:
     """
     A machine learning model to re-score PSMs.
 
@@ -99,23 +101,27 @@ class Model():
         If the learned model performs worse than the best feature, should
         the model still be used?
     """
-    def __init__(self,
-                 estimator,
-                 scaler=None,
-                 train_fdr=0.01,
-                 max_iter=10,
-                 direction=None,
-                 override=False):
+
+    def __init__(
+        self,
+        estimator,
+        scaler=None,
+        train_fdr=0.01,
+        max_iter=10,
+        direction=None,
+        override=False,
+    ):
         """Initialize a Model object"""
         if estimator is None:
-            warnings.warn("The estimator will need to be specified in future "
-                          "versions. Use the PercolatorModel class instead.",
-                          DeprecationWarning)
+            warnings.warn(
+                "The estimator will need to be specified in future "
+                "versions. Use the PercolatorModel class instead.",
+                DeprecationWarning,
+            )
             svm_model = svm.LinearSVC(dual=False)
-            estimator = ms.GridSearchCV(svm_model,
-                                        param_grid=PERC_GRID,
-                                        refit=False,
-                                        cv=3)
+            estimator = ms.GridSearchCV(
+                svm_model, param_grid=PERC_GRID, refit=False, cv=3
+            )
 
         self.estimator = base.clone(estimator)
         self.features = None
@@ -142,10 +148,12 @@ class Model():
     def __repr__(self):
         """How to print the class"""
         trained = {True: "A trained", False: "An untrained"}
-        return (f"{trained[self.is_trained]} mokapot.model.Model object:\n"
-                f"\testimator: {self.estimator}\n"
-                f"\tscaler: {self.scaler}\n"
-                f"\tfeatures: {self.features}")
+        return (
+            f"{trained[self.is_trained]} mokapot.model.Model object:\n"
+            f"\testimator: {self.estimator}\n"
+            f"\tscaler: {self.scaler}\n"
+            f"\tfeatures: {self.features}"
+        )
 
     def save(self, out_file):
         """
@@ -191,10 +199,14 @@ class Model():
 
         feat_names = psms.features.columns.tolist()
         if set(feat_names) != set(self.features):
-            raise ValueError("Features of the input data do not match the "
-                             "features of this Model.")
+            raise ValueError(
+                "Features of the input data do not match the "
+                "features of this Model."
+            )
 
-        feat = self.scaler.transform(psms.features.loc[:, self.features].values)
+        feat = self.scaler.transform(
+            psms.features.loc[:, self.features].values
+        )
         return self.estimator.decision_function(feat)
 
     def predict(self, psms):
@@ -229,9 +241,11 @@ class Model():
             raise ValueError("No decoy PSMs were available for training.")
 
         if len(psms.data) <= 200:
-            LOGGER.warning("Few PSMs are available for model training (%i). "
-                           "The learned models may be unstable.",
-                           len(psms.data))
+            LOGGER.warning(
+                "Few PSMs are available for model training (%i). "
+                "The learned models may be unstable.",
+                len(psms.data),
+            )
 
         # Choose the initial direction
         start_labels, feat_pass = _get_starting_labels(psms, self)
@@ -250,7 +264,7 @@ class Model():
         for i in range(self.max_iter):
             # Fit the model
             samples = norm_feat[target.astype(bool), :]
-            iter_targ = (target[target.astype(bool)]+1)/2
+            iter_targ = (target[target.astype(bool)] + 1) / 2
             model.fit(samples, iter_targ)
 
             # Update scores
@@ -259,12 +273,15 @@ class Model():
             # Update target
             target = psms._update_labels(scores, eval_fdr=self.train_fdr)
             num_passed.append((target == 1).sum())
-            LOGGER.info("\t- Iteration %i: %i training PSMs passed.",
-                        i, num_passed[i])
+            LOGGER.info(
+                "\t- Iteration %i: %i training PSMs passed.", i, num_passed[i]
+            )
 
         # If the model performs worse than what was initialized:
-        if (num_passed[-1] < (start_labels == 1).sum()
-                or num_passed[-1] < feat_pass):
+        if (
+            num_passed[-1] < (start_labels == 1).sum()
+            or num_passed[-1] < feat_pass
+        ):
             if self.override:
                 LOGGER.warning("Model performs worse after training.")
             else:
@@ -340,31 +357,39 @@ class PercolatorModel(Model):
         If the learned model performs worse than the best feature, should
         the model still be used?
     """
-    def __init__(self,
-                 scaler=None,
-                 train_fdr=0.01,
-                 max_iter=10,
-                 direction=None,
-                 override=False):
+
+    def __init__(
+        self,
+        scaler=None,
+        train_fdr=0.01,
+        max_iter=10,
+        direction=None,
+        override=False,
+    ):
         """Initialize a PercolatorModel"""
         svm_model = svm.LinearSVC(dual=False)
-        estimator = ms.GridSearchCV(svm_model,
-                                    param_grid=PERC_GRID,
-                                    refit=False,
-                                    cv=3)
+        estimator = ms.GridSearchCV(
+            svm_model, param_grid=PERC_GRID, refit=False, cv=3
+        )
 
-        super().__init__(estimator=estimator, scaler=scaler,
-                         train_fdr=train_fdr, max_iter=max_iter,
-                         direction=direction, override=override)
+        super().__init__(
+            estimator=estimator,
+            scaler=scaler,
+            train_fdr=train_fdr,
+            max_iter=max_iter,
+            direction=direction,
+            override=override,
+        )
 
 
-class DummyScaler():
+class DummyScaler:
     """
     Implements the interface of scikit-learn scalers, but does
     nothing to the data. This simplifies the training code.
 
     :meta private:
     """
+
     def fit(self, x):
         pass
 
@@ -463,14 +488,21 @@ def _get_starting_labels(psms, model):
     if model.direction is None and not model.is_trained:
         feat_res = psms._find_best_feature(model.train_fdr)
         best_feat, feat_pass, start_labels, _ = feat_res
-        LOGGER.info("\t- Selected feature %s with %i PSMs at q<=%g.",
-                    best_feat, feat_pass, model.train_fdr)
+        LOGGER.info(
+            "\t- Selected feature %s with %i PSMs at q<=%g.",
+            best_feat,
+            feat_pass,
+            model.train_fdr,
+        )
 
     elif model.is_trained:
         scores = model.estimator.decision_function(psms.features)
         start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
-        LOGGER.info("\t- The pretrained model found %i PSMs at q<=%g.",
-                    (start_labels == 1).sum(), model.train_fdr)
+        LOGGER.info(
+            "\t- The pretrained model found %i PSMs at q<=%g.",
+            (start_labels == 1).sum(),
+            model.train_fdr,
+        )
 
     else:
         feat = psms.features[model.direction].values
@@ -486,13 +518,18 @@ def _get_starting_labels(psms, model):
             start_labels = asc_labels
             feat_pass = asc_pass
 
-        LOGGER.info("  - Selected feature %s with %i PSMs at q<=%g.",
-                    model.direction, (start_labels == 1).sum(),
-                    model.train_fdr)
+        LOGGER.info(
+            "  - Selected feature %s with %i PSMs at q<=%g.",
+            model.direction,
+            (start_labels == 1).sum(),
+            model.train_fdr,
+        )
 
     if not (start_labels == 1).sum():
-        raise RuntimeError(f"No PSMs accepted at train_fdr={model.train_fdr}. "
-                           "Consider changing it to a higher value.")
+        raise RuntimeError(
+            f"No PSMs accepted at train_fdr={model.train_fdr}. "
+            "Consider changing it to a higher value."
+        )
 
     return start_labels, feat_pass
 
@@ -517,7 +554,7 @@ def _find_hyperparameters(model, features, labels):
     if model._needs_cv:
         LOGGER.info("Selecting hyperparameters...")
         cv_samples = features[labels.astype(bool), :]
-        cv_targ = (labels[labels.astype(bool)]+1)/2
+        cv_targ = (labels[labels.astype(bool)] + 1) / 2
 
         # Fit the model
         model.estimator.fit(cv_samples, cv_targ)

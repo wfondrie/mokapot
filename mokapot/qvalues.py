@@ -70,13 +70,16 @@ def tdc(scores, target, desc=True):
     scores = scores[srt_idx]
     target = target[srt_idx]
     cum_targets = target.cumsum()
-    cum_decoys = ((target-1)**2).cumsum()
+    cum_decoys = ((target - 1) ** 2).cumsum()
     num_total = cum_targets + cum_decoys
 
     # Handles zeros in denominator
-    fdr = np.divide((cum_decoys + 1), cum_targets,
-                    out=np.ones_like(cum_targets, dtype=float),
-                    where=(cum_targets != 0))
+    fdr = np.divide(
+        (cum_decoys + 1),
+        cum_targets,
+        out=np.ones_like(cum_targets, dtype=float),
+        where=(cum_targets != 0),
+    )
 
     # Calculate q-values
     unique_metric, indices = np.unique(scores, return_counts=True)
@@ -140,9 +143,12 @@ def crosslink_tdc(scores, num_targets, desc=True):
     one_decoy = (num_targets == 1).astype(int).cumsum()
     two_decoy = (num_targets == 0).astype(int).cumsum()
 
-    fdr = np.divide((one_decoy - two_decoy), cum_targets,
-                    out=np.ones_like(cum_targets, dtype=float),
-                    where=(cum_targets != 0))
+    fdr = np.divide(
+        (one_decoy - two_decoy),
+        cum_targets,
+        out=np.ones_like(cum_targets, dtype=float),
+        where=(cum_targets != 0),
+    )
 
     fdr[fdr < 0] = 0
 

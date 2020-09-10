@@ -27,18 +27,21 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Classes ---------------------------------------------------------------------
-class Confidence():
+class Confidence:
     """
     Estimate and store the statistical confidence for a collection of
     PSMs.
 
     :meta private:
     """
-    _level_labs = {"psms": "PSMs",
-                   "peptides": "Peptides",
-                   "proteins": "Proteins",
-                   "csms": "Cross-Linked PSMs",
-                   "peptide_pairs": "Peptide Pairs"}
+
+    _level_labs = {
+        "psms": "PSMs",
+        "peptides": "Peptides",
+        "proteins": "Proteins",
+        "csms": "Cross-Linked PSMs",
+        "peptide_pairs": "Peptide Pairs",
+    }
 
     def __init__(self, psms, scores, desc):
         """
@@ -48,7 +51,7 @@ class Confidence():
         self._score_column = _new_column("score", self._data)
 
         # Flip sign of scores if not descending
-        self._data[self._score_column] = scores * (desc*2 - 1)
+        self._data[self._score_column] = scores * (desc * 2 - 1)
 
         # This attribute holds the results as DataFrames:
         self._confidence_estimates = {}
@@ -136,8 +139,12 @@ class Confidence():
             An :py:class:`matplotlib.axes.Axes` with the cumulative
             number of accepted target PSMs or peptides.
         """
-        ax = plot_qvalues(self._confidence_estimates[level]["mokapot q-value"],
-                          threshold=threshold, ax=ax, **kwargs)
+        ax = plot_qvalues(
+            self._confidence_estimates[level]["mokapot q-value"],
+            threshold=threshold,
+            ax=ax,
+            **kwargs,
+        )
         ax.set_xlabel("q-value")
         ax.set_ylabel(f"Accepted {self._level_labs[level]}")
 
@@ -171,6 +178,7 @@ class LinearConfidence(Confidence):
     peptides : pandas.DataFrame
         Confidence estimates for peptides in the dataset.
     """
+
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
         """Initialize a a LinearPsmConfidence object"""
         LOGGER.info("=== Assigning Confidence ===")
@@ -182,12 +190,13 @@ class LinearConfidence(Confidence):
         self._eval_fdr = eval_fdr
 
         LOGGER.info("Performing target-decoy competition...")
-        LOGGER.info("Keeping the best match per %s columns...",
-                    "+".join(self._psm_columns))
+        LOGGER.info(
+            "Keeping the best match per %s columns...",
+            "+".join(self._psm_columns),
+        )
 
         self._perform_tdc(self._psm_columns)
-        LOGGER.info("\t- Found %i PSMs from unique spectra.",
-                    len(self._data))
+        LOGGER.info("\t- Found %i PSMs from unique spectra.", len(self._data))
 
         self._assign_confidence(desc=desc)
 
@@ -196,9 +205,11 @@ class LinearConfidence(Confidence):
         pass_psms = (self.psms["mokapot q-value"] <= self._eval_fdr).sum()
         pass_peps = (self.peptides["mokapot q-value"] <= self._eval_fdr).sum()
 
-        return ("A mokapot.confidence.LinearConfidence object:\n"
-                f"\t- PSMs at q<={self._eval_fdr:g}: {pass_psms}\n"
-                f"\t- Peptides at q<={self._eval_fdr:g}: {pass_peps}")
+        return (
+            "A mokapot.confidence.LinearConfidence object:\n"
+            f"\t- PSMs at q<={self._eval_fdr:g}: {pass_psms}\n"
+            f"\t- Peptides at q<={self._eval_fdr:g}: {pass_peps}"
+        )
 
     def _assign_confidence(self, desc=True):
         """
@@ -209,8 +220,9 @@ class LinearConfidence(Confidence):
         desc : bool
             Are higher scores better?
         """
-        peptide_idx = _groupby_max(self._data, self._peptide_column,
-                                   self._score_column)
+        peptide_idx = _groupby_max(
+            self._data, self._peptide_column, self._score_column
+        )
 
         peptides = self._data.loc[peptide_idx]
         LOGGER.info("  - Found %i unique peptides.", len(peptides))
@@ -224,24 +236,30 @@ class LinearConfidence(Confidence):
             data["mokapot q-value"] = qvalues.tdc(scores, targets, desc)
 
             # Make output tables pretty
-            data = data.loc[targets, :] \
-                       .sort_values(self._score_column, ascending=(not desc)) \
-                       .reset_index(drop=True) \
-                       .drop(self._target_column, axis=1) \
-                       .rename(columns={self._score_column: "mokapot score"})
+            data = (
+                data.loc[targets, :]
+                .sort_values(self._score_column, ascending=(not desc))
+                .reset_index(drop=True)
+                .drop(self._target_column, axis=1)
+                .rename(columns={self._score_column: "mokapot score"})
+            )
 
             # Set scores to be the correct sign again:
-            data["mokapot score"] = data["mokapot score"] * (desc*2 - 1)
+            data["mokapot score"] = data["mokapot score"] * (desc * 2 - 1)
 
             # Logging update on q-values
-            LOGGER.info("\t- Found %i %s with q<=%g",
-                        (data["mokapot q-value"] <= self._eval_fdr).sum(),
-                        level, self._eval_fdr)
+            LOGGER.info(
+                "\t- Found %i %s with q<=%g",
+                (data["mokapot q-value"] <= self._eval_fdr).sum(),
+                level,
+                self._eval_fdr,
+            )
 
             # Calculate PEPs
             LOGGER.info("Assiging PEPs to %s.", level)
-            _, pep = qvality.getQvaluesFromScores(scores[targets],
-                                                  scores[~targets])
+            _, pep = qvality.getQvaluesFromScores(
+                scores[targets], scores[~targets]
+            )
             data["mokapot PEP"] = pep
             self._confidence_estimates[level.lower()] = data
 
@@ -270,6 +288,7 @@ class CrossLinkedConfidence(Confidence):
     peptide_pairs : pandas.DataFrame
         Confidence estimates for peptide pairs in the dataset.
     """
+
     def __init__(self, psms, scores, desc=True):
         """Initialize a CrossLinkedConfidence object"""
         super().__init__(psms, scores, desc)
@@ -290,8 +309,9 @@ class CrossLinkedConfidence(Confidence):
         desc : bool
             Are higher scores better?
         """
-        peptide_idx = _groupby_max(self._data, self._peptide_columns,
-                                   self._score_column)
+        peptide_idx = _groupby_max(
+            self._data, self._peptide_columns, self._score_column
+        )
 
         peptides = self._data.loc[peptide_idx]
         levels = ("csms", "peptide_pairs")
@@ -299,17 +319,21 @@ class CrossLinkedConfidence(Confidence):
         for level, data in zip(levels, (self._data, peptides)):
             scores = data.loc[:, self._score_column].values
             targets = data.loc[:, self._target_column].astype(bool).values
-            data["mokapot q-value"] = qvalues.crosslink_tdc(scores, targets,
-                                                            desc)
+            data["mokapot q-value"] = qvalues.crosslink_tdc(
+                scores, targets, desc
+            )
 
-            data = data.loc[targets, :] \
-                       .sort_values(self._score_column, ascending=(not desc)) \
-                       .reset_index(drop=True) \
-                       .drop(self._target_column, axis=1) \
-                       .rename(columns={self._score_column: "mokapot score"})
+            data = (
+                data.loc[targets, :]
+                .sort_values(self._score_column, ascending=(not desc))
+                .reset_index(drop=True)
+                .drop(self._target_column, axis=1)
+                .rename(columns={self._score_column: "mokapot score"})
+            )
 
-            _, pep = qvality.getQvaluesFromScores(scores[targets == 2],
-                                                  scores[~targets])
+            _, pep = qvality.getQvaluesFromScores(
+                scores[targets == 2], scores[~targets]
+            )
             data["mokapot PEP"] = pep
             self._confidence_estimates[level] = data
 
@@ -348,8 +372,7 @@ def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
     qvals = qvals.groupby(["qvalue"]).max().reset_index()
     qvals = qvals[["qvalue", "num"]]
 
-    zero = pd.DataFrame({"qvalue": qvals["qvalue"][0],
-                        "num": 0}, index=[-1])
+    zero = pd.DataFrame({"qvalue": qvals["qvalue"][0], "num": 0}, index=[-1])
     qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
 
     xmargin = threshold * 0.05
@@ -365,18 +388,19 @@ def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
     ax.set_xlabel("q-value")
     ax.set_ylabel(f"Discoveries")
 
-    ax.step(qvals["qvalue"].values,
-            qvals.num.values, where="post", **kwargs)
+    ax.step(qvals["qvalue"].values, qvals.num.values, where="post", **kwargs)
 
     return ax
 
 
 def _groupby_max(df, by_cols, max_col):
     """Quickly get the indices for the maximum value of col"""
-    idx = (df.sample(frac=1)
-             .sort_values(list(by_cols)+[max_col], axis=0)
-             .drop_duplicates(list(by_cols), keep="last")
-             .index)
+    idx = (
+        df.sample(frac=1)
+        .sort_values(list(by_cols) + [max_col], axis=0)
+        .drop_duplicates(list(by_cols), keep="last")
+        .index
+    )
 
     return idx
 

@@ -20,18 +20,24 @@ def main():
     config = Config()
 
     # Setup logging
-    verbosity_dict = {0: logging.ERROR,
-                      1: logging.WARNING,
-                      2: logging.INFO,
-                      3: logging.DEBUG}
+    verbosity_dict = {
+        0: logging.ERROR,
+        1: logging.WARNING,
+        2: logging.INFO,
+        3: logging.DEBUG,
+    }
 
-    logging.basicConfig(format=("[{levelname}] {message}"),
-                        style="{", level=verbosity_dict[config.verbosity])
+    logging.basicConfig(
+        format=("[{levelname}] {message}"),
+        style="{",
+        level=verbosity_dict[config.verbosity],
+    )
 
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
-    logging.info("Department of Genome Sciences at the University of "
-                 "Washington.")
+    logging.info(
+        "Department of Genome Sciences at the University of " "Washington."
+    )
     logging.info("Command issued:")
     logging.info("%s", " ".join(sys.argv))
     logging.info("")
@@ -44,16 +50,18 @@ def main():
         datasets = read_pin(config.pin_files)
     else:
         datasets = [read_pin(f) for f in config.pin_files]
-        prefixes = [os.path.splitext(os.path.basename(f))[0]
-                    for f in config.pin_files]
+        prefixes = [
+            os.path.splitext(os.path.basename(f))[0] for f in config.pin_files
+        ]
 
-    model = PercolatorModel(train_fdr=config.train_fdr,
-                            max_iter=config.max_iter,
-                            direction=config.direction)
-    psms = brew(datasets,
-                model=model,
-                test_fdr=config.test_fdr,
-                folds=config.folds)
+    model = PercolatorModel(
+        train_fdr=config.train_fdr,
+        max_iter=config.max_iter,
+        direction=config.direction,
+    )
+    psms = brew(
+        datasets, model=model, test_fdr=config.test_fdr, folds=config.folds
+    )
 
     if config.aggregate or len(config.pin_files) == 1:
         psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)

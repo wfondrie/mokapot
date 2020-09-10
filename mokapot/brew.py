@@ -14,11 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
-def brew(psms,
-         model=None,
-         test_fdr=0.01,
-         folds=3,
-         max_workers=1):
+def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     """
     Re-score one or more collection of PSMs.
 
@@ -84,10 +80,12 @@ def brew(psms,
     train_sets = _make_train_sets(psms, test_idx)
 
     # Create args for map:
-    map_args = [_fit_model,
-                train_sets,
-                [copy.deepcopy(model) for _ in range(folds)],
-                range(folds)]
+    map_args = [
+        _fit_model,
+        train_sets,
+        [copy.deepcopy(model) for _ in range(folds)],
+        range(folds),
+    ]
 
     # Train models in parallel
     with ProcessPoolExecutor(max_workers=max_workers) as prc:
@@ -102,13 +100,15 @@ def brew(psms,
     reset = any([m[1] for m in models])
     if reset:
         # If we reset, just use the original model on all the folds:
-        scores = [p._calibrate_scores(model.predict(p), test_fdr)
-                  for p in psms]
+        scores = [
+            p._calibrate_scores(model.predict(p), test_fdr) for p in psms
+        ]
     elif all([m[0].is_trained for m in models]):
         # If we don't reset, assign scores to each fold:
         models = [m for m, _ in models]
-        scores = [_predict(p, i, models, test_fdr)
-                  for p, i in zip(psms, test_idx)]
+        scores = [
+            _predict(p, i, models, test_fdr) for p, i in zip(psms, test_idx)
+        ]
     else:
         # If model training has failed
         scores = [np.zeros(len(p.data)) for p in psms]
@@ -128,23 +128,30 @@ def brew(psms,
     # Here, f[0] is the name of the best feature, and f[3] is a boolean
     if feat_total > pred_total:
         using_best_feat = True
-        scores = [p.data[f[0]].values * int(f[3])
-                  for p, f in zip(psms, best_feats)]
+        scores = [
+            p.data[f[0]].values * int(f[3]) for p, f in zip(psms, best_feats)
+        ]
     else:
         using_best_feat = False
 
     if using_best_feat:
-        logging.warning("Learned model did not improve over the best feature. "
-                        "Now scoring by the best feature for each collection "
-                        "of PSMs.")
+        logging.warning(
+            "Learned model did not improve over the best feature. "
+            "Now scoring by the best feature for each collection "
+            "of PSMs."
+        )
     elif reset:
-        logging.warning("Learned model did not improve upon the pretrained "
-                        "input model. Now re-scoring each collection of PSMs "
-                        "using the original model.")
+        logging.warning(
+            "Learned model did not improve upon the pretrained "
+            "input model. Now re-scoring each collection of PSMs "
+            "using the original model."
+        )
 
     LOGGER.info("")
-    res = [p.assign_confidence(s, eval_fdr=test_fdr, desc=True)
-           for p, s in zip(psms, scores)]
+    res = [
+        p.assign_confidence(s, eval_fdr=test_fdr, desc=True)
+        for p, s in zip(psms, scores)
+    ]
 
     if len(res) == 1:
         return res[0]
@@ -198,8 +205,9 @@ def _predict(dset, test_idx, models, test_fdr):
     scores = []
     for fold_idx, mod in zip(test_idx, models):
         test_set._data = dset.data.loc[list(fold_idx), :]
-        s = test_set._calibrate_scores(mod.predict(test_set), test_fdr)
-        scores.append(s)
+        scores.append(
+            test_set._calibrate_scores(mod.predict(test_set), test_fdr)
+        )
 
     rev_idx = np.argsort(sum(test_idx, [])).tolist()
     return np.concatenate(scores)[rev_idx]
@@ -224,7 +232,7 @@ def _fit_model(train_set, model, fold):
         Whether the models should be reset to their original parameters.
     """
     LOGGER.info("")
-    LOGGER.info("=== Analyzing Fold %i ===", fold+1)
+    LOGGER.info("=== Analyzing Fold %i ===", fold + 1)
     reset = False
     try:
         model.fit(train_set)
