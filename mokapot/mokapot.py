@@ -11,6 +11,7 @@ from mokapot import __version__
 from .config import Config
 from .parsers import read_pin
 from .brew import brew
+from .model import PercolatorModel
 
 
 def main():
@@ -46,11 +47,12 @@ def main():
         prefixes = [os.path.splitext(os.path.basename(f))[0]
                     for f in config.pin_files]
 
+    model = PercolatorModel(train_fdr=config.train_fdr,
+                            max_iter=config.max_iter,
+                            direction=config.direction)
     psms = brew(datasets,
-                train_fdr=config.train_fdr,
+                model=model,
                 test_fdr=config.test_fdr,
-                max_iter=config.max_iter,
-                direction=config.direction,
                 folds=config.folds)
 
     if config.aggregate or len(config.pin_files) == 1:

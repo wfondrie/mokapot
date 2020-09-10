@@ -8,7 +8,7 @@ from concurrent.futures import ProcessPoolExecutor
 import pandas as pd
 import numpy as np
 
-from .model import Model
+from .model import PercolatorModel
 
 LOGGER = logging.getLogger(__name__)
 
@@ -16,10 +16,7 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 def brew(psms,
          model=None,
-         train_fdr=0.01,
          test_fdr=0.01,
-         max_iter=10,
-         direction=None,
          folds=3,
          max_workers=1):
     """
@@ -44,19 +41,9 @@ def brew(psms,
         The :py:class:`mokapot.Model` object to be fit. The default is
         :code:`None`, which attempts to mimic the same support vector
         machine models used by Percolator.
-    train_fdr : float, optional
-        The maximum false discovery rate at which to consider a
-        target PSM as a positive example during model training.
     test_fdr : float, optional
         The false-discovery rate threshold at which to evaluate
         the learned models.
-    max_iter : int, optional
-        The number of iterations to use for training.
-    direction : str or None, optional
-        The name of the feature to use as the initial direction for
-        ranking PSMs. The default, :code`None`, automatically selects
-        the feature that finds the most PSMs below the `train_fdr`. This
-        will be ignored in the case the model is already trained.
     folds : int, optional
         The number of cross-validation folds to use. PSMs originating
         from the same mass spectrum are always in the same fold.
@@ -76,7 +63,7 @@ def brew(psms,
         `psms` parameter.
     """
     if model is None:
-        model = Model()
+        model = PercolatorModel()
 
     try:
         iter(psms)
@@ -100,9 +87,6 @@ def brew(psms,
     map_args = [_fit_model,
                 train_sets,
                 [copy.deepcopy(model) for _ in range(folds)],
-                [train_fdr]*folds,
-                [max_iter]*folds,
-                [direction]*folds,
                 range(folds)]
 
     # Train models in parallel
@@ -131,8 +115,12 @@ def brew(psms,
 
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
-    best_feats = [p._find_best_feature(test_fdr) for p in psms]
-    feat_total = sum([best_feat[1] for best_feat in best_feats])
+    if not model.override:
+        LOGGER.info("")
+        best_feats = [p._find_best_feature(test_fdr) for p in psms]
+        feat_total = sum([best_feat[1] for best_feat in best_feats])
+    else:
+        feat_total = 0
 
     preds = [p._update_labels(s, test_fdr) for p, s in zip(psms, scores)]
     pred_total = sum([(pred == 1).sum() for pred in preds])
@@ -185,7 +173,7 @@ def _make_train_sets(psms, test_idx):
         train_set._data = None
         data = []
         for i, j, dset in zip(idx, all_idx, psms):
-            data.append(dset.data.iloc[list(j - set(i)), :])
+            data.append(dset.data.loc[list(j - set(i)), :])
 
         train_set._data = pd.concat(data, ignore_index=True)
         yield train_set
@@ -208,8 +196,8 @@ def _predict(dset, test_idx, models, test_fdr):
     """
     test_set = copy.copy(dset)
     scores = []
-    for fold, mod in zip(test_idx, models):
-        test_set._data = dset.data.iloc[list(fold), :]
+    for fold_idx, mod in zip(test_idx, models):
+        test_set._data = dset.data.loc[list(fold_idx), :]
         s = test_set._calibrate_scores(mod.predict(test_set), test_fdr)
         scores.append(s)
 
@@ -217,7 +205,7 @@ def _predict(dset, test_idx, models, test_fdr):
     return np.concatenate(scores)[rev_idx]
 
 
-def _fit_model(train_set, model, train_fdr, max_iter, direction, fold):
+def _fit_model(train_set, model, fold):
     """
     Fit the estimator using the training data.
 
@@ -225,13 +213,8 @@ def _fit_model(train_set, model, train_fdr, max_iter, direction, fold):
     ----------
     train_set : PsmDataset
         A PsmDataset that specifies the training data
-    models : tuple of Model
+    model : tuple of Model
         A Classifier to train.
-    train_fdr : float
-        The FDR threshold used to define positive examples during the
-        Percolator algorithm.
-    max_iter : int
-        The maximum number of iterations to run the algorithm.
 
     Returns
     -------
@@ -243,13 +226,8 @@ def _fit_model(train_set, model, train_fdr, max_iter, direction, fold):
     LOGGER.info("")
     LOGGER.info("=== Analyzing Fold %i ===", fold+1)
     reset = False
-
     try:
-        model.fit(train_set,
-                  train_fdr=train_fdr,
-                  max_iter=max_iter,
-                  direction=direction)
-
+        model.fit(train_set)
     except RuntimeError as msg:
         if str(msg) != "Model performs worse after training.":
             raise

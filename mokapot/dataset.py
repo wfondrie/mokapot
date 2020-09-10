@@ -93,7 +93,7 @@ class PsmDataset(ABC):
                  other_columns,
                  copy_data):
         """Initialize an object"""
-        self._data = psms.copy(deep=copy_data)
+        self._data = psms.copy(deep=copy_data).reset_index(drop=True)
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
@@ -130,6 +130,10 @@ class PsmDataset(ABC):
     def data(self):
         """The full collection of PSMs as a :py:class:`pandas.DataFrame`."""
         return self._data
+
+    def __len__(self):
+        """Return the number of PSMs"""
+        return len(self._data.index)
 
     @property
     def _metadata_columns(self):
@@ -275,8 +279,8 @@ class PsmDataset(ABC):
 class LinearPsmDataset(PsmDataset):
     """Store and analyze a collection of PSMs
 
-    This class stores a collection of PSMs from data-dependent
-    acquisition proteomics experiments and defines the necessary fields
+    Stores a collection of PSMs from data-dependent acquisition
+    proteomics experiments and defines the necessary fields
     for mokapot analysis.
 
     Parameters

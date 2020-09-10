@@ -8,9 +8,14 @@ allowing a wide variety of models to be used. Once initialized,
 the :py:meth:`Model.fit` method trains the underyling classifier
 using :doc:`a collection of PSMs <dataset>` with this iterative
 approach.
+
+Additional subclasses of the :py:class:`Model` class are available for
+typical use cases. For example, use :py:class:`PercolatorModel` if you
+want to emulate the behavior of Percolator.
 """
 import logging
 import pickle
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -33,9 +38,7 @@ class Model():
     """
     A machine learning model to re-score PSMs.
 
-    A linear support vector machine (SVM) model is used by default in an
-    attempt emulate the SVM models in Percolator. Alternatively, any
-    classifier with a `scikit-learn estimator interface
+    Any classifier with a `scikit-learn estimator interface
     <https://scikit-learn.org/stable/developers/develop.html#estimators>`_
     can be used. This class also supports hyper parameter optimization
     using classes from the :py:mod:`sklearn.model_selection`
@@ -58,8 +61,20 @@ class Model():
         , implementing :code:`fit_transform()` and :code:`transform()` methods.
         Alternatively, the string :code:`"as-is"` leaves the features in
         their original scale.
-    is_trained : bool, optional
-        Indicates if the model has already been trained.
+    train_fdr : float, optional
+        The maximum false discovery rate at which to consider a target PSM as a
+        positive example.
+    max_iter : int, optional
+        The number of iterations to perform.
+    direction : str or None, optional
+        The name of the feature to use as the initial direction for ranking
+        PSMs. The default, :code:`None`, automatically
+        selects the feature that finds the most PSMs below the
+        `train_fdr`. This
+        will be ignored in the case the model is already trained.
+    override : bool, optional
+        If the learned model performs worse than the best feature, should
+        the model still be used?
 
     Attributes
     ----------
@@ -72,18 +87,39 @@ class Model():
         model has yet to be trained.
     is_trained : bool
         Indicates if the model has been trained.
+        train_fdr : float
+        The maximum false discovery rate at which to consider a target PSM as a
+        positive example.
+    max_iter : int
+        The number of iterations to perform.
+    direction : str or None, optional
+        The name of the feature to use as the initial direction for ranking
+        PSMs.
+    override : bool
+        If the learned model performs worse than the best feature, should
+        the model still be used?
     """
-    def __init__(self, estimator=None, scaler=None, is_trained=False):
+    def __init__(self,
+                 estimator,
+                 scaler=None,
+                 train_fdr=0.01,
+                 max_iter=10,
+                 direction=None,
+                 override=False):
         """Initialize a Model object"""
         if estimator is None:
+            warnings.warn("The estimator will need to be specified in future "
+                          "versions. Use the PercolatorModel class instead.",
+                          DeprecationWarning)
             svm_model = svm.LinearSVC(dual=False)
-            estimator = ms.GridSearchCV(svm_model, param_grid=PERC_GRID,
+            estimator = ms.GridSearchCV(svm_model,
+                                        param_grid=PERC_GRID,
                                         refit=False,
                                         cv=3)
 
         self.estimator = base.clone(estimator)
         self.features = None
-        self.is_trained = is_trained
+        self.is_trained = False
 
         if scaler == "as-is":
             self.scaler = DummyScaler()
@@ -92,10 +128,20 @@ class Model():
         else:
             self.scaler = base.clone(scaler)
 
+        self.train_fdr = train_fdr
+        self.max_iter = max_iter
+        self.direction = direction
+        self.override = override
+
+        # Sort out whether we need to optimize hyperparameters:
+        if hasattr(self.estimator, "estimator"):
+            self._needs_cv = True
+        else:
+            self._needs_cv = False
+
     def __repr__(self):
         """How to print the class"""
         trained = {True: "A trained", False: "An untrained"}
-
         return (f"{trained[self.is_trained]} mokapot.model.Model object:\n"
                 f"\testimator: {self.estimator}\n"
                 f"\tscaler: {self.scaler}\n"
@@ -155,9 +201,9 @@ class Model():
         """Alias for :py:meth:`decision_function`."""
         return self.decision_function(psms)
 
-    def fit(self, psms, train_fdr=0.01, max_iter=10, direction=None):
+    def fit(self, psms):
         """
-        Fit the machine learning model using the Percolator algorithm.
+        Fit the model using the Percolator algorithm.
 
         The model if trained by iteratively learning to separate decoy
         PSMs from high-scoring target PSMs. By default, an initial
@@ -171,79 +217,37 @@ class Model():
         psms : PsmDataset object
             :doc:`A collection of PSMs <dataset>` from which to train
             the model.
-        train_fdr : float, optional
-            The maximum false discovery rate at which to consider a
-            target PSM as a positive example.
-        max_iter : int, optional
-            The number of iterations to perform.
-        direction : str or None, optional
-            The name of the feature to use as the initial direction for
-            ranking PSMs. The default, :code:`None`, automatically
-            selects the feature that finds the most PSMs below the
-            `train_fdr`. This
-            will be ignored in the case the model is already trained.
+
+        Returns
+        -------
+        self
         """
-        if not sum(psms.targets):
+        if not (psms.targets).sum():
             raise ValueError("No target PSMs were available for training.")
-        elif not sum(~psms.targets):
+
+        if not (~psms.targets).sum():
             raise ValueError("No decoy PSMs were available for training.")
-        elif len(psms.data) <= 200:
-            logging.warning("Few PSMs are available for model training (%i). "
-                            "The learned models may be unstable.",
-                            len(psms.data))
+
+        if len(psms.data) <= 200:
+            LOGGER.warning("Few PSMs are available for model training (%i). "
+                           "The learned models may be unstable.",
+                           len(psms.data))
 
         # Choose the initial direction
-        LOGGER.info("Finding initial direction...")
-        best_feat, feat_pass, feat_labels, _ = psms._find_best_feature(train_fdr)
-        if direction is None and not self.is_trained:
-            LOGGER.info("  - Selected feature %s with %i PSMs at q<=%g.",
-                        best_feat, feat_pass, train_fdr)
-            start_labels = feat_labels
-        elif self.is_trained:
-            scores = self.estimator.decision_function(psms.features)
-            start_labels = psms._update_labels(scores, eval_fdr=train_fdr)
-            LOGGER.info("  - The pretrained model found %i PSMs at q<=%g.",
-                        (start_labels == 1).sum(), train_fdr)
-        else:
-            desc_labels = psms._update_labels(psms.features[direction].values,
-                                              train_fdr, desc=True)
-            asc_labels = psms._update_labels(psms.features[direction].values,
-                                             train_fdr, desc=False)
-
-            if (desc_labels == 1).sum() >= (asc_labels == 1).sum():
-                start_labels = desc_labels
-            else:
-                start_labels = asc_labels
-
-            LOGGER.info("  - Selected feature %s with %i PSMs at q<=%g.",
-                        direction, (start_labels == 1).sum(), train_fdr)
-
-        if not (start_labels == 1).sum():
-            raise RuntimeError(f"No PSMs accepted at train_fdr={train_fdr}. "
-                               "Consider changing it to a higher value.")
+        start_labels, feat_pass = _get_starting_labels(psms, self)
 
         # Normalize Features
         self.features = psms.features.columns.tolist()
-        norm_feat = self.scaler.fit_transform(psms.features)
+        norm_feat = self.scaler.fit_transform(psms.features.values)
 
-        # Initialize Model and Training Variables
-        if hasattr(self.estimator, "estimator"):
-            LOGGER.info("Selecting hyperparameters...")
-            cv_samples = norm_feat[feat_labels.astype(bool), :]
-            cv_targ = (feat_labels[feat_labels.astype(bool)]+1)/2
-            self.estimator.fit(cv_samples, cv_targ)
-            best_params = self.estimator.best_params_
-            model = self.estimator.estimator
-            model.set_params(**best_params)
-            LOGGER.info("  - best parameters: %s", best_params)
-        else:
-            model = self.estimator
+        # Prepare the model:
+        model = _find_hyperparameters(self, norm_feat, start_labels)
 
         # Begin training loop
         target = start_labels
         num_passed = []
         LOGGER.info("Beginning training loop...")
-        for i in range(max_iter):
+        for i in range(self.max_iter):
             # Fit the model
             samples = norm_feat[target.astype(bool), :]
             iter_targ = (target[target.astype(bool)]+1)/2
@@ -253,18 +257,20 @@ class Model():
             scores = model.decision_function(norm_feat)
 
             # Update target
-            target = psms._update_labels(scores, eval_fdr=train_fdr)
+            target = psms._update_labels(scores, eval_fdr=self.train_fdr)
             num_passed.append((target == 1).sum())
-            LOGGER.info("  - Iteration %i: %i training PSMs passed.",
+            LOGGER.info("\t- Iteration %i: %i training PSMs passed.",
                         i, num_passed[i])
 
         # If the model performs worse than what was initialized:
         if (num_passed[-1] < (start_labels == 1).sum()
                 or num_passed[-1] < feat_pass):
-            raise RuntimeError("Model performs worse after training.")
+            if self.override:
+                LOGGER.warning("Model performs worse after training.")
+            else:
+                raise RuntimeError("Model performs worse after training.")
 
         self.estimator = model
-
         weights = _get_weights(self.estimator, self.features)
         if weights is not None:
             LOGGER.info("Normalized feature weights in the learned model:")
@@ -273,6 +279,83 @@ class Model():
 
         self.is_trained = True
         LOGGER.info("Done training.")
+        return self
+
+
+class PercolatorModel(Model):
+    """
+    A model that emulates Percolator.
+    Create linear support vector machine (SVM) model that is similar
+    to the one used by Percolator. This is the default model used by
+    mokapot.
+
+    Parameters
+    ----------
+    scaler : scaler object or "as-is", optional
+        Defines how features are normalized before model fitting and
+        prediction. The default, :code:`None`, subtracts the mean and scales
+        to unit variance using
+        :py:class:`sklearn.preprocessing.StandardScaler`.
+        Other scalers should follow the `scikit-learn transformer
+        interface
+        <https://scikit-learn.org/stable/developers/develop.html#apis-of-scikit-learn-objects>`_
+        , implementing :code:`fit_transform()` and :code:`transform()` methods.
+        Alternatively, the string :code:`"as-is"` leaves the features in
+        their original scale.
+    train_fdr : float, optional
+        The maximum false discovery rate at which to consider a target PSM as a
+        positive example.
+    max_iter : int, optional
+        The number of iterations to perform.
+    direction : str or None, optional
+        The name of the feature to use as the initial direction for ranking
+        PSMs. The default, :code:`None`, automatically
+        selects the feature that finds the most PSMs below the
+        `train_fdr`. This
+        will be ignored in the case the model is already trained.
+    override : bool, optional
+        If the learned model performs worse than the best feature, should
+        the model still be used?
+
+    Attributes
+    ----------
+    estimator : classifier object
+        The classifier used to re-score PSMs.
+    scaler : scaler object
+        The scaler used to normalize features.
+    features : list of str or None
+        The name of the features used to fit the model. None if the
+        model has yet to be trained.
+    is_trained : bool
+        Indicates if the model has been trained.
+    train_fdr : float
+        The maximum false discovery rate at which to consider a target PSM as a
+        positive example.
+    max_iter : int
+        The number of iterations to perform.
+    direction : str or None, optional
+        The name of the feature to use as the initial direction for ranking
+        PSMs.
+    override : bool
+        If the learned model performs worse than the best feature, should
+        the model still be used?
+    """
+    def __init__(self,
+                 scaler=None,
+                 train_fdr=0.01,
+                 max_iter=10,
+                 direction=None,
+                 override=False):
+        """Initialize a PercolatorModel"""
+        svm_model = svm.LinearSVC(dual=False)
+        estimator = ms.GridSearchCV(svm_model,
+                                    param_grid=PERC_GRID,
+                                    refit=False,
+                                    cv=3)
+
+        super().__init__(estimator=estimator, scaler=scaler,
+                         train_fdr=train_fdr, max_iter=max_iter,
+                         direction=direction, override=override)
 
 
 class DummyScaler():
@@ -340,14 +423,13 @@ def load_model(model_file):
         logging.info("Loading the Percolator model.")
 
         weight_cols = [c for c in weights.index if c != "m0"]
-        model = Model(estimator=svm.LinearSVC(), scaler="as-is",
-                      is_trained=True)
-
+        model = Model(estimator=svm.LinearSVC(), scaler="as-is")
         weight_vals = weights.loc[weight_cols]
         weight_vals = weight_vals[np.newaxis, :]
         model.estimator.coef_ = weight_vals
         model.estimator.intercept_ = weights.loc["m0"]
         model.features = weight_cols
+        model.is_trained = True
 
     # Then try loading it with pickle:
     except UnicodeDecodeError:
@@ -356,6 +438,99 @@ def load_model(model_file):
             model = pickle.load(mod_in)
 
     return model
+
+
+# Private Functions -----------------------------------------------------------
+def _get_starting_labels(psms, model):
+    """
+    Get labels using the initial direction.
+
+    Parameters
+    ----------
+    psms : a collection of PSMs
+        The PsmDataset object
+    model : mokapot.Model
+        A model object (this is likely `self`)
+
+    Returns
+    -------
+    start_labels : np.array
+        The starting labels for model training.
+    feat_pass : int
+        The number of passing PSMs with the best feature.
+    """
+    LOGGER.info("Finding initial direction...")
+    if model.direction is None and not model.is_trained:
+        feat_res = psms._find_best_feature(model.train_fdr)
+        best_feat, feat_pass, start_labels, _ = feat_res
+        LOGGER.info("\t- Selected feature %s with %i PSMs at q<=%g.",
+                    best_feat, feat_pass, model.train_fdr)
+
+    elif model.is_trained:
+        scores = model.estimator.decision_function(psms.features)
+        start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
+        LOGGER.info("\t- The pretrained model found %i PSMs at q<=%g.",
+                    (start_labels == 1).sum(), model.train_fdr)
+
+    else:
+        feat = psms.features[model.direction].values
+        desc_labels = psms._update_labels(feat, model.train_fdr, desc=True)
+        asc_labels = psms._update_labels(feat, model.train_fdr, desc=False)
+
+        desc_pass = (desc_labels == 1).sum()
+        asc_pass = (asc_labels == 1).sum()
+        if desc_pass >= asc_pass:
+            start_labels = desc_labels
+            feat_pass = desc_pass
+        else:
+            start_labels = asc_labels
+            feat_pass = asc_pass
+
+        LOGGER.info("  - Selected feature %s with %i PSMs at q<=%g.",
+                    model.direction, (start_labels == 1).sum(),
+                    model.train_fdr)
+
+    if not (start_labels == 1).sum():
+        raise RuntimeError(f"No PSMs accepted at train_fdr={model.train_fdr}. "
+                           "Consider changing it to a higher value.")
+
+    return start_labels, feat_pass
+
+
+def _find_hyperparameters(model, features, labels):
+    """
+    Find the hyperparameters for the model.
+
+    Parameters
+    ----------
+    model : a mokapot.Model
+        The model to fit.
+    features : array-like
+        The features to fit the model with.
+    labels : array-like
+        The labels for each PSM (1, 0, or -1).
+
+    Returns
+    -------
+    An estimator.
+    """
+    if model._needs_cv:
+        LOGGER.info("Selecting hyperparameters...")
+        cv_samples = features[labels.astype(bool), :]
+        cv_targ = (labels[labels.astype(bool)]+1)/2
+
+        # Fit the model
+        model.estimator.fit(cv_samples, cv_targ)
+
+        # Extract the best params.
+        best_params = model.estimator.best_params_
+        new_est = model.estimator.estimator
+        new_est.set_params(**best_params)
+        model._needs_cv = False
+    else:
+        new_est = model.estimator
+
+    return new_est
 
 
 def _get_weights(model, features):

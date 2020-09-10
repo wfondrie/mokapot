@@ -31,11 +31,10 @@ class Config():
 
 def _parser():
     """The parser"""
-    desc = ("mokapot: Fast and flexible semi-supervised learning for "
-            "peptide detection.\n" +
-            ("="*80 + "\n") +
-            f"Version {__version__}\n"
-            "Official code website: https://github.com/wfondrie/mokapot\n\n"
+    desc = (f"mokapot version {__version__}\n"
+            "Writeen by William E. Fondrie (wfondrie@uw.edu)\n"
+            "Department of Genome Sciences at the University of Washington\n\n"
+            "Official code website: https://github.com/wfondrie/mokapot\n"
             "More documentation and examples: https://mokapot.readthedocs.io")
 
     parser = argparse.ArgumentParser(description=desc,
