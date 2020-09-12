@@ -54,15 +54,21 @@ def main():
             os.path.splitext(os.path.basename(f))[0] for f in config.pin_files
         ]
 
+    # Define a model:
     model = PercolatorModel(
         train_fdr=config.train_fdr,
         max_iter=config.max_iter,
         direction=config.direction,
+        override=config.override,
+        subset_max_train=config.subset_max_train,
     )
+
+    # Fit the models:
     psms = brew(
         datasets, model=model, test_fdr=config.test_fdr, folds=config.folds
     )
 
+    # Determine how to write the results:
     if config.aggregate or len(config.pin_files) == 1:
         psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)
     else:

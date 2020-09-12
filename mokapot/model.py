@@ -13,6 +13,7 @@ Additional subclasses of the :py:class:`Model` class are available for
 typical use cases. For example, use :py:class:`PercolatorModel` if you
 want to emulate the behavior of Percolator.
 """
+import copy
 import logging
 import pickle
 import warnings
@@ -77,6 +78,11 @@ class Model:
     override : bool, optional
         If the learned model performs worse than the best feature, should
         the model still be used?
+    subset_max_train : int or None, optional
+        Use only a random subset of the PSMs for training. This is useful
+        for very large datasets or models that scale poorly with the
+        number of PSMs. The default, :code:`None` will use all of the
+        PSMs.
 
     Attributes
     ----------
@@ -94,12 +100,14 @@ class Model:
         positive example.
     max_iter : int
         The number of iterations to perform.
-    direction : str or None, optional
+    direction : str or None
         The name of the feature to use as the initial direction for ranking
         PSMs.
     override : bool
         If the learned model performs worse than the best feature, should
         the model still be used?
+    subset_max_train : int
+        The number of PSMs for training.
     """
 
     def __init__(
@@ -110,6 +118,7 @@ class Model:
         max_iter=10,
         direction=None,
         override=False,
+        subset_max_train=None,
     ):
         """Initialize a Model object"""
         if estimator is None:
@@ -126,6 +135,7 @@ class Model:
         self.estimator = base.clone(estimator)
         self.features = None
         self.is_trained = False
+        self.subset_max_train = subset_max_train
 
         if scaler == "as-is":
             self.scaler = DummyScaler()
@@ -247,6 +257,14 @@ class Model:
                 len(psms.data),
             )
 
+        if self.subset_max_train is not None:
+            subset_idx = np.random.choice(
+                len(psms), self.subset_max_train, replace=False
+            )
+
+            psms = copy.copy(psms)
+            psms._data = psms._data.iloc[subset_idx, :]
+
         # Choose the initial direction
         start_labels, feat_pass = _get_starting_labels(psms, self)
 
@@ -333,6 +351,11 @@ class PercolatorModel(Model):
     override : bool, optional
         If the learned model performs worse than the best feature, should
         the model still be used?
+    subset_max_train : int or None, optional
+        Use only a random subset of the PSMs for training. This is useful
+        for very large datasets or models that scale poorly with the
+        number of PSMs. The default, :code:`None` will use all of the
+        PSMs.
 
     Attributes
     ----------
@@ -350,12 +373,14 @@ class PercolatorModel(Model):
         positive example.
     max_iter : int
         The number of iterations to perform.
-    direction : str or None, optional
+    direction : str or None
         The name of the feature to use as the initial direction for ranking
         PSMs.
     override : bool
         If the learned model performs worse than the best feature, should
         the model still be used?
+    subset_max_train : int or None
+        The number of PSMs for training.
     """
 
     def __init__(
@@ -365,6 +390,7 @@ class PercolatorModel(Model):
         max_iter=10,
         direction=None,
         override=False,
+        subset_max_train=None,
     ):
         """Initialize a PercolatorModel"""
         svm_model = svm.LinearSVC(dual=False)
@@ -379,6 +405,7 @@ class PercolatorModel(Model):
             max_iter=max_iter,
             direction=direction,
             override=override,
+            subset_max_train=subset_max_train,
         )
 
 

@@ -133,6 +133,26 @@ def _parser():
     )
 
     parser.add_argument(
+        "--subset_max_train",
+        type=int,
+        default=None,
+        help=(
+            "Use only a random subset of PSMs for training. "
+            "This is useful for very large datasets."
+        ),
+    )
+
+    parser.add_argument(
+        "--override",
+        default=False,
+        action="store_true",
+        help=(
+            "Use the learned model even if it performs worse "
+            "than the best feature."
+        ),
+    )
+
+    parser.add_argument(
         "--folds",
         type=int,
         default=3,
