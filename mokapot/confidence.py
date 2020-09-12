@@ -76,10 +76,12 @@ class Confidence:
         Parameters
         ----------
         dest_dir : str or None, optional
-            The directory in which to save the files. The default is the
+            The directory in which to save the files. `None` will use the
             current working directory.
         file_root : str or None, optional
-            An optional prefix for the confidence estimate files.
+            An optional prefix for the confidence estimate files. The
+            suffix will always be `mokapot.psms.txt` and
+            `mokapot.peptides.txt`.
         sep : str
             The delimiter to use.
 
@@ -114,7 +116,7 @@ class Confidence:
         psm_idx = _groupby_max(self._data, psm_columns, self._score_column)
         self._data = self._data.loc[psm_idx, :]
 
-    def plot_qvalues(self, level, threshold=0.1, ax=None, **kwargs):
+    def plot_qvalues(self, level="psms", threshold=0.1, ax=None, **kwargs):
         """
         Plot the cumulative number of discoveries over range of q-values.
 
@@ -225,7 +227,7 @@ class LinearConfidence(Confidence):
         )
 
         peptides = self._data.loc[peptide_idx]
-        LOGGER.info("  - Found %i unique peptides.", len(peptides))
+        LOGGER.info("\t- Found %i unique peptides.", len(peptides))
 
         for level, data in zip(("PSMs", "peptides"), (self._data, peptides)):
             scores = data.loc[:, self._score_column].values
