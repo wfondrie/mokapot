@@ -58,7 +58,7 @@ interpreter and affords greater flexibility:
 ```Python
 >>> import mokapot
 >>> psms = mokapot.read_pin("psms.pin")
->>> results = mokapot.brew(psms)
+>>> results, models = mokapot.brew(psms)
 >>> results.to_txt()
 ```
 

@@ -33,7 +33,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         PSMs are aggregated across all of the collections for model
         training, but the confidence estimates are calculated and
         returned separately.
-    model : Model object, optional
+    model: Model object, optional
         The :py:class:`mokapot.Model` object to be fit. The default is
         :code:`None`, which attempts to mimic the same support vector
         machine models used by Percolator.
@@ -57,6 +57,9 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         (i.e. PSMs, peptides) when assessed using the learned score.
         If a list, they will be in the same order as provided in the
         `psms` parameter.
+    list of Model objects
+        The learned :py:class:`~mokapot.model.Model` objects, one
+        for each fold.
     """
     if model is None:
         model = PercolatorModel()
@@ -154,9 +157,9 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     ]
 
     if len(res) == 1:
-        return res[0]
+        return res[0], models
 
-    return res
+    return res, models
 
 
 # Utility Functions -----------------------------------------------------------

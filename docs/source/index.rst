@@ -140,7 +140,7 @@ Then, conduct your mokapot analysis:
 
    >>> import mokapot
    >>> psms = mokapot.read_pin("phospho_rep1.pin")
-   >>> results = mokapot.brew(psms)
+   >>> results, models = mokapot.brew(psms)
    >>> results.to_txt()
 
 This is great for when your upstream and/or downstream analyses are also

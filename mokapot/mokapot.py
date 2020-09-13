@@ -3,7 +3,9 @@ This is the command line interface for mokapot
 """
 import os
 import sys
+import time
 import logging
+import datetime
 
 import numpy as np
 
@@ -16,6 +18,7 @@ from .model import PercolatorModel
 
 def main():
     """The CLI entry point"""
+    start = time.time()
     # Get command line arguments
     config = Config()
 
@@ -64,11 +67,28 @@ def main():
     )
 
     # Fit the models:
-    psms = brew(
+    psms, models = brew(
         datasets, model=model, test_fdr=config.test_fdr, folds=config.folds
     )
 
+    if config.dest_dir is not None:
+        os.makedirs(config.dest_dir, exist_ok=True)
+
+    if config.save_models:
+        logging.info("Saving models...")
+        for i, trained_model in enumerate(models):
+            out_file = f"mokapot.model_fold-{i+1}.pkl"
+
+            if config.file_root is not None:
+                out_file = ".".join([config.file_root, out_file])
+
+            if config.dest_dir is not None:
+                out_file = os.path.join(config.dest_dir, out_file)
+
+            trained_model.save(out_file)
+
     # Determine how to write the results:
+    logging.info("Writing results...")
     if config.aggregate or len(config.pin_files) == 1:
         psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)
     else:
@@ -77,6 +97,13 @@ def main():
                 prefix = ".".join([config.file_root, prefix])
 
             dat.to_txt(dest_dir=config.dest_dir, file_root=prefix)
+
+    total_time = round(time.time() - start)
+    total_time = str(datetime.timedelta(seconds=total_time))
+
+    logging.info("")
+    logging.info("=== DONE! ===")
+    logging.info("mokapot analysis completed in %s", total_time)
 
 
 if __name__ == "__main__":

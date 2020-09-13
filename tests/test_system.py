@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 def test_compare_to_percolator():
     """Test that mokapot get almost the same answer as Percolator"""
     dat = mokapot.read_pin(os.path.join("data", "phospho_rep1.pin"))
-    res = mokapot.brew(dat)
+    res, _ = mokapot.brew(dat)
 
     perc_path = os.path.join("data", "percolator.{l}.txt")
     perc_res = {

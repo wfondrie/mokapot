@@ -153,6 +153,13 @@ def _parser():
     )
 
     parser.add_argument(
+        "--save_models",
+        default=False,
+        action="store_true",
+        help=("Save the models learned by mokapot as pickled Python objects."),
+    )
+
+    parser.add_argument(
         "--folds",
         type=int,
         default=3,

@@ -42,6 +42,7 @@ Model
    :nosignatures:
 
    Model
+   PercolatorModel
 
 Datasets
 --------
