@@ -217,7 +217,11 @@ class Model:
         feat = self.scaler.transform(
             psms.features.loc[:, self.features].values
         )
-        return self.estimator.decision_function(feat)
+
+        try:
+            return self.estimator.decision_function(feat)
+        except AttributeError:
+            return self.estimator.predict_proba(feat).flatten()
 
     def predict(self, psms):
         """Alias for :py:meth:`decision_function`."""
@@ -286,11 +290,15 @@ class Model:
             model.fit(samples, iter_targ)
 
             # Update scores
-            scores = model.decision_function(norm_feat)
+            try:
+                scores = model.decision_function(norm_feat)
+            except AttributeError:
+                scores = model.predict_proba(norm_feat).flatten()
 
             # Update target
             target = psms._update_labels(scores, eval_fdr=self.train_fdr)
             num_passed.append((target == 1).sum())
+
             LOGGER.info(
                 "\t- Iteration %i: %i training PSMs passed.", i, num_passed[i]
             )
