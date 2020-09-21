@@ -83,6 +83,9 @@ class Model:
         for very large datasets or models that scale poorly with the
         number of PSMs. The default, :code:`None` will use all of the
         PSMs.
+    shuffle : bool, optional
+        Should the order of PSMs be randomized for training? For deterministic
+        algorithms, this will have no effect.
 
     Attributes
     ----------
@@ -108,6 +111,8 @@ class Model:
         the model still be used?
     subset_max_train : int
         The number of PSMs for training.
+    shuffle : bool
+        Is the order of PSMs shuffled for training?
     """
 
     def __init__(
@@ -119,6 +124,7 @@ class Model:
         direction=None,
         override=False,
         subset_max_train=None,
+        shuffle=True,
     ):
         """Initialize a Model object"""
         if estimator is None:
@@ -148,6 +154,7 @@ class Model:
         self.max_iter = max_iter
         self.direction = direction
         self.override = override
+        self.shuffle = shuffle
 
         # Sort out whether we need to optimize hyperparameters:
         if hasattr(self.estimator, "estimator"):
@@ -276,6 +283,13 @@ class Model:
         self.features = psms.features.columns.tolist()
         norm_feat = self.scaler.fit_transform(psms.features.values)
 
+        # Shuffle order
+        shuffled_idx = np.random.permutation(np.arange(len(start_labels)))
+        original_idx = np.argsort(shuffled_idx)
+        if self.shuffle:
+            norm_feat = norm_feat[shuffled_idx, :]
+            start_labels = start_labels[shuffled_idx]
+
         # Prepare the model:
         model = _find_hyperparameters(self, norm_feat, start_labels)
 
@@ -295,8 +309,11 @@ class Model:
             except AttributeError:
                 scores = model.predict_proba(norm_feat).flatten()
 
+            scores = scores[original_idx]
+
             # Update target
             target = psms._update_labels(scores, eval_fdr=self.train_fdr)
+            target = target[shuffled_idx]
             num_passed.append((target == 1).sum())
 
             LOGGER.info(
@@ -364,6 +381,9 @@ class PercolatorModel(Model):
         for very large datasets or models that scale poorly with the
         number of PSMs. The default, :code:`None` will use all of the
         PSMs.
+    shuffle : bool, optional
+        Should the order of PSMs be randomized for training? For deterministic
+        algorithms, this will have no effect.
 
     Attributes
     ----------
@@ -389,6 +409,8 @@ class PercolatorModel(Model):
         the model still be used?
     subset_max_train : int or None
         The number of PSMs for training.
+    shuffle : bool
+        Is the order of PSMs shuffled for training?
     """
 
     def __init__(
