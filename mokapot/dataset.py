@@ -91,9 +91,7 @@ class PsmDataset(ABC):
         self, psms, spectrum_columns, feature_columns, other_columns, copy_data
     ):
         """Initialize an object"""
-        self._data = (
-            psms.copy(deep=copy_data).sample(frac=1).reset_index(drop=True)
-        )
+        self._data = psms.copy(deep=copy_data).reset_index(drop=True)
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
