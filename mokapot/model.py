@@ -553,7 +553,11 @@ def _get_starting_labels(psms, model):
         )
 
     elif model.is_trained:
-        scores = model.estimator.decision_function(psms.features)
+        try:
+            scores = model.estimator.decision_function(psms.features)
+        except AttributeError:
+            scores = model.estimator.predict_proba(psms.features).flatten()
+
         start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
         LOGGER.info(
             "\t- The pretrained model found %i PSMs at q<=%g.",
