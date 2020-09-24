@@ -196,9 +196,7 @@ def digest(
 
 
 # Private Functions -----------------------------------------------------------
-def _cleave(
-    sequence, sites, missed_cleavages, min_length, max_length, semi,
-):
+def _cleave(sequence, sites, missed_cleavages, min_length, max_length, semi):
     """
     Digest a protein sequence into its constituent peptides.
 
