@@ -194,6 +194,10 @@ class PsmDataset(ABC):
         `<prefix><protein ID>` for valid confidence estimates to be
         calculated.
 
+        If you need to generate an appropriate FASTA file with decoy
+        sequences for your database search, see
+        :py:func:`mokapot.make_decoys()`.
+
         Importantly, the parameters below should match the conditions
         in which the PSMs were assigned as closely as possible.
 
@@ -344,7 +348,7 @@ class PsmDataset(ABC):
 
 
 class LinearPsmDataset(PsmDataset):
-    """Store and analyze a collection of PSMs
+    """Store and analyze a collection of PSMs.
 
     Stores a collection of PSMs from data-dependent acquisition
     proteomics experiments and defines the necessary fields

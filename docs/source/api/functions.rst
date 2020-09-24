@@ -15,3 +15,5 @@ Utility Functions
 .. autofunction:: load_model
 .. autofunction:: read_percolator
 .. autofunction:: plot_qvalues
+.. autofunction:: make_decoys
+.. autofunction:: digest
