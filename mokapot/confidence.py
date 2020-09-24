@@ -49,6 +49,9 @@ class Confidence:
         """
         self._data = psms.metadata
         self._score_column = _new_column("score", self._data)
+        self._has_fasta = psms.has_fasta
+        self._fasta_peptides = psms._fasta_peptides
+        self._protein_map = psms._protein_map
 
         # Flip sign of scores if not descending
         self._data[self._score_column] = scores * (desc * 2 - 1)
@@ -222,6 +225,7 @@ class LinearConfidence(Confidence):
         desc : bool
             Are higher scores better?
         """
+        levels = ["PSMs", "peptides"]
         peptide_idx = _groupby_max(
             self._data, self._peptide_column, self._score_column
         )
@@ -229,7 +233,15 @@ class LinearConfidence(Confidence):
         peptides = self._data.loc[peptide_idx]
         LOGGER.info("\t- Found %i unique peptides.", len(peptides))
 
-        for level, data in zip(("PSMs", "peptides"), (self._data, peptides)):
+        level_data = [self._data, peptides]
+
+        if self._has_fasta:
+            proteins = self._picked_protein(peptides)
+            levels += ["proteins"]
+            level_data += [proteins]
+            LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
+
+        for level, data in zip(levels, level_data):
             scores = data.loc[:, self._score_column].values
             targets = data.loc[:, self._target_column].astype(bool).values
 
@@ -264,6 +276,53 @@ class LinearConfidence(Confidence):
             )
             data["mokapot PEP"] = pep
             self._confidence_estimates[level.lower()] = data
+
+    def _picked_protein(self, peptides):
+        """
+        Calculate protein-level confidence estimates.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The protein confidence estimates.
+        """
+        keep = [
+            self._target_column,
+            self._peptide_column[0],
+            self._score_column,
+        ]
+
+        prots = peptides.loc[:, keep].rename(
+            columns={self._peptide_column[0]: "peptide"}
+        )
+
+        prots["stripped sequence"] = (
+            prots["peptide"]
+            .str.replace(r"[\[\(].*?[\]\)]", "")
+            .str.replace(r"^.*?\.", "")
+            .str.replace(r"\..*?$", "")
+        )
+
+        prots["mokapot protein group"] = prots["stripped sequence"].map(
+            self._fasta_peptides.get
+        )
+
+        prots["decoy"] = (
+            prots["mokapot protein group"]
+            .str.split(",", expand=True)[0]
+            .map(lambda x: self._protein_map.get(x, x))
+        )
+
+        prot_idx = _groupby_max(prots, ["decoy"], self._score_column)
+        final_cols = [
+            "peptide",
+            "stripped sequence",
+            "mokapot protein group",
+            self._score_column,
+            self._target_column,
+        ]
+
+        return prots.loc[prot_idx, final_cols]
 
 
 class CrossLinkedConfidence(Confidence):

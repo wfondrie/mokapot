@@ -25,7 +25,7 @@ def read_fasta(
 
     Parameters
     ----------
-    fasta_file : str
+    fasta_files : str
         The FASTA file to parse.
     enzyme_regex : str or compiled regex, optional
         A regular expression defining the enzyme specificity.

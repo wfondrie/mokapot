@@ -26,6 +26,7 @@ import pandas as pd
 
 from . import qvalues
 from . import utils
+from .proteins import read_fasta
 from .confidence import LinearConfidence, CrossLinkedConfidence
 
 LOGGER = logging.getLogger(__name__)
@@ -92,6 +93,8 @@ class PsmDataset(ABC):
     ):
         """Initialize an object"""
         self._data = psms.copy(deep=copy_data).reset_index(drop=True)
+        self._fasta_peptides = None
+        self._protein_map = None
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
@@ -163,6 +166,70 @@ class PsmDataset(ABC):
     def columns(self):
         """The columns of the dataset."""
         return self.data.columns.tolist()
+
+    @property
+    def has_fasta(self):
+        """Has a FASTA file been added?"""
+        has_peps = self._fasta_peptides is not None
+        has_prots = self._protein_map is not None
+        return has_peps and has_prots
+
+    def add_fasta(
+        self,
+        fasta,
+        decoy_prefix="decoy_",
+        enzyme="[KR]",
+        missed_cleavages=0,
+        min_length=6,
+        max_length=50,
+        semi=False,
+    ):
+        """
+        Add protein information to the dataset.
+
+        Protein sequence information from the FASTA file are
+        required to compute protein-level confidence estimates using
+        the picked-protein approach. Decoys proteins must be included
+        and must be of the have a description in format of
+        `<prefix><protein ID>` for valid confidence estimates to be
+        calculated.
+
+        Importantly, the parameters below should match the conditions
+        in which the PSMs were assigned as closely as possible.
+
+        Parameters
+        ----------
+        fasta : str or tuple of str
+            The FASTA file(s) used for assigning the PSMs.
+        decoy_prefix : str, optional
+            The prefix used to indicate a decoy protein in the description
+            lines of the FASTA file.
+        enzyme : str or compiled regex, optional
+            A regular expression defining the enzyme specificity was used
+            when assigning PSMs. The cleavage site is interpreted as the
+            end of the match. The default is trypsin, without proline
+            suppression: "[KR]".
+        missed_cleavages : int, optional
+            The allowed number of missed cleavages.
+        min_length : int, optional
+            The minimum peptide length to consider.
+        max_length : int, optional
+            The maximum peptide length to consider.
+        semi : bool, optional
+            Was a semi-enzymatic digest used to assign PSMs? If
+            :code:`True`, the protein database will likely contain many
+            shared peptides and yield unhelpful protein-level confidence
+            estimates.
+        """
+        self._fasta_peptides, self._protein_map = read_fasta(
+            fasta_files=fasta,
+            enzyme_regex=enzyme,
+            missed_cleavages=missed_cleavages,
+            min_length=min_length,
+            max_length=max_length,
+            semi=semi,
+            decoy_prefix=decoy_prefix,
+        )
 
     def _find_best_feature(self, eval_fdr):
         """
@@ -301,11 +368,10 @@ class LinearPsmDataset(PsmDataset):
         indicated either in square brackets :code:`[]` or parentheses
         :code:`()`. The exact modification format within those entities
         does not matter, so long as it is consistent.
-    protein_column : str
+    protein_column : str, optional
         The column that specifies which protein(s) the detected peptide
-        might have originated from. This column should contain a
-        delimited list of protein identifiers that match the FASTA file
-        used for database searching.
+        might have originated from. This column is not used to compute
+        protein-level confidence estimates (see :py:meth:`add_fasta()`).
     feature_columns : str or tuple of str, optional
         The column(s) specifying the feature(s) for mokapot analysis. If
         `None`, these are assumed to be all columns not specified in the
@@ -325,6 +391,7 @@ class LinearPsmDataset(PsmDataset):
     peptides : pandas.DataFrame
     targets : numpy.ndarray
     columns : list of str
+    has_fasta : bool
     """
 
     def __init__(
@@ -340,14 +407,13 @@ class LinearPsmDataset(PsmDataset):
         """Initialize a PsmDataset object."""
         self._target_column = target_column
         self._peptide_column = utils.tuplize(peptide_column)
-        self._protein_column = utils.tuplize(protein_column)
+
+        if protein_column is not None:
+            self._protein_column = utils.tuplize(protein_column)
+        else:
+            self._protein_column = tuple()
 
         # Some error checking:
-        if len(self._protein_column) > 1:
-            raise ValueError(
-                "Only one column can be used for " "'protein_column'."
-            )
-
         if len(self._peptide_column) > 1:
             raise ValueError(
                 "Only one column can be used for " "'peptide_column'"
@@ -392,11 +458,12 @@ class LinearPsmDataset(PsmDataset):
         return (
             f"A mokapot.dataset.LinearPsmDataset with {len(self.data)} "
             "PSMs:\n"
-            f"\t- target PSMs: {self.targets.sum()}\n"
-            f"\t- decoy PSMs: {(~self.targets).sum()}\n"
-            f"\t- unique spectra: {len(self.spectra.drop_duplicates())}\n"
-            f"\t- unique peptides: {len(self.peptides.drop_duplicates())}\n"
-            f"\t- features: {self._feature_columns}"
+            f"\t- Protein confidence estimates enabled: {self.has_fasta}\n"
+            f"\t- Target PSMs: {self.targets.sum()}\n"
+            f"\t- Decoy PSMs: {(~self.targets).sum()}\n"
+            f"\t- Unique spectra: {len(self.spectra.drop_duplicates())}\n"
+            f"\t- Unique peptides: {len(self.peptides.drop_duplicates())}\n"
+            f"\t- Features: {self._feature_columns}"
         )
 
     @property
