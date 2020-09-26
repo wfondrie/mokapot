@@ -93,7 +93,7 @@ class PsmDataset(ABC):
     ):
         """Initialize an object"""
         self._data = psms.copy(deep=copy_data).reset_index(drop=True)
-        self._fasta_peptides = None
+        self._peptide_map = None
         self._protein_map = None
 
         # Set columns
@@ -168,13 +168,13 @@ class PsmDataset(ABC):
         return self.data.columns.tolist()
 
     @property
-    def has_fasta(self):
+    def has_proteins(self):
         """Has a FASTA file been added?"""
-        has_peps = self._fasta_peptides is not None
+        has_peps = self._peptide_map is not None
         has_prots = self._protein_map is not None
         return has_peps and has_prots
 
-    def add_fasta(
+    def add_proteins(
         self,
         fasta,
         decoy_prefix="decoy_",
@@ -225,7 +225,7 @@ class PsmDataset(ABC):
             shared peptides and yield unhelpful protein-level confidence
             estimates.
         """
-        self._fasta_peptides, self._protein_map = read_fasta(
+        self._peptide_map, self._protein_map = read_fasta(
             fasta_files=fasta,
             enzyme_regex=enzyme,
             missed_cleavages=missed_cleavages,
@@ -395,7 +395,7 @@ class LinearPsmDataset(PsmDataset):
     peptides : pandas.DataFrame
     targets : numpy.ndarray
     columns : list of str
-    has_fasta : bool
+    has_proteins : bool
     """
 
     def __init__(
@@ -462,7 +462,7 @@ class LinearPsmDataset(PsmDataset):
         return (
             f"A mokapot.dataset.LinearPsmDataset with {len(self.data)} "
             "PSMs:\n"
-            f"\t- Protein confidence estimates enabled: {self.has_fasta}\n"
+            f"\t- Protein confidence estimates enabled: {self.has_proteins}\n"
             f"\t- Target PSMs: {self.targets.sum()}\n"
             f"\t- Decoy PSMs: {(~self.targets).sum()}\n"
             f"\t- Unique spectra: {len(self.spectra.drop_duplicates())}\n"

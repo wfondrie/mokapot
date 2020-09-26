@@ -49,8 +49,8 @@ class Confidence:
         """
         self._data = psms.metadata
         self._score_column = _new_column("score", self._data)
-        self._has_fasta = psms.has_fasta
-        self._fasta_peptides = psms._fasta_peptides
+        self._has_proteins = psms.has_proteins
+        self._peptide_map = psms._peptide_map
         self._protein_map = psms._protein_map
 
         # Flip sign of scores if not descending
@@ -205,16 +205,31 @@ class LinearConfidence(Confidence):
 
         self._assign_confidence(desc=desc)
 
+        self.accepted = {}
+        for level in self.levels:
+            self.accepted[level] = self._num_accepted(level)
+
     def __repr__(self):
         """How to print the class"""
-        pass_psms = (self.psms["mokapot q-value"] <= self._eval_fdr).sum()
-        pass_peps = (self.peptides["mokapot q-value"] <= self._eval_fdr).sum()
-
-        return (
+        base = (
             "A mokapot.confidence.LinearConfidence object:\n"
-            f"\t- PSMs at q<={self._eval_fdr:g}: {pass_psms}\n"
-            f"\t- Peptides at q<={self._eval_fdr:g}: {pass_peps}"
+            f"\t- PSMs at q<={self._eval_fdr:g}: {self.accepted['psms']}\n"
+            f"\t- Peptides at q<={self._eval_fdr:g}: "
+            f"{self.accepted['peptides']}\n"
         )
+
+        if self._has_proteins:
+            base += (
+                f"\t- Protein groups at q<={self._eval_fdr:g}: "
+                f"{self.accepted['proteins']}\n"
+            )
+
+        return base
+
+    def _num_accepted(self, level):
+        """Calculate the number of accepted discoveries"""
+        disc = self._confidence_estimates[level]
+        return (disc["mokapot q-value"] <= self._eval_fdr).sum()
 
     def _assign_confidence(self, desc=True):
         """
@@ -235,7 +250,7 @@ class LinearConfidence(Confidence):
 
         level_data = [self._data, peptides]
 
-        if self._has_fasta:
+        if self._has_proteins:
             proteins = self._picked_protein(peptides)
             levels += ["proteins"]
             level_data += [proteins]
@@ -293,18 +308,24 @@ class LinearConfidence(Confidence):
         ]
 
         prots = peptides.loc[:, keep].rename(
-            columns={self._peptide_column[0]: "peptide"}
+            columns={self._peptide_column[0]: "best peptide"}
         )
 
         prots["stripped sequence"] = (
-            prots["peptide"]
+            prots["best peptide"]
             .str.replace(r"[\[\(].*?[\]\)]", "")
             .str.replace(r"^.*?\.", "")
             .str.replace(r"\..*?$", "")
         )
 
         prots["mokapot protein group"] = prots["stripped sequence"].map(
-            self._fasta_peptides.get
+            self._peptide_map.get
+        )
+        unmatched = pd.isna(prots["mokapot protein group"]).sum()
+        LOGGER.warning(
+            "%i out of %i peptides could not be matched to a protein group.",
+            unmatched,
+            len(prots),
         )
 
         prots["decoy"] = (
@@ -315,9 +336,9 @@ class LinearConfidence(Confidence):
 
         prot_idx = _groupby_max(prots, ["decoy"], self._score_column)
         final_cols = [
-            "peptide",
-            "stripped sequence",
             "mokapot protein group",
+            "best peptide",
+            "stripped sequence",
             self._score_column,
             self._target_column,
         ]
