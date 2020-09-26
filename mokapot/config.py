@@ -35,9 +35,9 @@ def _parser():
     """The parser"""
     desc = (
         f"mokapot version {__version__}\n"
-        "Writeen by William E. Fondrie (wfondrie@uw.edu)\n"
+        "Written by William E. Fondrie (wfondrie@uw.edu) in the \n"
         "Department of Genome Sciences at the University of Washington\n\n"
-        "Official code website: https://github.com/wfondrie/mokapot\n"
+        "Official code website: https://github.com/wfondrie/mokapot\n\n"
         "More documentation and examples: https://mokapot.readthedocs.io"
     )
 

@@ -25,12 +25,6 @@ re-scores them, and yields statistical measures---confidence estimates, such as
 q-values and posterior error probabilities---indicating their quality.
 
 
-.. note::
-
-   mokapot is still in active development and some features (such as
-   cross-linking support) will be enabled and documented in the near future.
-
-
 Introduction
 ------------
 
@@ -44,7 +38,7 @@ frameworks for interpreting these detections.
 
 mokapot is fundamentally a Python implementation of the semi-supervised learning
 algorithm introduced by Percolator. We developed mokapot to add additional
-flexibility to our analyses, whether to try something experimental---such as
+flexibility for our analyses, whether to try something experimental---such as
 swapping Percolator's linear support vector machine classifier for a non-linear,
 gradient boosting classifier---or to train a joint model across experiments
 while retaining valid, per-experiment confidence estimates. We designed mokapot

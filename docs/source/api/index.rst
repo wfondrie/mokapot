@@ -1,6 +1,19 @@
 Python API
 ==========
 
+The Python API enables maximum flexibility using mokapot. It also aids in
+making analyses reproducible by easily integrating into Jupyter notebooks and
+Python scripts.
+
+Basic analyses with mokapot can be conducted using only the :ref:`Primary
+Functions`. PSMs not saved in the Percolator tab-delimited format can be loaded
+from a :py:class:`~pandas.DataFrame` using the :ref:`Dataset` classes. Finally,
+custom models can be created using the :ref:`Model` class.
+
+Using :py:func:`mokapot.brew()` or the
+:py:meth:`~mokapot.datasets.LinearPsmDataset.assign_confidence()` method return
+objects that contain :ref:`Confidence Estimates`.
+
 .. toctree::
    :maxdepth: 1
    :hidden:
@@ -33,6 +46,8 @@ Utility Functions
    load_model
    read_percolator
    plot_qvalues
+   make_decoys
+   digest
 
 
 Model
@@ -44,8 +59,8 @@ Model
    Model
    PercolatorModel
 
-Datasets
---------
+Dataset
+-------
 .. currentmodule:: mokapot.dataset
 .. autosummary::
    :nosignatures:
