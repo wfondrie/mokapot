@@ -44,7 +44,7 @@ gradient boosting classifier---or to train a joint model across experiments
 while retaining valid, per-experiment confidence estimates. We designed mokapot
 to be extensible and support the analysis of additional types of proteomics
 data, such as cross-linked peptides from cross-linking mass spectrometry
-experiments. mokapot offers basic functionality from the command, but using
+experiments. mokapot offers basic functionality from the command line, but using
 mokapot as a Python package unlocks maximum flexibility. 
 
 Ready to try mokapot for your analyses? See below for details on how to install
@@ -128,7 +128,7 @@ start up the Python interpreter:
 
    $ python3
 
-Then, conduct your mokapot analysis:
+Then conduct your mokapot analysis:
 
 .. code-block:: Python
 
