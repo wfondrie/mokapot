@@ -122,8 +122,8 @@ def read_percolator(perc_file):
         fopen = open
 
     with fopen(perc_file) as perc:
-        cols = perc.readline().replace("\n", "").split("\t")
-        psms = [l.replace("\n", "").split("\t", len(cols) - 1) for l in perc]
+        cols = perc.readline().rstrip().split("\t")
+        psms = [l.rstrip().split("\t", len(cols) - 1) for l in perc]
 
     psms = pd.DataFrame(psms, columns=cols)
     return psms.apply(pd.to_numeric, errors="ignore")
