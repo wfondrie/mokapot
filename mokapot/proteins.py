@@ -13,6 +13,91 @@ from .utils import tuplize
 LOGGER = logging.getLogger(__name__)
 
 
+class FastaProteins:
+    """
+    Parse a FASTA file, storing a mapping of peptides and proteins.
+
+    Protein sequence information from the FASTA file is
+    required to compute protein-level confidence estimates using
+    the picked-protein approach. Decoys proteins must be included
+    and must be of the have a description in format of
+    `<prefix><protein ID>` for valid confidence estimates to be
+    calculated.
+
+    If you need to generate an appropriate FASTA file with decoy
+    sequences for your database search, see
+    :py:func:`mokapot.make_decoys()`.
+
+    Importantly, the parameters below should match the conditions
+    in which the PSMs were assigned as closely as possible.
+
+    Parameters
+    ----------
+    fasta : str or tuple of str
+        The FASTA file(s) used for assigning the PSMs
+    decoy_prefix : str, optional
+        The prefix used to indicate a decoy protein in the description
+        lines of the FASTA file.
+   enzyme : str or compiled regex, optional
+        A regular expression defining the enzyme specificity was used
+        when assigning PSMs. The cleavage site is interpreted as the
+        end of the match. The default is trypsin, without proline
+        suppression: "[KR]".
+    missed_cleavages : int, optional
+        The allowed number of missed cleavages.
+    min_length : int, optional
+        The minimum peptide length to consider.
+    max_length : int, optional
+        The maximum peptide length to consider.
+    semi : bool, optional
+        Was a semi-enzymatic digest used to assign PSMs? If
+        :code:`True`, the protein database will likely contain many
+        shared peptides and yield unhelpful protein-level confidence
+        estimates.
+
+    Attributes
+    ----------
+    peptide_map : Dict[str, List[str]]
+        A dictionary mapping peptide sequences to the proteins that
+        may have generated them.
+    protein_map : Dict[str, str]
+        A dictionary mapping decoy proteins to the target proteins from
+        which they were generated.
+    """
+
+    def __init__(
+        self,
+        fasta_files,
+        enzyme_regex="[KR]",
+        missed_cleavages=0,
+        min_length=6,
+        max_length=50,
+        semi=False,
+        decoy_prefix="decoy_",
+    ):
+        """Initialize a FastaProteins object"""
+        parsed = read_fasta(
+            fasta_files=fasta_files,
+            enzyme_regex=enzyme_regex,
+            missed_cleavages=missed_cleavages,
+            min_length=min_length,
+            max_length=max_length,
+            semi=semi,
+            decoy_prefix=decoy_prefix,
+        )
+
+        self._peptide_map = parsed[0]
+        self._protein_map = parsed[1]
+
+    @property
+    def peptide_map(self):
+        return self._peptide_map
+
+    @property
+    def protein_map(self):
+        return self._protein_map
+
+
 # Functions -------------------------------------------------------------------
 def make_decoys(
     fasta,
@@ -206,7 +291,7 @@ def read_fasta(
         total_proteins,
     )
 
-    return unique_peptides, decoy_map
+    return Proteins(unique_peptides, decoy_map)
 
 
 def digest(

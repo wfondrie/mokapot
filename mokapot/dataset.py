@@ -28,6 +28,7 @@ from . import qvalues
 from . import utils
 from .proteins import read_fasta
 from .confidence import LinearConfidence, CrossLinkedConfidence
+from .proteins import FastaProteins
 
 LOGGER = logging.getLogger(__name__)
 
@@ -174,66 +175,30 @@ class PsmDataset(ABC):
         has_prots = self._protein_map is not None
         return has_peps and has_prots
 
-    def add_proteins(
-        self,
-        fasta,
-        decoy_prefix="decoy_",
-        enzyme="[KR]",
-        missed_cleavages=0,
-        min_length=6,
-        max_length=50,
-        semi=False,
-    ):
+    def add_proteins(self, proteins, **kwargs):
         """
         Add protein information to the dataset.
 
-        Protein sequence information from the FASTA file are
-        required to compute protein-level confidence estimates using
-        the picked-protein approach. Decoys proteins must be included
-        and must be of the have a description in format of
-        `<prefix><protein ID>` for valid confidence estimates to be
-        calculated.
-
-        If you need to generate an appropriate FASTA file with decoy
-        sequences for your database search, see
-        :py:func:`mokapot.make_decoys()`.
-
-        Importantly, the parameters below should match the conditions
-        in which the PSMs were assigned as closely as possible.
+        Protein sequence information is required to compute protein-level
+        confidence estimates using the picked-protein approach.
 
         Parameters
         ----------
-        fasta : str or tuple of str
-            The FASTA file(s) used for assigning the PSMs.
-        decoy_prefix : str, optional
-            The prefix used to indicate a decoy protein in the description
-            lines of the FASTA file.
-        enzyme : str or compiled regex, optional
-            A regular expression defining the enzyme specificity was used
-            when assigning PSMs. The cleavage site is interpreted as the
-            end of the match. The default is trypsin, without proline
-            suppression: "[KR]".
-        missed_cleavages : int, optional
-            The allowed number of missed cleavages.
-        min_length : int, optional
-            The minimum peptide length to consider.
-        max_length : int, optional
-            The maximum peptide length to consider.
-        semi : bool, optional
-            Was a semi-enzymatic digest used to assign PSMs? If
-            :code:`True`, the protein database will likely contain many
-            shared peptides and yield unhelpful protein-level confidence
-            estimates.
+        proteins : a FastaProteins object or str
+            The :py:class:`mokapot.FastaProteins` object defines the mapping
+            of peptides to proteins and the mapping of decoy proteins to their
+            corresponding target proteins. Alternatively, a string specifying
+            a FASTA file can be specified which will be parsed to define
+            these mappings.
+        **kwargs : dict
+            If `proteins` is a string, then **kwargs are keyword arguments
+            passed to the :py:class:`mokapot.FastaProteins` constructor.
         """
-        self._peptide_map, self._protein_map = read_fasta(
-            fasta_files=fasta,
-            enzyme_regex=enzyme,
-            missed_cleavages=missed_cleavages,
-            min_length=min_length,
-            max_length=max_length,
-            semi=semi,
-            decoy_prefix=decoy_prefix,
-        )
+        if not isinstance(proteins, FastaProteins):
+            proteins = FastaProteins(proteins, **kwargs)
+
+        self._peptide_map = proteins.peptide_map
+        self._protein_map = proteins.protein_map
 
     def _find_best_feature(self, eval_fdr):
         """
