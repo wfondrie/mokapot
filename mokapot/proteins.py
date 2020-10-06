@@ -291,7 +291,7 @@ def read_fasta(
         total_proteins,
     )
 
-    return Proteins(unique_peptides, decoy_map)
+    return unique_peptides, decoy_map
 
 
 def digest(
