@@ -38,7 +38,7 @@ class FastaProteins:
     decoy_prefix : str, optional
         The prefix used to indicate a decoy protein in the description
         lines of the FASTA file.
-   enzyme : str or compiled regex, optional
+    enzyme : str or compiled regex, optional
         A regular expression defining the enzyme specificity was used
         when assigning PSMs. The cleavage site is interpreted as the
         end of the match. The default is trypsin, without proline
