@@ -45,6 +45,8 @@ class FastaProteins:
         suppression: "[KR]".
     missed_cleavages : int, optional
         The allowed number of missed cleavages.
+    clip_nterm_methionine : bool, optional
+        Remove methionine residues that occur at the protein N-terminus.
     min_length : int, optional
         The minimum peptide length to consider.
     max_length : int, optional
@@ -70,6 +72,7 @@ class FastaProteins:
         fasta_files,
         enzyme_regex="[KR]",
         missed_cleavages=0,
+        clip_nterm_methionine=False,
         min_length=6,
         max_length=50,
         semi=False,
@@ -80,6 +83,7 @@ class FastaProteins:
             fasta_files=fasta_files,
             enzyme_regex=enzyme_regex,
             missed_cleavages=missed_cleavages,
+            clip_nterm_methionine=clip_nterm_methionine,
             min_length=min_length,
             max_length=max_length,
             semi=semi,
@@ -176,6 +180,7 @@ def read_fasta(
     fasta_files,
     enzyme_regex="[KR]",
     missed_cleavages=0,
+    clip_nterm_methionine=False,
     min_length=6,
     max_length=50,
     semi=False,
@@ -192,6 +197,8 @@ def read_fasta(
         A regular expression defining the enzyme specificity.
     missed_cleavages : int, optional
         The maximum number of allowed missed cleavages.
+    clip_nterm_methionine : bool, optional
+        Remove methionine residues that occur at the protein N-terminus.
     min_length : int, optional
         The minimum peptide length.
     max_length : int, optional
@@ -220,6 +227,8 @@ def read_fasta(
     peptides = defaultdict(set)
     for entry in fasta:
         prot, seq = _parse_protein(entry)
+        if clip_nterm_methionine and seq[0] == "M":
+            seq = seq[1:]
 
         peps = digest(
             seq,
