@@ -94,8 +94,7 @@ class PsmDataset(ABC):
     ):
         """Initialize an object"""
         self._data = psms.copy(deep=copy_data).reset_index(drop=True)
-        self._peptide_map = None
-        self._protein_map = None
+        self._proteins = None
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
@@ -171,9 +170,7 @@ class PsmDataset(ABC):
     @property
     def has_proteins(self):
         """Has a FASTA file been added?"""
-        has_peps = self._peptide_map is not None
-        has_prots = self._protein_map is not None
-        return has_peps and has_prots
+        return self._proteins is not None
 
     def add_proteins(self, proteins, **kwargs):
         """
@@ -197,8 +194,7 @@ class PsmDataset(ABC):
         if not isinstance(proteins, FastaProteins):
             proteins = FastaProteins(proteins, **kwargs)
 
-        self._peptide_map = proteins.peptide_map
-        self._protein_map = proteins.protein_map
+        self._proteins = proteins
 
     def _find_best_feature(self, eval_fdr):
         """

@@ -65,6 +65,8 @@ class FastaProteins:
     protein_map : Dict[str, str]
         A dictionary mapping decoy proteins to the target proteins from
         which they were generated.
+    shared_peptides : Set[str]
+        A set of peptides that are shared by more than one protein group.
     """
 
     def __init__(
@@ -91,7 +93,8 @@ class FastaProteins:
         )
 
         self._peptide_map = parsed[0]
-        self._protein_map = parsed[1]
+        self._shared_peptides = parsed[1]
+        self._protein_map = parsed[2]
 
     @property
     def peptide_map(self):
@@ -100,6 +103,10 @@ class FastaProteins:
     @property
     def protein_map(self):
         return self._protein_map
+
+    @property
+    def shared_peptides(self):
+        return self._shared_peptides
 
 
 # Functions -------------------------------------------------------------------
@@ -272,21 +279,33 @@ def read_fasta(
             "Found %i target proteins without matching decoys.", no_decoys
         )
 
+    if not decoy_map:
+        raise ValueError(
+            "No decoy proteins could be mapped to target proteins. Verify that"
+            " 'decoy_prefix' is correct and that decoy proteins are present "
+            "in your database."
+        )
+
     LOGGER.info("Building protein groups...")
     # Group Proteins
     num_before_group = len(proteins)
     proteins, peptides = _group_proteins(proteins, peptides)
     LOGGER.info(
-        "\t -Aggregated %i proteins into %i protein groups.",
+        "\t- Aggregated %i proteins into %i protein groups.",
         num_before_group,
         len(proteins),
     )
 
     # unique peptides:
     LOGGER.info("Discarding shared peptides...")
-    unique_peptides = {
-        k: next(iter(v)) for k, v in peptides.items() if len(v) == 1
-    }
+    shared_peptides = set()
+    unique_peptides = {}
+    for pep, prots in peptides.items():
+        if len(prots) == 1:
+            unique_peptides[pep] = next(iter(prots))
+        else:
+            shared_peptides.add(pep)
+
     total_proteins = len(set(p for p in unique_peptides.values()))
 
     LOGGER.info(
@@ -294,13 +313,14 @@ def read_fasta(
         len(peptides) - len(unique_peptides),
         len(proteins) - total_proteins,
     )
+
     LOGGER.info(
         "\t- Retained %i peptides from %i protein groups.",
         len(unique_peptides),
         total_proteins,
     )
 
-    return unique_peptides, decoy_map
+    return unique_peptides, shared_peptides, decoy_map
 
 
 def digest(

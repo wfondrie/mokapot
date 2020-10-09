@@ -50,8 +50,10 @@ class Confidence:
         self._data = psms.metadata
         self._score_column = _new_column("score", self._data)
         self._has_proteins = psms.has_proteins
-        self._peptide_map = psms._peptide_map
-        self._protein_map = psms._protein_map
+        if psms.has_proteins:
+            self._proteins = psms._proteins
+        else:
+            self._proteins = None
 
         # Flip sign of scores if not descending
         self._data[self._score_column] = scores * (desc * 2 - 1)
@@ -261,7 +263,7 @@ class LinearConfidence(Confidence):
             targets = data.loc[:, self._target_column].astype(bool).values
 
             # Estimate q-values and assign to dataframe
-            LOGGER.info("Assiging q-values to %s.", level)
+            LOGGER.info("Assiging q-values to %s...", level)
             data["mokapot q-value"] = qvalues.tdc(scores, targets, desc)
 
             # Make output tables pretty
@@ -285,7 +287,7 @@ class LinearConfidence(Confidence):
             )
 
             # Calculate PEPs
-            LOGGER.info("Assiging PEPs to %s.", level)
+            LOGGER.info("Assiging PEPs to %s...", level)
             _, pep = qvality.getQvaluesFromScores(
                 scores[targets], scores[~targets]
             )
@@ -319,19 +321,35 @@ class LinearConfidence(Confidence):
         )
 
         prots["mokapot protein group"] = prots["stripped sequence"].map(
-            self._peptide_map.get
+            self._proteins.peptide_map.get
         )
-        unmatched = pd.isna(prots["mokapot protein group"]).sum()
-        LOGGER.warning(
-            "%i out of %i peptides could not be matched to a protein group.",
-            unmatched,
+
+        unmatched = pd.isna(prots["mokapot protein group"])
+        unmatched_prots = prots.loc[unmatched, :]
+        shared = unmatched_prots["stripped sequence"].isin(
+            self._proteins.shared_peptides
+        )
+
+        shared_unmatched = (~shared).sum()
+        num_shared = len(shared) - shared_unmatched
+        LOGGER.debug(
+            "%i out of %i peptides were discarded as shared peptides.",
+            num_shared,
             len(prots),
         )
+
+        if shared_unmatched:
+            LOGGER.warning(
+                "%i out of %i peptides could not be mapped."
+                "Check your digest settings.",
+                shared_unmatched,
+                len(prots),
+            )
 
         prots["decoy"] = (
             prots["mokapot protein group"]
             .str.split(",", expand=True)[0]
-            .map(lambda x: self._protein_map.get(x, x))
+            .map(lambda x: self._proteins.protein_map.get(x, x))
         )
 
         prot_idx = _groupby_max(prots, ["decoy"], self._score_column)
