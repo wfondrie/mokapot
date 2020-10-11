@@ -73,6 +73,85 @@ def _parser():
     )
 
     parser.add_argument(
+        "--proteins",
+        type=str,
+        help=(
+            "The FASTA file used for the database search. Using this "
+            "option enable protein-level confidence estimates using "
+            "the 'picked-protein' approach. Note that the FASTA file "
+            "must contain both target and decoy sequences. "
+            "Additionally, verify that the '--enzyme', "
+            "'--missed_cleavages, '--min_length', '--max_length', "
+            "'--semi', '--clip_nterm_methionine', and '--decoy_prefix' "
+            "parameters match your search engine conditions."
+        ),
+    )
+
+    parser.add_argument(
+        "--decoy_prefix",
+        type=str,
+        default="decoy_",
+        help=(
+            "The prefix used to indicate a decoy protein in the "
+            "FASTA file. For mokapot to provide accurate confidence "
+            "estimates, decoy proteins should have same description "
+            "as the target proteins they were generated from, but "
+            "this string prepended."
+        ),
+    )
+
+    parser.add_argument(
+        "--enzyme",
+        type=str,
+        default="[KR]",
+        help=(
+            "A regular expression defining the enzyme specificity. "
+            "The cleavage site is interpreted as the end of the match. "
+            "The default is trypsin, without proline suppression: [KR]"
+        ),
+    )
+
+    parser.add_argument(
+        "--missed_cleavages",
+        type=int,
+        default=2,
+        help="The allowed number of missed cleavages",
+    )
+
+    parser.add_argument(
+        "--clip_nterm_methionine",
+        default=False,
+        action="store_true",
+        help="Remove methionine residues that occur at the protein N-terminus.",
+    )
+
+    parser.add_argument(
+        "--min_length",
+        type=int,
+        default=6,
+        help="The minimum peptide length to consider.",
+    )
+
+    parser.add_argument(
+        "--max_length",
+        type=int,
+        default=50,
+        help="The maximum peptide length to consider.",
+    )
+
+    parser.add_argument(
+        "--semi",
+        default=False,
+        action="store_true",
+        help=(
+            "Was a semi-enzymatic digest used to assign PSMs? If"
+            "'so, the protein database will likely contain "
+            "shared peptides and yield unhelpful protein-level confidence "
+            "estimates. We do not recommend using this option."
+        ),
+    )
+
+    parser.add_argument(
         "--train_fdr",
         default=0.01,
         type=float,

@@ -14,11 +14,13 @@ from .config import Config
 from .parsers import read_pin
 from .brew import brew
 from .model import PercolatorModel
+from .proteins import FastaProteins
 
 
 def main():
     """The CLI entry point"""
     start = time.time()
+
     # Get command line arguments
     config = Config()
 
@@ -49,6 +51,7 @@ def main():
 
     np.random.seed(config.seed)
 
+    # Parse Datasets
     if config.aggregate or len(config.pin_files) == 1:
         datasets = read_pin(config.pin_files)
     else:
@@ -56,6 +59,26 @@ def main():
         prefixes = [
             os.path.splitext(os.path.basename(f))[0] for f in config.pin_files
         ]
+
+    # Parse FASTA, if required:
+    if config.proteins is not None:
+        logging.info("Protein-level confidence estimates enabled.")
+        proteins = FastaProteins(
+            config.proteins,
+            enzyme=config.enzyme,
+            missed_cleavages=config.missed_cleavages,
+            clip_nterm_methionine=config.clip_nterm_methionine,
+            min_length=config.min_length,
+            max_length=config.max_length,
+            semi=config.semi,
+            decoy_prefix=config.decoy_prefix,
+        )
+
+        if config.aggregate or len(config.pin_files) == 1:
+            datasets.add_proteins(proteins)
+        else:
+            for dataset in datasets:
+                dataset.add_proteins(proteins)
 
     # Define a model:
     model = PercolatorModel(

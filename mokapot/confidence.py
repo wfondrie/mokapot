@@ -346,6 +346,8 @@ class LinearConfidence(Confidence):
                 len(prots),
             )
 
+        prots = prots.loc[~unmatched, :]
+
         prots["decoy"] = (
             prots["mokapot protein group"]
             .str.split(",", expand=True)[0]

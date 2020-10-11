@@ -72,8 +72,8 @@ class FastaProteins:
     def __init__(
         self,
         fasta_files,
-        enzyme_regex="[KR]",
-        missed_cleavages=0,
+        enzyme="[KR]",
+        missed_cleavages=2,
         clip_nterm_methionine=False,
         min_length=6,
         max_length=50,
@@ -83,7 +83,7 @@ class FastaProteins:
         """Initialize a FastaProteins object"""
         parsed = read_fasta(
             fasta_files=fasta_files,
-            enzyme_regex=enzyme_regex,
+            enzyme_regex=enzyme,
             missed_cleavages=missed_cleavages,
             clip_nterm_methionine=clip_nterm_methionine,
             min_length=min_length,
