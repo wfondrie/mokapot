@@ -264,12 +264,12 @@ class LinearConfidence(Confidence):
 
             # Estimate q-values and assign to dataframe
             LOGGER.info("Assiging q-values to %s...", level)
-            data["mokapot q-value"] = qvalues.tdc(scores, targets, desc)
+            data["mokapot q-value"] = qvalues.tdc(scores, targets, desc=True)
 
             # Make output tables pretty
             data = (
                 data.loc[targets, :]
-                .sort_values(self._score_column, ascending=(not desc))
+                .sort_values(self._score_column, ascending=False)
                 .reset_index(drop=True)
                 .drop(self._target_column, axis=1)
                 .rename(columns={self._score_column: "mokapot score"})
