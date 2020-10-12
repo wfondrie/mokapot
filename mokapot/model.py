@@ -300,7 +300,7 @@ class Model:
         for i in range(self.max_iter):
             # Fit the model
             samples = norm_feat[target.astype(bool), :]
-            iter_targ = ((target[target.astype(bool)] + 1) / 2).astype(int)
+            iter_targ = (target[target.astype(bool)] + 1) / 2
             model.fit(samples, iter_targ)
 
             # Update scores
@@ -615,7 +615,7 @@ def _find_hyperparameters(model, features, labels):
     if model._needs_cv:
         LOGGER.info("Selecting hyperparameters...")
         cv_samples = features[labels.astype(bool), :]
-        cv_targ = ((labels[labels.astype(bool)] + 1) / 2).astype(int)
+        cv_targ = (labels[labels.astype(bool)] + 1) / 2
 
         # Fit the model
         model.estimator.fit(cv_samples, cv_targ)
