@@ -67,6 +67,8 @@ class FastaProteins:
         which they were generated.
     shared_peptides : Set[str]
         A set of peptides that are shared by more than one protein group.
+    has_decoys : bool
+        Did the FASTA file have decoy proteins in it?
     """
 
     def __init__(
@@ -95,6 +97,7 @@ class FastaProteins:
         self._peptide_map = parsed[0]
         self._shared_peptides = parsed[1]
         self._protein_map = parsed[2]
+        self._has_decoys = bool(parsed[2])
 
     @property
     def peptide_map(self):
@@ -107,6 +110,10 @@ class FastaProteins:
     @property
     def shared_peptides(self):
         return self._shared_peptides
+
+    @property
+    def has_decoys(self):
+        return self._has_decoys
 
 
 # Functions -------------------------------------------------------------------
@@ -279,13 +286,6 @@ def read_fasta(
             "Found %i target proteins without matching decoys.", no_decoys
         )
 
-    if not decoy_map:
-        raise ValueError(
-            "No decoy proteins could be mapped to target proteins. Verify that"
-            " 'decoy_prefix' is correct and that decoy proteins are present "
-            "in your database."
-        )
-
     LOGGER.info("Building protein groups...")
     # Group Proteins
     num_before_group = len(proteins)
@@ -295,6 +295,12 @@ def read_fasta(
         num_before_group,
         len(proteins),
     )
+
+    if not decoy_map:
+        LOGGER.info(
+            "No decoy sequences were found in the FASTA file. Creating decoy "
+            " protein groups that mirror their target proteins."
+        )
 
     # unique peptides:
     LOGGER.info("Discarding shared peptides...")
