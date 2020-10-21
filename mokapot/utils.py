@@ -7,6 +7,18 @@ import numpy as np
 import pandas as pd
 
 
+def groupby_max(df, by_cols, max_col):
+    """Quickly get the indices for the maximum value of col"""
+    idx = (
+        df.sample(frac=1)
+        .sort_values(list(by_cols) + [max_col], axis=0)
+        .drop_duplicates(list(by_cols), keep="last")
+        .index
+    )
+
+    return idx
+
+
 def unnormalize_weights(weights, intercept, feat_mean, feat_std):
     """Take in normalized weights, return unnormalized weights"""
     new_weights = np.divide(

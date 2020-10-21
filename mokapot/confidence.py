@@ -22,6 +22,8 @@ import matplotlib.pyplot as plt
 from triqler import qvality
 
 from . import qvalues
+from . import utils
+from .picked_protein import picked_protein
 
 LOGGER = logging.getLogger(__name__)
 
@@ -118,7 +120,9 @@ class Confidence:
         psm_columns : str or list of str
             The columns that define a PSM.
         """
-        psm_idx = _groupby_max(self._data, psm_columns, self._score_column)
+        psm_idx = utils.groupby_max(
+            self._data, psm_columns, self._score_column
+        )
         self._data = self._data.loc[psm_idx, :]
 
     def plot_qvalues(self, level="psms", threshold=0.1, ax=None, **kwargs):
@@ -243,7 +247,7 @@ class LinearConfidence(Confidence):
             Are higher scores better?
         """
         levels = ["PSMs", "peptides"]
-        peptide_idx = _groupby_max(
+        peptide_idx = utils.groupby_max(
             self._data, self._peptide_column, self._score_column
         )
 
@@ -253,7 +257,13 @@ class LinearConfidence(Confidence):
         level_data = [self._data, peptides]
 
         if self._has_proteins:
-            proteins = self._picked_protein(peptides)
+            proteins = picked_protein(
+                peptides,
+                self._target_column,
+                self._peptide_column[0],
+                self._score_column,
+                self._proteins,
+            )
             levels += ["proteins"]
             level_data += [proteins]
             LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
@@ -293,77 +303,6 @@ class LinearConfidence(Confidence):
             )
             data["mokapot PEP"] = pep
             self._confidence_estimates[level.lower()] = data
-
-    def _picked_protein(self, peptides):
-        """
-        Calculate protein-level confidence estimates.
-
-        Returns
-        -------
-        pandas.DataFrame
-            The protein confidence estimates.
-        """
-        keep = [
-            self._target_column,
-            self._peptide_column[0],
-            self._score_column,
-        ]
-
-        prots = peptides.loc[:, keep].rename(
-            columns={self._peptide_column[0]: "best peptide"}
-        )
-
-        prots["stripped sequence"] = (
-            prots["best peptide"]
-            .str.replace(r"[\[\(].*?[\]\)]", "")
-            .str.replace(r"^.*?\.", "")
-            .str.replace(r"\..*?$", "")
-        )
-
-        prots["mokapot protein group"] = prots["stripped sequence"].map(
-            self._proteins.peptide_map.get
-        )
-
-        unmatched = pd.isna(prots["mokapot protein group"])
-        unmatched_prots = prots.loc[unmatched, :]
-        shared = unmatched_prots["stripped sequence"].isin(
-            self._proteins.shared_peptides
-        )
-
-        shared_unmatched = (~shared).sum()
-        num_shared = len(shared) - shared_unmatched
-        LOGGER.debug(
-            "%i out of %i peptides were discarded as shared peptides.",
-            num_shared,
-            len(prots),
-        )
-
-        if shared_unmatched:
-            LOGGER.warning(
-                "%i out of %i peptides could not be mapped."
-                "Check your digest settings.",
-                shared_unmatched,
-                len(prots),
-            )
-
-        prots = prots.loc[~unmatched, :]
-
-        prots["decoy"] = (
-            prots["mokapot protein group"]
-            .str.split(",", expand=True)[0]
-            .map(lambda x: self._proteins.protein_map.get(x, x))
-        )
-
-        prot_idx = _groupby_max(prots, ["decoy"], self._score_column)
-        final_cols = [
-            "mokapot protein group",
-            "best peptide",
-            "stripped sequence",
-            self._score_column,
-            self._target_column,
-        ]
-
-        return prots.loc[prot_idx, final_cols]
 
 
 class CrossLinkedConfidence(Confidence):
@@ -411,7 +350,7 @@ class CrossLinkedConfidence(Confidence):
         desc : bool
             Are higher scores better?
         """
-        peptide_idx = _groupby_max(
+        peptide_idx = utils.groupby_max(
             self._data, self._peptide_columns, self._score_column
         )
 
@@ -493,18 +432,6 @@ def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
     ax.step(qvals["qvalue"].values, qvals.num.values, where="post", **kwargs)
 
     return ax
-
-
-def _groupby_max(df, by_cols, max_col):
-    """Quickly get the indices for the maximum value of col"""
-    idx = (
-        df.sample(frac=1)
-        .sort_values(list(by_cols) + [max_col], axis=0)
-        .drop_duplicates(list(by_cols), keep="last")
-        .index
-    )
-
-    return idx
 
 
 def _new_column(name, df):
