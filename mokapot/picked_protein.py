@@ -3,6 +3,7 @@ Implementation of the picked-protein approach for protein-level
 confidence estimates.
 """
 import logging
+import numpy as np
 import pandas as pd
 
 from .peptides import match_decoy
@@ -62,7 +63,17 @@ def picked_protein(
     # Verify that unmatched peptides are shared:
     unmatched = pd.isna(prots["mokapot protein group"])
     if not proteins.has_decoys:
-        unmatched = unmatched[prots[target_column]]
+        unmatched[~prots[target_column]] = False
+
+    # Verify that reasonable number of decoys were matched.
+    if proteins.has_decoys:
+        num_unmatched_decoys = unmatched[~prots[target_column]].sum()
+        total_decoys = (~prots[target_column]).sum()
+        if num_unmatched_decoys / total_decoys > 0.05:
+            raise ValueError(
+                "Fewer than 5% of decoy peptides could be mapped to proteins."
+                " Was the correct FASTA file and digest settings used?"
+            )
 
     unmatched_prots = prots.loc[unmatched, :]
     shared = unmatched_prots["stripped sequence"].isin(
@@ -78,6 +89,12 @@ def picked_protein(
     )
 
     if shared_unmatched:
+        if shared_unmatched / len(prots) > 0.10:
+            raise ValueError(
+                "Fewer than 90% of all peptides could be matched to proteins. "
+                "Verify that your digest settings are correct."
+            )
+
         LOGGER.warning(
             "%i out of %i peptides could not be mapped."
             "Check your digest settings.",
@@ -100,7 +117,6 @@ def picked_protein(
         score_column,
         target_column,
     ]
-
     return prots.loc[prot_idx, final_cols]
 
 
@@ -148,16 +164,15 @@ def group_without_decoys(peptides, target_column, proteins):
     decoys = match_decoy(decoys, pd.Series(proteins.peptide_map.keys()))
 
     # Map decoys to target protein group:
-    decoy_map = {k: proteins.peptide_map[v] for k, v in decoys}
+    decoy_map = {}
+    for decoy_peptide, target_peptide in decoys.items():
+        protein_group = proteins.peptide_map[target_peptide].split(", ")
+        protein_group = ", ".join(["decoy_" + p for p in protein_group])
+        decoy_map[decoy_peptide] = protein_group
 
     # First lookup targets:
     prots = peptides["stripped sequence"].map(proteins.peptide_map.get)
-    prots[prots.is_na()] = peptides["stripped sequence"].map(
-        _decoy_lookup, decoy_map=decoy_map, proteins=proteins
+    prots[prots.isna()] = peptides[prots.isna()]["stripped sequence"].map(
+        decoy_map.get
     )
     return prots
-
-
-def _decoy_lookup(seq, decoy_map, proteins):
-    """Lookup a decoy sequence"""
-    return proteins.peptide_map[decoy_map[seq]]

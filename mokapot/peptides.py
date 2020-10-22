@@ -1,11 +1,14 @@
 """
 Match target peptides to plausible corresponding decoys
 """
+from collections import defaultdict
+
 import numpy as np
 import pandas as pd
+import numba as nb
 
 
-def match_decoy(decoys, targets):
+def match_decoy(decoys, targets, ignore_mods=True):
     """Find a corresponding target for each decoy.
 
     Matches a decoy to a unique random target peptide that
@@ -19,6 +22,8 @@ def match_decoy(decoys, targets):
         A collection of decoy peptides
     targets : pandas.Series
         A collection of target peptides
+    ignore_mods : bool
+        Ignore modifications. Run much faster if True.
 
     Returns
     -------
@@ -32,13 +37,23 @@ def match_decoy(decoys, targets):
     # Note we need to maintain the order of decoys, but not
     # the order of targets.
     targets = targets.sample(frac=1).reset_index(drop=True)
-    targets = residue_sort(targets)
-    decoys = residue_sort(decoys)
-    decoys = pd.merge(decoys, targets, how="left").set_index("decoy")
-    return decoys["target"].to_dict()
+
+    # Build a map of composition to lists of peptides:
+    targ_comps = residue_sort(targets, ignore_mods)
+
+    # Find the first target peptide that matches the decoy composition
+    decoy_map = {}
+    decoy_comps = decoys.str.split("(?=[A-Z])").to_list()
+    for decoy, comp in zip(decoys.to_list(), decoy_comps):
+        try:
+            decoy_map[decoy] = targ_comps["".join(sorted(comp))].pop()
+        except IndexError:
+            continue
+
+    return decoy_map
 
 
-def residue_sort(peptides):
+def residue_sort(peptides, ignore_mods):
     """Sort peptide sequences by amino acid
 
     This function also considers potential modifications
@@ -47,6 +62,8 @@ def residue_sort(peptides):
     ----------
     peptides : pandas.Series
         A collection of peptides
+    ignore_mods : bool
+        Ignore modifications for the sake of speed.
 
     Returns
     -------
@@ -54,10 +71,19 @@ def residue_sort(peptides):
         A lexographically sorted sequence that respects
         modifications.
     """
-    comp = peptides.str.split("(?=[A-Z])").apply(lambda x: "".join(sorted(x)))
-    peptides = peptides.to_frame()
-    peptides["comp"] = comp
-    peptides["n"] = peptides.groupby("comp").transform(
-        lambda x: np.arange(x.size)
-    )
-    return peptides
+    if ignore_mods:
+        compositions = peptides.to_list()
+    else:
+        compositions = peptides.str.split("(?=[A-Z])").to_list()
+
+    comp_map = defaultdict(list)
+    for pep, comp in zip(peptides.to_list(), compositions):
+        comp_map[_sort(comp)].append(pep)
+
+    return comp_map
+
+
+# @nb.njit
+def _sort(peptide):
+    """Sort the residues of a peptide"""
+    return "".join(sorted(peptide))

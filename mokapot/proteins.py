@@ -97,7 +97,7 @@ class FastaProteins:
         self._peptide_map = parsed[0]
         self._shared_peptides = parsed[1]
         self._protein_map = parsed[2]
-        self._has_decoys = bool(parsed[2])
+        self._has_decoys = parsed[3]
 
     @property
     def peptide_map(self):
@@ -273,15 +273,17 @@ def read_fasta(
     # Build the decoy map:
     decoy_map = {}
     no_decoys = 0
+    has_decoys = False
     for prot_name in proteins:
         if not prot_name.startswith(decoy_prefix):
             decoy = decoy_prefix + prot_name
+            decoy_map[prot_name] = decoy
             if decoy in proteins.keys():
-                decoy_map[prot_name] = decoy
+                has_decoys = True
             else:
                 no_decoys += 1
 
-    if no_decoys:
+    if no_decoys and no_decoys < len(decoy_map):
         LOGGER.warning(
             "Found %i target proteins without matching decoys.", no_decoys
         )
@@ -296,10 +298,11 @@ def read_fasta(
         len(proteins),
     )
 
-    if not decoy_map:
+    if not has_decoys:
+        LOGGER.info("No decoy sequences were found in the FASTA file.")
         LOGGER.info(
-            "No decoy sequences were found in the FASTA file. Creating decoy "
-            " protein groups that mirror their target proteins."
+            "\t - Creating decoy protein groups that mirror the target "
+            "proteins."
         )
 
     # unique peptides:
@@ -326,7 +329,7 @@ def read_fasta(
         total_proteins,
     )
 
-    return unique_peptides, shared_peptides, decoy_map
+    return unique_peptides, shared_peptides, decoy_map, has_decoys
 
 
 def digest(
