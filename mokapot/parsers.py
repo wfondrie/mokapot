@@ -4,10 +4,13 @@ This module contains the parsers for reading in PSMs
 import gzip
 import logging
 
+import numpy as np
 import pandas as pd
 
 from . import utils
 from .dataset import LinearPsmDataset
+
+from memory_profiler import profile
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,6 +100,7 @@ def read_pin(pin_files, to_df=False):
 
 
 # Utility Functions -----------------------------------------------------------
+@profile
 def read_percolator(perc_file):
     """
     Read a Percolator tab-delimited file.
@@ -123,7 +127,7 @@ def read_percolator(perc_file):
 
     with fopen(perc_file) as perc:
         cols = perc.readline().rstrip().split("\t")
-        psms = [l.rstrip().split("\t", len(cols) - 1) for l in perc]
+        psms_gen = (l.rstrip().split("\t", len(cols) - 1) for l in perc)
+        psms = pd.DataFrame.from_records(psms_gen, columns=cols)
 
-    psms = pd.DataFrame(psms, columns=cols)
     return psms.apply(pd.to_numeric, errors="ignore")
