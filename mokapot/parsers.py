@@ -10,7 +10,6 @@ import pandas as pd
 from . import utils
 from .dataset import LinearPsmDataset
 
-from memory_profiler import profile
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,7 +99,6 @@ def read_pin(pin_files, to_df=False):
 
 
 # Utility Functions -----------------------------------------------------------
-@profile
 def read_percolator(perc_file):
     """
     Read a Percolator tab-delimited file.

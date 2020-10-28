@@ -61,11 +61,12 @@ class Confidence:
         self._data[self._score_column] = scores * (desc * 2 - 1)
 
         # This attribute holds the results as DataFrames:
-        self._confidence_estimates = {}
+        self.confidence_estimates = {}
+        self.decoy_confidence_estimates = {}
 
     def __getattr__(self, attr):
         try:
-            return self._confidence_estimates[attr]
+            return self.confidence_estimates[attr]
         except KeyError:
             raise AttributeError
 
@@ -74,9 +75,9 @@ class Confidence:
         """
         The available levels for confidence estimates.
         """
-        return list(self._confidence_estimates.keys())
+        return list(self.confidence_estimates.keys())
 
-    def to_txt(self, dest_dir=None, file_root=None, sep="\t"):
+    def to_txt(self, dest_dir=None, file_root=None, sep="\t", decoys=False):
         """
         Save confidence estimates to delimited text files.
 
@@ -91,6 +92,8 @@ class Confidence:
             `mokapot.peptides.txt`.
         sep : str
             The delimiter to use.
+        decoys : bool
+            Save decoys confidence estimates as well?
 
         Returns
         -------
@@ -104,10 +107,19 @@ class Confidence:
             file_base = os.path.join(dest_dir, file_base)
 
         out_files = []
-        for level, qvals in self._confidence_estimates.items():
+        for level, qvals in self.confidence_estimates.items():
+            if qvals is None:
+                continue
+
             out_file = file_base + f".{level}.txt"
             qvals.to_csv(out_file, sep=sep, index=False)
             out_files.append(out_file)
+
+        if decoys:
+            for level, qvals in self.decoy_confidence_estimates.items():
+                out_file = file_base + f"decoys.{level}.txt"
+                qvals.to_csv(out_file, sep=sep, index=False)
+                out_files.append(out_file)
 
         return out_files
 
@@ -150,12 +162,11 @@ class Confidence:
             An :py:class:`matplotlib.axes.Axes` with the cumulative
             number of accepted target PSMs or peptides.
         """
-        ax = plot_qvalues(
-            self._confidence_estimates[level]["mokapot q-value"],
-            threshold=threshold,
-            ax=ax,
-            **kwargs,
-        )
+        qvals = self.confidence_estimates[level]["mokapot q-value"]
+        if qvals is None:
+            raise ValueError(f"{level}-level estimates are unavailable.")
+
+        ax = plot_qvalues(qvals, threshold=threshold, ax=ax, **kwargs,)
         ax.set_xlabel("q-value")
         ax.set_ylabel(f"Accepted {self._level_labs[level]}")
 
@@ -188,6 +199,12 @@ class LinearConfidence(Confidence):
         Confidence estimates for PSMs in the dataset.
     peptides : pandas.DataFrame
         Confidence estimates for peptides in the dataset.
+    proteins : pandas.DataFrame or None
+        Confidence estimates for proteins in the dataset.
+    confidence_estimates : Dict[str, pandas.DataFrame]
+        A dictionary of confidence estimates at each level.
+    decoy_confidence_estimates : Dict[str, pandas.DataFrame]
+        A dictionary of confidence estimates for the decoys at each level.
     """
 
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
@@ -234,8 +251,11 @@ class LinearConfidence(Confidence):
 
     def _num_accepted(self, level):
         """Calculate the number of accepted discoveries"""
-        disc = self._confidence_estimates[level]
-        return (disc["mokapot q-value"] <= self._eval_fdr).sum()
+        disc = self.confidence_estimates[level]
+        if disc is not None:
+            return (disc["mokapot q-value"] <= self._eval_fdr).sum()
+        else:
+            return None
 
     def _assign_confidence(self, desc=True):
         """
@@ -278,8 +298,7 @@ class LinearConfidence(Confidence):
 
             # Make output tables pretty
             data = (
-                data.loc[targets, :]
-                .sort_values(self._score_column, ascending=False)
+                data.sort_values(self._score_column, ascending=False)
                 .reset_index(drop=True)
                 .drop(self._target_column, axis=1)
                 .rename(columns={self._score_column: "mokapot score"})
@@ -299,10 +318,16 @@ class LinearConfidence(Confidence):
             # Calculate PEPs
             LOGGER.info("Assiging PEPs to %s...", level)
             _, pep = qvality.getQvaluesFromScores(
-                scores[targets], scores[~targets]
+                scores[targets], scores[~targets], includeDecoys=True,
             )
+
+            level = level.lower()
             data["mokapot PEP"] = pep
-            self._confidence_estimates[level.lower()] = data
+            self.confidence_estimates[level] = data.loc[targets, :]
+            self.decoy_confidence_estimates[level] = data.loc[~targets, :]
+
+        if "proteins" not in self.confidence_estimates.keys():
+            self.confidence_estimates["proteins"] = None
 
 
 class CrossLinkedConfidence(Confidence):

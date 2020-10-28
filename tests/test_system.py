@@ -39,7 +39,7 @@ def test_compare_to_percolator():
                 "mokapot protein group"
             ].str.split(", ", expand=True)[0]
 
-        merged = pd.merge(res._confidence_estimates[level], perc)
+        merged = pd.merge(res.confidence_estimates[level], perc)
         assert merged["mokapot q-value"].corr(merged["q-value"]) > 0.99
         assert (
             merged["mokapot PEP"].corr(merged["posterior_error_prob"]) > 0.99
