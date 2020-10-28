@@ -166,7 +166,7 @@ class Confidence:
         if qvals is None:
             raise ValueError(f"{level}-level estimates are unavailable.")
 
-        ax = plot_qvalues(qvals, threshold=threshold, ax=ax, **kwargs,)
+        ax = plot_qvalues(qvals, threshold=threshold, ax=ax, **kwargs)
         ax.set_xlabel("q-value")
         ax.set_ylabel(f"Accepted {self._level_labs[level]}")
 
