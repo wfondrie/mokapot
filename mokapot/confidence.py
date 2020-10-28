@@ -120,7 +120,7 @@ class Confidence:
                 if qvals is None:
                     continue
 
-                out_file = file_base + f"decoys.{level}.txt"
+                out_file = file_base + f".decoys.{level}.txt"
                 qvals.to_csv(out_file, sep=sep, index=False)
                 out_files.append(out_file)
 
