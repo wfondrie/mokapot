@@ -292,6 +292,9 @@ class LinearConfidence(Confidence):
             LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
 
         for level, data in zip(levels, level_data):
+            data = data.sort_values(
+                self._score_column, ascending=False
+            ).reset_index(drop=True)
             scores = data.loc[:, self._score_column].values
             targets = data.loc[:, self._target_column].astype(bool).values
 
@@ -300,11 +303,8 @@ class LinearConfidence(Confidence):
             data["mokapot q-value"] = qvalues.tdc(scores, targets, desc=True)
 
             # Make output tables pretty
-            data = (
-                data.sort_values(self._score_column, ascending=False)
-                .reset_index(drop=True)
-                .drop(self._target_column, axis=1)
-                .rename(columns={self._score_column: "mokapot score"})
+            data = data.drop(self._target_column, axis=1).rename(
+                columns={self._score_column: "mokapot score"}
             )
 
             # Set scores to be the correct sign again:
