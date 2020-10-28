@@ -117,6 +117,9 @@ class Confidence:
 
         if decoys:
             for level, qvals in self.decoy_confidence_estimates.items():
+                if qvals is None:
+                    continue
+
                 out_file = file_base + f"decoys.{level}.txt"
                 qvals.to_csv(out_file, sep=sep, index=False)
                 out_files.append(out_file)
@@ -328,6 +331,7 @@ class LinearConfidence(Confidence):
 
         if "proteins" not in self.confidence_estimates.keys():
             self.confidence_estimates["proteins"] = None
+            self.decoy_confidence_estimates["proteins"] = None
 
 
 class CrossLinkedConfidence(Confidence):
