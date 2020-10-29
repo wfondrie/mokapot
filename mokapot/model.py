@@ -225,10 +225,7 @@ class Model:
             psms.features.loc[:, self.features].values
         )
 
-        try:
-            return self.estimator.decision_function(feat)
-        except AttributeError:
-            return self.estimator.predict_proba(feat)[:, 1]
+        return _get_scores(self.estimator, feat)
 
     def predict(self, psms):
         """Alias for :py:meth:`decision_function`."""
@@ -304,11 +301,7 @@ class Model:
             model.fit(samples, iter_targ)
 
             # Update scores
-            try:
-                scores = model.decision_function(norm_feat)
-            except AttributeError:
-                scores = model.predict_proba(norm_feat)[:, 1]
-
+            scores = _get_scores(model, norm_feat)
             scores = scores[original_idx]
 
             # Update target
@@ -665,3 +658,37 @@ def _get_weights(model, features):
 
     txt_out.append("intercept" + " " * (col_width - 9) + str(intercept[0]))
     return txt_out
+
+
+def _get_scores(model, feat):
+    """Get the scores from a model
+
+    We want to use the `decision_function` method if it is available,
+    but fall back to the `predict_proba` method if it isn't. In sklearn,
+    `predict_proba` for a binary classifier returns a two-column numpy array,
+    where the second column is the probability we want. However,
+    skorch (and other tools) sometime do this differently, returning only
+    a single column. This function makes it so mokapot can work with either.
+
+    Parameters
+    ----------
+    model : an estimator object
+        The model to score the PSMs.
+    feat : np.ndarray
+        The normalized features
+
+    Returns
+    -------
+    np.ndarray
+        The score for each PSM in feat.
+    """
+    try:
+        return model.decision_function(feat)
+    except AttributeError:
+        scores = model.predict_proba(feat).squeeze()
+        if len(scores.shape) == 2:
+            return model.predict_proba(feat)[:, 1]
+        elif len(scores.shape) == 1:
+            return scores
+        else:
+            raise RuntimeError("'predict_proba' returned too many dimensions.")
