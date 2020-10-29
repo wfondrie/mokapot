@@ -228,7 +228,7 @@ class Model:
         try:
             return self.estimator.decision_function(feat)
         except AttributeError:
-            return self.estimator.predict_proba(feat).flatten()
+            return self.estimator.predict_proba(feat)[:, 1]
 
     def predict(self, psms):
         """Alias for :py:meth:`decision_function`."""
@@ -307,7 +307,7 @@ class Model:
             try:
                 scores = model.decision_function(norm_feat)
             except AttributeError:
-                scores = model.predict_proba(norm_feat).flatten()
+                scores = model.predict_proba(norm_feat)[:, 1]
 
             scores = scores[original_idx]
 
