@@ -9,6 +9,7 @@ import pandas as pd
 
 def groupby_max(df, by_cols, max_col):
     """Quickly get the indices for the maximum value of col"""
+    by_cols = tuplize(by_cols)
     idx = (
         df.sample(frac=1)
         .sort_values(list(by_cols) + [max_col], axis=0)
@@ -67,7 +68,5 @@ def tuplize(obj):
     else:
         if isinstance(obj, str):
             obj = (obj,)
-        else:
-            tuple(obj)
 
-    return obj
+    return tuple(obj)

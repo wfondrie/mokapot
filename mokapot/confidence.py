@@ -1,8 +1,7 @@
 """
 One of the primary purposes of mokapot is to assign confidence estimates to PSMs.
 This task is accomplished by ranking PSMs according to a score or metric and
-using an appropriate confidence estimation procedure for the type of data
-(currently, linear and cross-linked PSMs are supported). In either case,
+using an appropriate confidence estimation procedure for the type of data.
 mokapot can provide confidence estimates based any score, regardless of
 whether it was the result of a learned :py:func:`mokapot.model.Model`
 instance or provided independently.
@@ -11,10 +10,10 @@ The following classes store the confidence estimates for a dataset based on the
 provided score. In either case, they provide utilities to access, save, and
 plot these estimates for the various relevant levels (i.e. PSMs, peptides, and
 proteins). The :py:func:`LinearConfidence` class is appropriate for most
-proteomics datasets, whereas the :py:func:`CrossLinkedConfidence` is
-specifically designed for crosslinked peptides.
+proteomics datasets.
 """
 import os
+import copy
 import logging
 
 import pandas as pd
@@ -29,6 +28,83 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Classes ---------------------------------------------------------------------
+class GroupedConfidence:
+    """
+    Performed grouped confidence estimation for a collection of PSMs.
+
+    Parameters
+    ----------
+    psms : LinearPsmDataset object
+        A collection of PSMs.
+    scores : np.ndarray
+        A vector containing the score of each PSM.
+    desc : bool
+        Are higher scores better?
+    eval_fdr : float
+        The FDR threshold at which to report performance. This parameter
+        has no affect on the analysis itself, only logging messages.
+    """
+
+    def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
+        """Initialize a GroupedConfidence object"""
+        group_psms = copy.copy(psms)
+        group_psms._group_column = None
+        scores = scores * (desc * 2 - 1)
+
+        # Do TDC
+        scores = (
+            pd.Series(scores, index=psms._data.index)
+            .sample(frac=1)
+            .sort_values()
+        )
+
+        idx = (
+            psms.data.loc[scores.index, :]
+            .drop_duplicates(psms._spectrum_columns, keep="last")
+            .index
+        )
+
+        self.group_confidence_estimates = {}
+        for group, group_df in psms._data.groupby(psms._group_column):
+            group_psms._data = None
+            tdc_winners = group_df.index.intersection(idx)
+            group_psms._data = group_df.loc[tdc_winners, :]
+            group_scores = scores.loc[group_psms._data.index].values + 1
+            res = group_psms.assign_confidence(
+                (group_scores + 1) / (2 * desc), desc=desc, eval_fdr=eval_fdr
+            )
+            self.group_confidence_estimates[group] = res
+
+    def to_txt(self, dest_dir=None, file_root=None, sep="\t", decoys=False):
+        """
+        Save confidence estimates to delimited text files.
+
+        Parameters
+        ----------
+        dest_dir : str or None, optional
+            The directory in which to save the files. `None` will use the
+            current working directory.
+        file_root : str or None, optional
+            An optional prefix for the confidence estimate files. The
+            suffix will always be `mokapot.psms.txt` and
+            `mokapot.peptides.txt`.
+        sep : str, optional
+            The delimiter to use.
+        decoys : bool, optional
+            Save decoys confidence estimates as well?
+
+        Returns
+        -------
+        list of str
+            The paths to the saved files.
+        """
+        for group, res in self.group_confidence_estimates.items():
+            prefix = file_root + f".{group}"
+            res.to_txt(
+                dest_dir=dest_dir, file_root=prefix, sep=sep, decoys=decoys
+            )
+
+
 class Confidence:
     """
     Estimate and store the statistical confidence for a collection of
@@ -90,9 +166,9 @@ class Confidence:
             An optional prefix for the confidence estimate files. The
             suffix will always be `mokapot.psms.txt` and
             `mokapot.peptides.txt`.
-        sep : str
+        sep : str, optional
             The delimiter to use.
-        decoys : bool
+        decoys : bool, optional
             Save decoys confidence estimates as well?
 
         Returns
@@ -283,7 +359,7 @@ class LinearConfidence(Confidence):
             proteins = picked_protein(
                 peptides,
                 self._target_column,
-                self._peptide_column[0],
+                self._peptide_column,
                 self._score_column,
                 self._proteins,
             )

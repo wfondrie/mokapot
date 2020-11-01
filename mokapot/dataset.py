@@ -2,10 +2,7 @@
 The :py:class:`LinearPsmDataset` and :py:class:`CrossLinkedPsmDataset`
 classes are used to define collections peptide-spectrum matches. The
 :py:class:`LinearPsmDataset` class is suitable for most types of
-data-dependent acquisition proteomics experiments, whereas the
-:py:class:`CrossLinkedPsmDataset` is specifically designed for
-collections of cross-linked PSMs (CSMs) originating from
-cross-linking proteomics experiments.
+data-dependent acquisition proteomics experiments.
 
 Although either class can be constructed from a
 :py:class:`pandas.DataFrame`, it is often easier to load the PSMs directly
@@ -27,8 +24,12 @@ import pandas as pd
 from . import qvalues
 from . import utils
 from .proteins import read_fasta
-from .confidence import LinearConfidence, CrossLinkedConfidence
 from .proteins import FastaProteins
+from .confidence import (
+    LinearConfidence,
+    CrossLinkedConfidence,
+    GroupedConfidence,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -90,7 +91,13 @@ class PsmDataset(ABC):
         return
 
     def __init__(
-        self, psms, spectrum_columns, feature_columns, other_columns, copy_data
+        self,
+        psms,
+        spectrum_columns,
+        feature_columns,
+        group_column,
+        other_columns,
+        copy_data,
     ):
         """Initialize an object"""
         self._data = psms.copy(deep=copy_data).reset_index(drop=True)
@@ -98,14 +105,22 @@ class PsmDataset(ABC):
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
+        self._group_column = group_column
 
         if other_columns is not None:
             other_columns = utils.tuplize(other_columns)
         else:
             other_columns = ()
 
+        if group_column is not None:
+            group_column = (group_column,)
+        else:
+            group_column = ()
+
         # Check that all of the columns exist:
-        used_columns = sum([other_columns, self._spectrum_columns], tuple())
+        used_columns = sum(
+            [other_columns, self._spectrum_columns, group_column], tuple(),
+        )
 
         missing_columns = [c not in self.data.columns for c in used_columns]
         if not missing_columns:
@@ -161,6 +176,13 @@ class PsmDataset(ABC):
         identify a mass spectrum.
         """
         return self.data.loc[:, self._spectrum_columns]
+
+    @property
+    def groups(self):
+        """
+        A :py:class:`pandas.Series` of the groups for confidence estimation.
+        """
+        return self.data.loc[:, self._group_column]
 
     @property
     def columns(self):
@@ -336,7 +358,9 @@ class LinearPsmDataset(PsmDataset):
     protein_column : str, optional
         The column that specifies which protein(s) the detected peptide
         might have originated from. This column is not used to compute
-        protein-level confidence estimates (see :py:meth:`add_fasta()`).
+        protein-level confidence estimates (see :py:meth:`add_proteins()`).
+    group_column : str, optional
+        A factor by which to group PSMs for grouped confidence estimation.
     feature_columns : str or tuple of str, optional
         The column(s) specifying the feature(s) for mokapot analysis. If
         `None`, these are assumed to be all columns not specified in the
@@ -353,7 +377,8 @@ class LinearPsmDataset(PsmDataset):
     metadata : pandas.DataFrame
     features : pandas.DataFrame
     spectra : pandas.DataFrame
-    peptides : pandas.DataFrame
+    peptides : pandas.Series
+    groups : pandas.Series
     targets : numpy.ndarray
     columns : list of str
     has_proteins : bool
@@ -365,39 +390,26 @@ class LinearPsmDataset(PsmDataset):
         target_column,
         spectrum_columns,
         peptide_column,
-        protein_column,
+        protein_column=None,
+        group_column=None,
         feature_columns=None,
         copy_data=True,
     ):
         """Initialize a PsmDataset object."""
         self._target_column = target_column
-        self._peptide_column = utils.tuplize(peptide_column)
-
-        if protein_column is not None:
-            self._protein_column = utils.tuplize(protein_column)
-        else:
-            self._protein_column = tuple()
-
-        # Some error checking:
-        if len(self._peptide_column) > 1:
-            raise ValueError(
-                "Only one column can be used for " "'peptide_column'"
-            )
+        self._peptide_column = peptide_column
+        self._protein_column = protein_column
 
         # Finish initialization
-        other_columns = sum(
-            [
-                utils.tuplize(self._target_column),
-                self._peptide_column,
-                self._protein_column,
-            ],
-            tuple(),
-        )
+        other_columns = [target_column, peptide_column]
+        if protein_column is not None:
+            other_columns += [protein_column]
 
         super().__init__(
             psms=psms,
             spectrum_columns=spectrum_columns,
             feature_columns=feature_columns,
+            group_column=group_column,
             other_columns=other_columns,
             copy_data=copy_data,
         )
@@ -438,7 +450,7 @@ class LinearPsmDataset(PsmDataset):
 
     @property
     def peptides(self):
-        """A :py:class:`pandas.DataFrame` of the peptide column."""
+        """A :py:class:`pandas.Series` of the peptide column."""
         return self.data.loc[:, self._peptide_column]
 
     def _update_labels(self, scores, eval_fdr=0.01, desc=True):
@@ -509,7 +521,12 @@ class LinearPsmDataset(PsmDataset):
             LOGGER.info("Selected %s as the best feature.", feat)
             scores = self.features[feat].values
 
-        return LinearConfidence(self, scores, eval_fdr=eval_fdr, desc=desc)
+        if self._group_column is None:
+            return LinearConfidence(self, scores, eval_fdr=eval_fdr, desc=desc)
+        else:
+            return GroupedConfidence(
+                self, scores, eval_fdr=eval_fdr, desc=desc
+            )
 
 
 class CrossLinkedPsmDataset(PsmDataset):

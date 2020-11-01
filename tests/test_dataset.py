@@ -45,7 +45,7 @@ def test_linear_init():
     metadata = ["target", "spectrum", "peptide", "protein"]
 
     pd.testing.assert_frame_equal(dset.spectra, DAT1.loc[:, ["spectrum"]])
-    pd.testing.assert_frame_equal(dset.peptides, DAT1.loc[:, ["peptide"]])
+    pd.testing.assert_series_equal(dset.peptides, DAT1.loc[:, "peptide"])
     pd.testing.assert_frame_equal(dset.features, DAT1.loc[:, features])
     pd.testing.assert_frame_equal(dset.metadata, DAT1.loc[:, metadata])
     assert dset.columns == DAT1.columns.tolist()
@@ -66,6 +66,7 @@ def test_update_labels():
         spectrum_columns="spectrum",
         peptide_column="peptide",
         protein_column="protein",
+        group_column=None,
         feature_columns=None,
         copy_data=True,
     )

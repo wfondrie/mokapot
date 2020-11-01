@@ -14,7 +14,7 @@ from .dataset import LinearPsmDataset
 LOGGER = logging.getLogger(__name__)
 
 # Functions -------------------------------------------------------------------
-def read_pin(pin_files, to_df=False):
+def read_pin(pin_files, group_column=None, to_df=False):
     """
     Read Percolator input (PIN) tab-delimited files.
 
@@ -39,7 +39,10 @@ def read_pin(pin_files, to_df=False):
     ----------
     pin_files : str or tuple of str
         One or more PIN files to read.
-    to_df : bool
+    group_column : str, optional
+        A factor to by which to group PSMs for grouped confidence
+        estimation.
+    to_df : bool, optional
         Return a :py:class:`pandas.DataFrame` instead of a
         py:class:`~mokapot.dataset.LinearPsmDataset`.
 
@@ -53,27 +56,20 @@ def read_pin(pin_files, to_df=False):
     pin_df = pd.concat([read_percolator(f) for f in utils.tuplize(pin_files)])
 
     # Find all of the necessary columns, case-insensitive:
-    specid = tuple(c for c in pin_df.columns if c.lower() == "specid")
-    peptides = tuple(c for c in pin_df.columns if c.lower() == "peptide")
-    proteins = tuple(c for c in pin_df.columns if c.lower() == "proteins")
-    labels = tuple(c for c in pin_df.columns if c.lower() == "label")
-    other = tuple(c for c in pin_df.columns if c.lower() == "calcmass")
-    spectra = tuple(
-        c for c in pin_df.columns if c.lower() in ["scannr", "expmass"]
-    )
-
-    nonfeat = sum(
-        [specid, spectra, peptides, proteins, labels, other], tuple()
-    )
-
-    features = tuple(c for c in pin_df.columns if c not in nonfeat)
+    specid = [c for c in pin_df.columns if c.lower() == "specid"]
+    peptides = [c for c in pin_df.columns if c.lower() == "peptide"]
+    proteins = [c for c in pin_df.columns if c.lower() == "proteins"]
+    labels = [c for c in pin_df.columns if c.lower() == "label"]
+    other = [c for c in pin_df.columns if c.lower() == "calcmass"]
+    spectra = [c for c in pin_df.columns if c.lower() in ["scannr", "expmass"]]
+    nonfeat = sum([specid, spectra, peptides, proteins, labels, other], [])
+    features = [c for c in pin_df.columns if c not in nonfeat]
 
     # Check for errors:
-    if len(labels) > 1:
-        raise ValueError("More than one label column found in pin file.")
-
-    if len(proteins) > 1:
-        raise ValueError("More than one protein column found in pin file.")
+    col_names = ["Label", "Peptide", "Proteins"]
+    for col, name in zip([labels, peptides, proteins], col_names):
+        if len(col) > 1:
+            raise ValueError(f"More than one '{name}' column found.")
 
     if not all([specid, peptides, proteins, labels, spectra]):
         raise ValueError(
@@ -91,7 +87,7 @@ def read_pin(pin_files, to_df=False):
         psms=pin_df,
         target_column=labels[0],
         spectrum_columns=spectra,
-        peptide_column=peptides,
+        peptide_column=peptides[0],
         protein_column=proteins[0],
         feature_columns=features,
         copy_data=False,
