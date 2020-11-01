@@ -119,7 +119,7 @@ class PsmDataset(ABC):
 
         # Check that all of the columns exist:
         used_columns = sum(
-            [other_columns, self._spectrum_columns, group_column], tuple(),
+            [other_columns, self._spectrum_columns, group_column], tuple()
         )
 
         missing_columns = [c not in self.data.columns for c in used_columns]
