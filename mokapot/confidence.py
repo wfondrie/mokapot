@@ -48,6 +48,7 @@ class GroupedConfidence:
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
         """Initialize a GroupedConfidence object"""
         group_psms = copy.copy(psms)
+        self.group_column = group_psms._group_column
         group_psms._group_column = None
         scores = scores * (desc * 2 - 1)
 
@@ -98,11 +99,37 @@ class GroupedConfidence:
         list of str
             The paths to the saved files.
         """
+        ret_files = []
         for group, res in self.group_confidence_estimates.items():
             prefix = file_root + f".{group}"
-            res.to_txt(
+            new_files = res.to_txt(
                 dest_dir=dest_dir, file_root=prefix, sep=sep, decoys=decoys
             )
+            ret_files.append(new_files)
+
+        return ret_files
+
+    def __repr__(self):
+        """Nice printing."""
+        ngroups = len(self.group_confidence_estimates)
+        lines = [
+            "A mokapot.confidence.GroupedConfidence object with "
+            f"{ngroups} groups:\n"
+        ]
+
+        for group, conf in self.group_confidence_estimates.items():
+            lines += [f"Group: {self.group_column} == {group}"]
+            lines += ["-" * len(lines[-1])]
+            lines += [str(conf)]
+
+        return "\n".join(lines)
+
+    def __getattr__(self, attr):
+        """Make groups accessible easily"""
+        try:
+            return self.grouped_confidence_estimates[attr]
+        except KeyError:
+            raise AttributeError
 
 
 class Confidence:
