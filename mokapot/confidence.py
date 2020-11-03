@@ -400,6 +400,11 @@ class LinearConfidence(Confidence):
             ).reset_index(drop=True)
             scores = data.loc[:, self._score_column].values
             targets = data.loc[:, self._target_column].astype(bool).values
+            if all(targets):
+                logging.warning(
+                    "No decoy PSMs remain for confidence estimation. "
+                    "Confidence estimates may be unreliable."
+                )
 
             # Estimate q-values and assign to dataframe
             LOGGER.info("Assiging q-values to %s...", level)
@@ -423,9 +428,16 @@ class LinearConfidence(Confidence):
 
             # Calculate PEPs
             LOGGER.info("Assiging PEPs to %s...", level)
-            _, pep = qvality.getQvaluesFromScores(
-                scores[targets], scores[~targets], includeDecoys=True
-            )
+            try:
+                _, pep = qvality.getQvaluesFromScores(
+                    scores[targets], scores[~targets], includeDecoys=True
+                )
+            except SystemExit as msg:
+                print(msg)
+                if "no decoy hits available for PEP calculation" in str(msg):
+                    pep = 0
+                else:
+                    raise
 
             level = level.lower()
             data["mokapot PEP"] = pep
