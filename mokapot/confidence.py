@@ -67,6 +67,7 @@ class GroupedConfidence:
 
         self.group_confidence_estimates = {}
         for group, group_df in psms._data.groupby(psms._group_column):
+            LOGGER.info("Group: %s == %s", self.group_column, group)
             group_psms._data = None
             tdc_winners = group_df.index.intersection(idx)
             group_psms._data = group_df.loc[tdc_winners, :]
@@ -315,7 +316,6 @@ class LinearConfidence(Confidence):
 
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
         """Initialize a a LinearPsmConfidence object"""
-        LOGGER.info("=== Assigning Confidence ===")
         super().__init__(psms, scores, desc)
         self._target_column = _new_column("target", self._data)
         self._data[self._target_column] = psms.targets
