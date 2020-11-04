@@ -516,6 +516,7 @@ class LinearPsmDataset(PsmDataset):
             A :py:class:`LinearConfidence` object storing the
             confidence estimates for the collection of PSMs.
         """
+        LOGGER.info("=== Assigning Confidence ===")
         if scores is None:
             feat, _, _, desc = self._find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
