@@ -73,7 +73,7 @@ class GroupedConfidence:
             group_psms._data = group_df.loc[tdc_winners, :]
             group_scores = scores.loc[group_psms._data.index].values + 1
             res = group_psms.assign_confidence(
-                (group_scores + 1) / (2 * desc), desc=desc, eval_fdr=eval_fdr
+                group_scores * (2 * desc - 1), desc=desc, eval_fdr=eval_fdr
             )
             self.group_confidence_estimates[group] = res
 
