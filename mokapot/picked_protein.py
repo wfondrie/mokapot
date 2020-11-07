@@ -73,16 +73,6 @@ def picked_protein(
     if not proteins.has_decoys:
         unmatched[~prots[target_column]] = False
 
-    # Verify that reasonable number of decoys were matched.
-    if proteins.has_decoys:
-        num_unmatched_decoys = unmatched[~prots[target_column]].sum()
-        total_decoys = (~prots[target_column]).sum()
-        if num_unmatched_decoys / total_decoys > 0.05:
-            raise ValueError(
-                "Fewer than 5% of decoy peptides could be mapped to proteins."
-                " Was the correct FASTA file and digest settings used?"
-            )
-
     unmatched_prots = prots.loc[unmatched, :]
     shared = unmatched_prots["stripped sequence"].isin(
         proteins.shared_peptides
@@ -97,6 +87,7 @@ def picked_protein(
     )
 
     if shared_unmatched:
+        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
         if shared_unmatched / len(prots) > 0.10:
             raise ValueError(
                 "Fewer than 90% of all peptides could be matched to proteins. "
@@ -109,7 +100,16 @@ def picked_protein(
             shared_unmatched,
             len(prots),
         )
-        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
+
+    # Verify that reasonable number of decoys were matched.
+    if proteins.has_decoys:
+        num_unmatched_decoys = unmatched_prots[target_column][~shared].sum()
+        total_decoys = (~prots[target_column]).sum()
+        if num_unmatched_decoys / total_decoys > 0.05:
+            raise ValueError(
+                "Fewer than 5% of decoy peptides could be mapped to proteins."
+                " Was the correct FASTA file and digest settings used?"
+            )
 
     prots = prots.loc[~unmatched, :]
     prots["decoy"] = (
