@@ -101,7 +101,7 @@ def picked_protein(
             shared_unmatched,
             len(prots),
         )
-        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped Sequence"])
+        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
 
     prots = prots.loc[~unmatched, :]
     prots["decoy"] = (
