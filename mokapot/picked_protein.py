@@ -48,6 +48,14 @@ def picked_protein(
         .str.replace(r"\..*?$", "")
     )
 
+    # Sometimes folks use lowercase letters for the termini or mods:
+    if all(prots["stripped sequence"].str.islower()):
+        seqs = prots["stripped sequence"].upper()
+    else:
+        seqs = prots["stripped sequence"].str.replace(r"[a-z]", "")
+
+    prots["stripped sequence"] = seqs
+
     # There are two cases we need to deal with:
     # 1. The fasta contained both targets and decoys (ideal)
     # 2. The fasta contained only targets (less ideal)
