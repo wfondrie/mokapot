@@ -401,7 +401,7 @@ class LinearConfidence(Confidence):
             scores = data.loc[:, self._score_column].values
             targets = data.loc[:, self._target_column].astype(bool).values
             if all(targets):
-                logging.warning(
+                LOGGER.warning(
                     "No decoy PSMs remain for confidence estimation. "
                     "Confidence estimates may be unreliable."
                 )
