@@ -208,9 +208,15 @@ def _predict(dset, test_idx, models, test_fdr):
     scores = []
     for fold_idx, mod in zip(test_idx, models):
         test_set._data = dset.data.loc[list(fold_idx), :]
-        scores.append(
-            test_set._calibrate_scores(mod.predict(test_set), test_fdr)
-        )
+
+        # Don't calibrate if using predict_proba.
+        try:
+            mod.estimator.decision_function
+            scores.append(
+                test_set._calibrate_scores(mod.predict(test_set), test_fdr)
+            )
+        except AttributeError:
+            scores.append(mod.predict(test_set))
 
     rev_idx = np.argsort(sum(test_idx, [])).tolist()
     return np.concatenate(scores)[rev_idx]
