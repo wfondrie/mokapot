@@ -48,6 +48,14 @@ def picked_protein(
         .str.replace(r"\..*?$", "")
     )
 
+    # Sometimes folks use lowercase letters for the termini or mods:
+    if all(prots["stripped sequence"].str.islower()):
+        seqs = prots["stripped sequence"].upper()
+    else:
+        seqs = prots["stripped sequence"].str.replace(r"[a-z]", "")
+
+    prots["stripped sequence"] = seqs
+
     # There are two cases we need to deal with:
     # 1. The fasta contained both targets and decoys (ideal)
     # 2. The fasta contained only targets (less ideal)
@@ -65,16 +73,6 @@ def picked_protein(
     if not proteins.has_decoys:
         unmatched[~prots[target_column]] = False
 
-    # Verify that reasonable number of decoys were matched.
-    if proteins.has_decoys:
-        num_unmatched_decoys = unmatched[~prots[target_column]].sum()
-        total_decoys = (~prots[target_column]).sum()
-        if num_unmatched_decoys / total_decoys > 0.05:
-            raise ValueError(
-                "Fewer than 5% of decoy peptides could be mapped to proteins."
-                " Was the correct FASTA file and digest settings used?"
-            )
-
     unmatched_prots = prots.loc[unmatched, :]
     shared = unmatched_prots["stripped sequence"].isin(
         proteins.shared_peptides
@@ -89,6 +87,7 @@ def picked_protein(
     )
 
     if shared_unmatched:
+        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
         if shared_unmatched / len(prots) > 0.10:
             raise ValueError(
                 "Fewer than 90% of all peptides could be matched to proteins. "
@@ -101,6 +100,16 @@ def picked_protein(
             shared_unmatched,
             len(prots),
         )
+
+    # Verify that reasonable number of decoys were matched.
+    if proteins.has_decoys:
+        num_unmatched_decoys = unmatched_prots[target_column][~shared].sum()
+        total_decoys = (~prots[target_column]).sum()
+        if num_unmatched_decoys / total_decoys > 0.05:
+            raise ValueError(
+                "Fewer than 5% of decoy peptides could be mapped to proteins."
+                " Was the correct FASTA file and digest settings used?"
+            )
 
     prots = prots.loc[~unmatched, :]
     prots["decoy"] = (

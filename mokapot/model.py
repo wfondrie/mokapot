@@ -618,6 +618,8 @@ def _find_hyperparameters(model, features, labels):
         new_est = model.estimator.estimator
         new_est.set_params(**best_params)
         model._needs_cv = False
+        for param, value in best_params.items():
+            LOGGER.info("\t- %s = %s", param, value)
     else:
         new_est = model.estimator
 
