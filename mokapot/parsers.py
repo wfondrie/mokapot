@@ -115,7 +115,7 @@ def read_pin(pin_files, group_column=None, to_df=False, copy_data=False):
 
 
 # Utility Functions -----------------------------------------------------------
-def read_percolator(perc_file):
+def read_percolator(perc_file, chunk_size=10000):
     """
     Read a Percolator tab-delimited file.
 
@@ -127,6 +127,8 @@ def read_percolator(perc_file):
     ----------
     perc_file : str
         The file to parse.
+    chunk_size : int, optional
+        The number of lines to read at a time.
 
     Returns
     -------
@@ -141,7 +143,33 @@ def read_percolator(perc_file):
 
     with fopen(perc_file) as perc:
         cols = perc.readline().rstrip().split("\t")
-        psms_gen = (l.rstrip().split("\t", len(cols) - 1) for l in perc)
-        psms = pd.DataFrame.from_records(psms_gen, columns=cols)
+        psms = pd.concat([c for c in _parse_in_chunks(perc, cols)], copy=False)
 
     return psms.apply(pd.to_numeric, errors="ignore")
+
+
+def _parse_in_chunks(file_obj, columns, chunk_size=int(1e8)):
+    """
+    Parse a file in chunks
+
+    Parameters
+    ----------
+    file_obj : file object
+        The file to read lines from.
+    columns : list of str
+        The columns for each DataFrame.
+    chunk_size : int
+        The chunk size in bytes.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The chunk of PSMs
+    """
+    while True:
+        psms = file_obj.readlines(chunk_size)
+        if not psms:
+            break
+
+        psms = [l.rstrip().split("\t", len(columns) - 1) for l in psms]
+        yield pd.DataFrame.from_records(psms, columns=columns)
