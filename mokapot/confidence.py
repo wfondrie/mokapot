@@ -444,13 +444,6 @@ class LinearConfidence(Confidence):
             self.confidence_estimates[level] = data.loc[targets, :]
             self.decoy_confidence_estimates[level] = data.loc[~targets, :]
 
-        print(
-            (
-                self.confidence_estimates["proteins"]["mokapot q-value"]
-                <= 0.01
-            ).sum()
-        )
-
         if "proteins" not in self.confidence_estimates.keys():
             self.confidence_estimates["proteins"] = None
             self.decoy_confidence_estimates["proteins"] = None
