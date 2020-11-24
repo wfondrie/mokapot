@@ -421,7 +421,7 @@ class LinearConfidence(Confidence):
             # Logging update on q-values
             LOGGER.info(
                 "\t- Found %i %s with q<=%g",
-                (data["mokapot q-value"] <= self._eval_fdr).sum(),
+                (data.loc[targets, "mokapot q-value"] <= self._eval_fdr).sum(),
                 level,
                 self._eval_fdr,
             )
@@ -443,6 +443,8 @@ class LinearConfidence(Confidence):
             data["mokapot PEP"] = pep
             self.confidence_estimates[level] = data.loc[targets, :]
             self.decoy_confidence_estimates[level] = data.loc[~targets, :]
+
+        print((self.confidence_estimates["proteins"]["mokapot q-value"] <= 0.01).sum())
 
         if "proteins" not in self.confidence_estimates.keys():
             self.confidence_estimates["proteins"] = None
