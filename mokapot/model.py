@@ -20,10 +20,10 @@ import warnings
 
 import numpy as np
 import pandas as pd
-import sklearn.base as base
-import sklearn.svm as svm
-import sklearn.model_selection as ms
-import sklearn.preprocessing as pp
+from sklearn.base import clone
+from sklearn.svm import LinearSVC
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import StandardScaler
 from sklearn.exceptions import NotFittedError
 
 LOGGER = logging.getLogger(__name__)
@@ -133,12 +133,12 @@ class Model:
                 "versions. Use the PercolatorModel class instead.",
                 DeprecationWarning,
             )
-            svm_model = svm.LinearSVC(dual=False)
-            estimator = ms.GridSearchCV(
+            svm_model = LinearSVC(dual=False)
+            estimator = GridSearchCV(
                 svm_model, param_grid=PERC_GRID, refit=False, cv=3
             )
 
-        self.estimator = base.clone(estimator)
+        self.estimator = clone(estimator)
         self.features = None
         self.is_trained = False
         self.subset_max_train = subset_max_train
@@ -146,9 +146,9 @@ class Model:
         if scaler == "as-is":
             self.scaler = DummyScaler()
         elif scaler is None:
-            self.scaler = pp.StandardScaler()
+            self.scaler = StandardScaler()
         else:
-            self.scaler = base.clone(scaler)
+            self.scaler = clone(scaler)
 
         self.train_fdr = train_fdr
         self.max_iter = max_iter
@@ -416,8 +416,8 @@ class PercolatorModel(Model):
         subset_max_train=None,
     ):
         """Initialize a PercolatorModel"""
-        svm_model = svm.LinearSVC(dual=False)
-        estimator = ms.GridSearchCV(
+        svm_model = LinearSVC(dual=False)
+        estimator = GridSearchCV(
             svm_model, param_grid=PERC_GRID, refit=False, cv=3
         )
 
@@ -498,7 +498,7 @@ def load_model(model_file):
         logging.info("Loading the Percolator model.")
 
         weight_cols = [c for c in weights.index if c != "m0"]
-        model = Model(estimator=svm.LinearSVC(), scaler="as-is")
+        model = Model(estimator=LinearSVC(), scaler="as-is")
         weight_vals = weights.loc[weight_cols]
         weight_vals = weight_vals[np.newaxis, :]
         model.estimator.coef_ = weight_vals
