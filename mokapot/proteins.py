@@ -59,6 +59,9 @@ class FastaProteins:
 
     Attributes
     ----------
+    decoy_prefix : str, optional
+        The prefix used to indicate a decoy protein in the description
+        lines of the FASTA file.
     peptide_map : Dict[str, List[str]]
         A dictionary mapping peptide sequences to the proteins that
         may have generated them.
@@ -94,10 +97,15 @@ class FastaProteins:
             decoy_prefix=decoy_prefix,
         )
 
+        self._decoy_prefix = decoy_prefix
         self._peptide_map = parsed[0]
         self._shared_peptides = parsed[1]
         self._protein_map = parsed[2]
         self._has_decoys = parsed[3]
+
+    @property
+    def decoy_prefix(self):
+        return self._decoy_prefix
 
     @property
     def peptide_map(self):
@@ -241,8 +249,6 @@ def read_fasta(
     peptides = defaultdict(set)
     for entry in fasta:
         prot, seq = _parse_protein(entry)
-        if clip_nterm_methionine and seq[0] == "M":
-            seq = seq[1:]
 
         peps = digest(
             seq,
@@ -251,6 +257,7 @@ def read_fasta(
             min_length=min_length,
             max_length=max_length,
             semi=semi,
+            clip_nterm_methionine=clip_nterm_methionine,
         )
 
         if peps:
@@ -336,6 +343,7 @@ def digest(
     sequence,
     enzyme_regex="[KR]",
     missed_cleavages=0,
+    clip_nterm_methionine=False,
     min_length=6,
     max_length=50,
     semi=False,
@@ -352,6 +360,8 @@ def digest(
         match should indicate the cleavage site.
     missed_cleavages : int, optional
         The maximum number of allowed missed cleavages.
+    clip_nterm_methionine : bool, optional
+        Remove methionine residues that occur at the protein N-terminus.
     min_length : int, optional
         The minimum peptide length.
     max_length : int, optional
@@ -372,6 +382,7 @@ def digest(
         min_length=min_length,
         max_length=max_length,
         semi=semi,
+        clip_nterm_met=clip_nterm_methionine,
     )
 
     return peptides
@@ -507,7 +518,15 @@ def _cleavage_sites(sequence, enzyme_regex):
     return sites
 
 
-def _cleave(sequence, sites, missed_cleavages, min_length, max_length, semi):
+def _cleave(
+    sequence,
+    sites,
+    missed_cleavages,
+    min_length,
+    max_length,
+    semi,
+    clip_nterm_met
+):
     """Digest a protein sequence into its constituent peptides.
 
     Parameters
@@ -524,6 +543,8 @@ def _cleave(sequence, sites, missed_cleavages, min_length, max_length, semi):
         The maximum peptide length.
     semi : bool
         Allow semi-enzymatic cleavage.
+    clip_nterm_met : bool
+        Clip the N-Terminal methionine
 
     Returns
     -------
@@ -545,6 +566,9 @@ def _cleave(sequence, sites, missed_cleavages, min_length, max_length, semi):
                 continue
 
             peptides.add(peptide)
+
+            if clip_nterm_met and not start_idx and peptide.startswith("M"):
+                peptides.add(peptide[1:])
 
             # Handle semi:
             if semi:

@@ -176,8 +176,8 @@ def group_without_decoys(peptides, target_column, proteins):
     decoy_map = {}
     for decoy_peptide, target_peptide in decoys.items():
         protein_group = proteins.peptide_map[target_peptide].split(", ")
-        protein_group = ", ".join(["decoy_" + p for p in protein_group])
-        decoy_map[decoy_peptide] = protein_group
+        protein_group = [proteins.decoy_prefix + p for p in protein_group]
+        decoy_map[decoy_peptide] = ", ".join(protein_group)
 
     # First lookup targets:
     prots = peptides["stripped sequence"].map(proteins.peptide_map.get)
