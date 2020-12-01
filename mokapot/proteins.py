@@ -525,7 +525,7 @@ def _cleave(
     min_length,
     max_length,
     semi,
-    clip_nterm_met
+    clip_nterm_met,
 ):
     """Digest a protein sequence into its constituent peptides.
 
