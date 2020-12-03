@@ -24,6 +24,8 @@ putative peptide-spectrum matches (PSMs) from database search engines as input,
 re-scores them, and yields statistical measures---confidence estimates, such as
 q-values and posterior error probabilities---indicating their quality.
 
+Check out our new preprint on *bioRxiv*:
+`[Link] <https://www.biorxiv.org/content/10.1101/2020.12.01.407270v1>`_
 
 Introduction
 ------------
