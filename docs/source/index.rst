@@ -24,8 +24,17 @@ putative peptide-spectrum matches (PSMs) from database search engines as input,
 re-scores them, and yields statistical measures---confidence estimates, such as
 q-values and posterior error probabilities---indicating their quality.
 
-Check out our new preprint on *bioRxiv*:
-`[Link] <https://www.biorxiv.org/content/10.1101/2020.12.01.407270v1>`_
+
+Citing
+------
+If you use mokapot in your work, please cite:
+
+.. epigraph::
+   Fondrie, W. E. & Noble, W. S. mokapot: Fast and flexible semi-supervised
+   learning for peptide detection. bioRxiv 2020.12.01.407270 (2020)
+   doi:10.1101/2020.12.01.407270. `[Link]
+   <https://www.biorxiv.org/content/10.1101/2020.12.01.407270v2>`_
+
 
 Introduction
 ------------
@@ -79,8 +88,14 @@ mokapot also depends on several Python packages:
 - `triqler <https://github.com/statisticalbiotechnology/triqler>`_
 
 
-We recommend using `pip` to install mokapot. Missing dependencies will also
+We recommend using `conda` to install mokapot. Missing dependencies will also
 be installed automatically:
+
+.. code-block:: bash
+
+   $ conda install -c bioconda mokapot
+
+You can also install mokapot with `pip`:
 
 .. code-block:: bash
 
