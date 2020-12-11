@@ -25,10 +25,23 @@ mokapot as a Python package unlocks maximum flexibility.
 For more information, check out our
 [documentation](https://mokapot.readthedocs.io).  
 
+## Citing  
+If you use mokapot in your work, please cite:  
+
+> Fondrie, W. E. & Noble, W. S. mokapot: Fast and flexible semi-supervised
+> learning for peptide detection. *bioRxiv* (2020)
+> doi:10.1101/2020.12.01.407270.
+
 ## Installation  
 
-mokapot requires Python 3.6+ and can be installed with pip:  
+mokapot requires Python 3.6+ and can be installed with pip or conda.  
 
+Using conda:
+```
+$ conda install -c bioconda mokapot
+```
+
+Using pip:
 ```
 $ pip3 install mokapot
 ```
@@ -64,3 +77,4 @@ interpreter and affords greater flexibility:
 
 Check out our [documentation](https://mokapot.readthedocs.io) for more details
 and examples of mokapot in action.
+
