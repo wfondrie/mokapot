@@ -160,6 +160,15 @@ when using mokapot from the Python interpreter. For more details, see the
 :doc:`Python API <api/index>`.
 
 
+Need help?
+##########
+
+Do you still have questions after reading the documentation on this site? The
+best way to get help is to poster your question to the `mokapot discussion board
+<https://github.com/wfondrie/mokapot/discussions>`_. Chances are, if you have a
+question, someone else has a similar one.
+
+
  .. [1] Hogrebe, Alexander, et al. "Benchmarking common quantification strategies
        for large-scale phosphoproteomics." Nature communications 9.1 (2018):
        1-13.

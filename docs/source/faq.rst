@@ -64,10 +64,9 @@ How do I do <insert a task> with mokapot?
 -----------------------------------------
 
 The best way to get help with these kinds of questions is to post them to the
-`Bioinformatics Stack Exchange <https://bioinformatics.stackexchange.com/>`_. We
-monitor this site for questions regarding mokapot. Posting a question there,
-instead of asking privately by email, means that all users can benefit from
-the answers to your question and others.
+`mokapot discussion board <https://github.com/wfondrie/mokapot/discussions>`_.
+Posting a question here, instead of asking privately by email, means that all
+users can benefit from the answers to your question and others.
 
 
 Help, I just got a mysterious error! What should I do?
@@ -75,7 +74,9 @@ Help, I just got a mysterious error! What should I do?
 
 First, make sure you have read the documentation on this site and can't find an
 answer to what went wrong. Also, verify that you have the latest version of
-mokapot installed.
+mokapot installed. Finally, check the `mokapot discussion board
+<https://github.com/wfondrie/mokapot/discussions>`_ to see if anyone else has
+encountered your error.
 
 If you still have a problem, please don't hesitate to `file an issue on Github
 <https://github.com/wfondrie/mokapot/issues>`_. It may very well be that you've
