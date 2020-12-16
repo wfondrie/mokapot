@@ -49,6 +49,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinxarg.ext",
     "nbsphinx",
+    "recommonmark",
 ]
 
 nbsphinx_execute = "never"
@@ -93,7 +94,7 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 master_doc = "index"
-source_suffix = ".rst"
+source_suffix = [".rst", ".md"]
 
 html_theme_options = {
     "style_nav_header_background": "#343131",

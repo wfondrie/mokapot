@@ -44,6 +44,7 @@ setuptools.setup(
             "sphinx-rtd-theme>=0.5.0",
             "nbsphinx>=0.7.1",
             "ipykernel>=5.3.0",
+            "recommonmark>=0.5.0",
         ],
         "dev": ["pre-commit>=2.7.1", "black>=19.10b0"],
     },

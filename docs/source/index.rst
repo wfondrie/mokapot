@@ -185,3 +185,5 @@ question, someone else has a similar one.
    api/index.rst
    cli.rst
    FAQ <faq.rst>
+   Contributing <contributing.rst>
+   Code of Conduct <code_of_conduct.md>
