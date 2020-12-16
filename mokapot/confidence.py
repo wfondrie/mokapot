@@ -449,7 +449,7 @@ class LinearConfidence(Confidence):
             self.decoy_confidence_estimates["proteins"] = None
 
 
-class CrossLinkedConfidence(Confidence):
+class CrosslinkConfidence(Confidence):
     """
     Assign confidence estimates to a set of cross-linked PSMs
 

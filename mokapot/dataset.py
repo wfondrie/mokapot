@@ -23,11 +23,10 @@ import pandas as pd
 
 from . import qvalues
 from . import utils
-from .proteins import read_fasta
 from .proteins import FastaProteins
 from .confidence import (
     LinearConfidence,
-    CrossLinkedConfidence,
+    CrosslinkConfidence,
     GroupedConfidence,
 )
 
@@ -531,84 +530,169 @@ class LinearPsmDataset(PsmDataset):
             )
 
 
-class CrossLinkedPsmDataset(PsmDataset):
-    """
-    Store and analyze a collection of PSMs
+class CrosslinkPsmDataset(PsmDataset):
+    """Store and analyze a collection of CSMs
 
-    A `PsmDataset` is intended to store a collection of PSMs from
-    standard, data-dependent acquisition proteomics experiments and
+    Stores a collection of cross-linked peptide-spectrum matches (CSMs) from
+    data-dependent acquisition cross-linking mass spectrometry experiments and
     defines the necessary fields for mokapot analysis.
 
     Parameters
     ----------
-    psms : pandas.DataFrame
-        A collection of PSMs.
+    csms : pandas.DataFrame
+        A collection of CSMs. Each row should contain information about both
+        peptides for a cross-linked peptide pair.
     target_column : tuple of str
-        The columns specifying whether each peptide of a PSM is a target
-        (`True`) or a decoy (`False`) sequence. These columns will be coerced
-        to boolean, so the
-        specifying targets as `1` and decoys as `-1` will not work correctly.
+        A tuple of two strings that indicate the columns specifying if the
+        :math:{\alpha}-peptide and :math:{\beta}-peptide of a cross-linked
+        peptide pair is a target (`True`) or a decoy (`False`). These columns
+        will be coerced to boolean, so specifying targets as `1` and decoys as
+        `-1` will not work correctly.
     spectrum_columns : str or tuple of str
         The column(s) that collectively identify unique mass spectra.
         Multiple columns can be useful to avoid combining scans from
         multiple mass spectrometry runs.
-    peptide_columns : str or tuple of str
-        The column(s) that collectively define a peptide. Multiple
-        columns may be useful if sequence and modifications are provided
-        as separate columns.
-    protein_column : str
-        The column that specifies which protein(s) the detected peptide
-        might have originated from. This column should contain a
-        delimited list of protein identifiers that match the FASTA file
-        used for database searching.
-    feature_columns : str or tuple of str
+    peptide_columns : tuple of str
+        A tuple of two strings that indicate which columns define a unique
+        peptide for the :math:{\alpha}-peptide and :math:{\beta}-peptide,
+        respectively. Modifications should indicated either in square brackets
+        :code:`[]` or parentheses :code:`()`. The exact modification format
+        within those entities does not matter, so long as it is consistent.
+    protein_columns : tuple of str, optional
+        The columns that specify which protein(s) the detected peptide pair may
+        have originated from. This column is not used to compute protein-level
+        confidence estimates (see :py:meth:`add_proteins()`).
+    group_column : str, optional
+        A factor by which to group PSMs for grouped confidence estimation.
+    feature_columns : str or tuple of str, optional
         The column(s) specifying the feature(s) for mokapot analysis. If
         `None`, these are assumed to be all columns not specified in the
         previous parameters.
+    copy_data : bool, optional
+        If true, a deep copy of `csms` is created, so that changes to the
+        original collection of CSMs is not propagated to this object. This uses
+        more memory, but is safer since it prevents accidental modification of
+        the underlying data.
 
-    :meta private:
+    Attributes
+    ----------
+    data : pandas.DataFrame
+    metadata : pandas.DataFrame
+    features : pandas.DataFrame
+    spectra : pandas.DataFrame
+    peptides : pandas.DataFrame
+    combined_peptides: pandas.Series
+    groups : pandas.Series
+    targets : numpy.ndarray
+    columns : list of str
+    has_proteins : bool
     """
 
     def __init__(
         self,
-        psms: pd.DataFrame,
+        csms,
         spectrum_columns,
         target_columns,
         peptide_columns,
-        protein_columns,
+        protein_columns=None,
+        group_column=None,
         feature_columns=None,
+        copy_data=True,
     ):
         """Initialize a PsmDataset object."""
         self._target_columns = utils.tuplize(target_columns)
-        self._peptide_columns = tuple(
-            utils.tuplize(c) for c in peptide_columns
-        )
-        self._protein_columns = tuple(
-            utils.tuplize(c) for c in protein_columns
-        )
+        self._peptide_columns = utils.tuplize(peptide_columns)
+
+        check_len(self._target_columns, "target_columns", 2)
+        check_len(self._peptide_columns, "peptide_columns", 2)
 
         # Finish initialization
         other_columns = sum(
             [
                 self._target_columns,
-                *self._peptide_columns,
-                *self._protein_columns,
+                self._peptide_columns,
+                self._protein_columns,
             ],
-            tuple(),
+            [],
         )
 
+        if protein_columns is not None:
+            self._protein_columns = utils.tuplize(protein_columns)
+            other_columns += list(self._protein_columns)
+        else:
+            self._proteins_columns = None
+
         super().__init__(
-            psms=psms,
+            psms=csms,
             spectrum_columns=spectrum_columns,
             feature_columns=feature_columns,
+            group_column=group_column,
             other_columns=other_columns,
+            copy_data=copy_data,
+        )
+
+        self._data.loc[:, target_columns] = csms[target_columns].astype(bool)
+        num_targets = self.data[target_columns].sum(axis=1).values
+        self._num_tt = (num_targets == 2).sum()
+        self._num_td = (num_targets == 1).sum()
+        self._num_dd = (num_targets == 0).sum()
+
+        self._combined_peptides = None
+
+        LOGGER.info(
+            (
+                "\t- %i target-target CSMs, %i target-decoy CSMs, and %i "
+                "decoy-decoy CSMs detected"
+            ),
+            self._num_tt,
+            self._num_td,
+            self._num_dd,
+        )
+
+    def __repr__(self):
+        """How to print the class"""
+        num_spec = len(self.spectra.drop_duplicates())
+        num_pep = len(self.combined_peptides.drop_duplicates())
+        return (
+            f"A mokapot.dataset.CrosslinkPsmDataset with {len(self.data)} "
+            "CSMs:\n"
+            f"\t- Protein confidence estimates enabled: {self.has_proteins}\n"
+            f"\t- Target-target CSMs:   {self._num_tt}\n"
+            f"\t- Target-decoy CSMs:    {self._num_td}\n"
+            f"\t- Decoy-decoy CSMs:     {self._num_dd}\n"
+            f"\t- Unique spectra:       {num_spec}\n"
+            f"\t- Unique peptide pairs: {num_pep}\n"
+            f"\t- Features: {self._feature_columns}"
         )
 
     @property
+    def data(self):
+        """The full collection of CSMs as a :py:class:`pandas.DataFrame`."""
+        return super().data
+
+    @property
+    def combined_peptides(self):
+        """Both peptides of a CSM as a single string."""
+        if self._combined_peptides is not None and len(
+            self._combined_peptides
+        ) == len(self._data):
+            return self._combined_peptides
+
+        self._combined_peptides = []
+        for peps in self.data.loc[:, self._peptide_columns].iterrows():
+            self._combined_peptides.append(sorted(list(peps)))
+
+        return pd.Series(self._combined_peptides)
+
+    @property
     def targets(self):
-        """An array indicating whether each PSM is a target."""
-        bool_targs = self.data.loc[:, self._target_columns].astype(bool)
-        return bool_targs.sum(axis=1).values
+        """An array indicating the number of targets in each CSM."""
+        return self.data.loc[:, self._target_columns].sum(axis=1).values
+
+    @property
+    def peptides(self):
+        """A :py:class:`pandas.DataFrame` of the peptides from each CSM"""
+        return self.data.loc[:, self._peptide_columns]
 
     def _update_labels(self, scores, eval_fdr=0.01, desc=True):
         """
@@ -644,27 +728,59 @@ class CrossLinkedPsmDataset(PsmDataset):
         new_labels[unlabeled] = 0
         return new_labels
 
-    def assign_confidence(self, scores, desc=True):
-        """
-        Assign confidence to crosslinked PSMs and peptides.
+    def assign_confidence(self, scores=None, desc=True, eval_fdr=0.01):
+        """Assign confidence to crosslinked PSMs and peptides.
 
-        Two forms of confidence estimates are calculated: q-values,
-        which are the minimum false discovery rate at which a given PSMs
-        would be accepted, and posterior error probabilities (PEPs),
-        which probability that the given PSM is incorrect. For more
-        information see the :doc:`PsmConfidence <confidence>` page.
+        Two forms of confidence estimates are calculated: q-values, which are
+        the minimum false discovery rate at which a given CSMs would be
+        accepted, and posterior error probabilities (PEPs), which probability
+        that the given CSM is incorrect. For more information see the
+        :doc:`PsmConfidence <confidence>` page.
 
         Parameters
         ----------
         scores : numpy.ndarray
-            The scores used to rank the PSMs.
+            The scores used to rank the CSMs. The default, :code:`None`, uses
+            the feature that accepts the most CSMs at an FDR of `eval_fdr`.
         desc : bool
             Are higher scores better?
+        eval_fdr : float
+            The FDR threshold at which to report and evaluate performance. If
+            `scores` is not :code:`None`, this parameter has no affect on the
+            analysis itself, only on logging messages.
 
         Returns
         -------
-        CrossLinkedPsmConfidence
-            A :py:class:`CrossLinkedPsmConfidence` object storing the
-            confidence for the provided PSMs.
+        CrosslinkPsmConfidence
+            A :py:class:`CrosslinkConfidence` object storing the
+            confidence for the provided CSMs.
+
         """
-        return CrossLinkedConfidence(self, scores, desc)
+        if scores is None:
+            feat, _, _, desc = self._find_best_feature(eval_fdr)
+            LOGGER.info("Selected %s as the best feature.", feat)
+            scores = self.features[feat].values
+
+        if self._group_column is None:
+            LOGGER.info("Assigning confidence...")
+            return CrosslinkConfidence(self, scores, eval_fdr, desc=desc)
+
+        return CrosslinkConfidence(self, scores, desc)
+
+
+# Utility Functions -----------------------------------------------------------
+def check_len(var, label, expected=2):
+    """
+    Check that a variable is the expected length.
+
+    Parameters
+    ----------
+    var : anything with a `__len__() method`
+        The variable to assess.
+    label : str
+        The string to put in the error message.
+    expected : int
+        The expected length.
+    """
+    if len(var) != expected:
+        raise ValueError(f"'{label}' must be of length {expected}")
