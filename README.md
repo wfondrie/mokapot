@@ -1,11 +1,10 @@
 <img src="https://raw.githubusercontent.com/wfondrie/mokapot/master/static/mokapot_logo_dark.svg" width=300>  
 
----
-
-[![PyPI version](https://badge.fury.io/py/mokapot.svg)](https://badge.fury.io/py/mokapot)
+---  
+[![conda](https://img.shields.io/conda/vn/bioconda/mokapot?color=green)](http://bioconda.github.io/recipes/mokapot/README.html)
+[![PyPI](https://img.shields.io/pypi/v/mokapot?color=green)](https://pypi.org/project/mokapot/)
 [![tests](https://github.com/wfondrie/mokapot/workflows/tests/badge.svg)](https://github.com/wfondrie/mokapot/actions?query=workflow%3Atests)
-[![Documentation Status](https://readthedocs.org/projects/mokapot/badge/?version=latest)](https://mokapot.readthedocs.io/en/latest/?badge=latest)
-[![Built with Spacemacs](https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg)](http://spacemacs.org)  
+[![docs](https://readthedocs.org/projects/mokapot/badge/?version=latest)](https://mokapot.readthedocs.io/en/latest/?badge=latest)
 
 
 
@@ -78,3 +77,5 @@ interpreter and affords greater flexibility:
 Check out our [documentation](https://mokapot.readthedocs.io) for more details
 and examples of mokapot in action.
 
+
+[![Built with Spacemacs](https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg)](http://spacemacs.org)  

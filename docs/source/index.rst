@@ -1,5 +1,9 @@
-.. image:: https://badge.fury.io/py/mokapot.svg
-   :target: https://badge.fury.io/py/mokapot
+.. image:: https://img.shields.io/conda/vn/bioconda/mokapot?color=green
+   :target: http://bioconda.github.io/recipes/mokapot/README.html
+   :alt: bioconda
+
+.. image:: https://img.shields.io/pypi/v/mokapot?color=green
+   :target: https://pypi.org/project/mokapot/
    :alt: PyPI
 
 .. image:: https://github.com/wfondrie/mokapot/workflows/tests/badge.svg
@@ -9,10 +13,6 @@
 .. image:: https://readthedocs.org/projects/mokapot/badge/?version=latest
    :target: https://mokapot.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation Status
-
-.. image:: https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg
-   :target: http://spacemacs.org
-   :alt: Built with Spacemacs
 
 
 Getting Started
