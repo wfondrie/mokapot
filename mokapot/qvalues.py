@@ -143,14 +143,15 @@ def crosslink_tdc(scores, num_targets, desc=True):
     one_decoy = (num_targets == 1).astype(int).cumsum()
     two_decoy = (num_targets == 0).astype(int).cumsum()
 
+    numerator = one_decoy - two_decoy
+    numerator[numerator <= 0] = 1
+
     fdr = np.divide(
-        (one_decoy - two_decoy),
+        numerator,
         cum_targets,
         out=np.ones_like(cum_targets, dtype=float),
         where=(cum_targets != 0),
     )
-
-    fdr[fdr < 0] = 0
 
     # Calculate q-values
     unique_metric, indices = np.unique(scores, return_counts=True)
