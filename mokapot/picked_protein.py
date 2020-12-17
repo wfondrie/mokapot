@@ -295,7 +295,7 @@ def verify_match(peptides, target_column, protein_column, proteins):
                 " Was the correct FASTA file and digest settings used?"
             )
 
-    peptides = peptides.loc[~unmatched, :]
+    peptides = peptides.loc[~unmatched, :].copy()
     peptides["decoy"] = (
         peptides["mokapot protein group"]
         .str.split(",", expand=True)[0]
