@@ -487,9 +487,9 @@ class CrosslinkConfidence(Confidence):
     def __init__(self, csms, scores, desc=True, eval_fdr=0.01):
         """Initialize a CrossLinkedConfidence object"""
         super().__init__(csms, scores, desc)
-        self._target_column = _new_column("target", self._data)
-        self._data[self._target_column] = csms.targets
-        self._target_column = self._data.columns[-1]
+        self._target_columns = csms._target_columns
+        self._num_target_column = _new_column("target", self._data)
+        self._data[self._num_target_column] = csms.targets
         self._csm_columns = csms._spectrum_columns
         self._peptide_columns = csms._peptide_columns
         self._combined_peptides_column = _new_column(
@@ -562,7 +562,7 @@ class CrosslinkConfidence(Confidence):
             ).reset_index(drop=True)
 
             scores = data.loc[:, self._score_column].values
-            targets = data.loc[:, self._target_column].values
+            targets = data.loc[:, self._num_target_column].values
 
             if all(targets == 2):
                 LOGGER.warning(

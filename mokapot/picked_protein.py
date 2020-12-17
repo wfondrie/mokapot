@@ -12,6 +12,56 @@ from . import utils
 LOGGER = logging.getLogger(__name__)
 
 
+def crosslink_picked_protein(
+    peptides, target_columns, peptide_columns, score_column, proteins
+):
+    """Perform the picked-protein approach with cross-linked data
+
+    Parameters
+    ----------
+    peptides : pandas.DataFrame
+        The dataframe of peptide pairs.
+    target_columns : tuple of str
+        The columns that indicate whether each peptide is a target.
+    peptide_columns : tuple of str
+        The columns that indicate each peptide sequence.
+    score_column : str
+        The column containing the scores
+    proteins : a FastaProteins object
+        A FastaProteins object.
+    """
+    keep = sum([*target_columns, *peptide_columns, score_column], [])
+    prots = peptides.loc[keep]
+    prefixes = ["alpha", "beta"]
+
+    pep_df = []
+    for prefix, pep, targ in zip(prefixes, peptide_columns, target_columns):
+        stripped = f"{prefix} stripped sequence"
+        protein_group = f"{prefix} mokapot protein group"
+        prots[stripped] = strip_peptide(prots[pep])
+        prots = prots.rename(columns={pep: f"{prefix} best peptide"})
+
+        df = prots.loc[:, [stripped, targ]]
+        df.columns = ["stripped sequence", "target"]
+        pep_df.append(df)
+
+    pep_df = pd.concat(df)
+    del df
+
+    if proteins.has_decoys:
+        pep_df["proteins"] = group_with_decoys(pep_df, proteins)
+    else:
+        pep_df["proteins"] = group_without_decoys(pep_df, "target", proteins)
+
+    pep_df = verify_match(pep_df, "target", "proteins", proteins)
+
+    # TODO:
+    # - Map proteins groups from pep_df back to prots
+    # - Conduct TDC
+    # - Select and return a dataframe with final columns.
+    return None
+
+
 def picked_protein(
     peptides, target_column, peptide_column, score_column, proteins
 ):
@@ -25,6 +75,8 @@ def picked_protein(
         The column in `peptides` indicating if the peptide is a target.
     peptide_column : str
         The column in `peptides` containing the peptide sequence.
+    score_column: str
+        The column in `peptides` containing the scores.
     proteins : FastaProteins object
         A FastaProteins object.
 
@@ -40,21 +92,7 @@ def picked_protein(
         columns={peptide_column: "best peptide"}
     )
 
-    # Strip modifications and flanking AA's from peptide sequences.
-    prots["stripped sequence"] = (
-        prots["best peptide"]
-        .str.replace(r"[\[\(].*?[\]\)]", "")
-        .str.replace(r"^.*?\.", "")
-        .str.replace(r"\..*?$", "")
-    )
-
-    # Sometimes folks use lowercase letters for the termini or mods:
-    if all(prots["stripped sequence"].str.islower()):
-        seqs = prots["stripped sequence"].upper()
-    else:
-        seqs = prots["stripped sequence"].str.replace(r"[a-z]", "")
-
-    prots["stripped sequence"] = seqs
+    prots["stripped sequence"] = strip_peptide(prots["best peptide"])
 
     # There are two cases we need to deal with:
     # 1. The fasta contained both targets and decoys (ideal)
@@ -68,54 +106,8 @@ def picked_protein(
             prots, target_column, proteins
         )
 
-    # Verify that unmatched peptides are shared:
-    unmatched = pd.isna(prots["mokapot protein group"])
-    if not proteins.has_decoys:
-        unmatched[~prots[target_column]] = False
-
-    unmatched_prots = prots.loc[unmatched, :]
-    shared = unmatched_prots["stripped sequence"].isin(
-        proteins.shared_peptides
-    )
-
-    shared_unmatched = (~shared).sum()
-    num_shared = len(shared) - shared_unmatched
-    LOGGER.debug(
-        "%i out of %i peptides were discarded as shared peptides.",
-        num_shared,
-        len(prots),
-    )
-
-    if shared_unmatched:
-        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
-        if shared_unmatched / len(prots) > 0.10:
-            raise ValueError(
-                "Fewer than 90% of all peptides could be matched to proteins. "
-                "Verify that your digest settings are correct."
-            )
-
-        LOGGER.warning(
-            "%i out of %i peptides could not be mapped."
-            "Check your digest settings.",
-            shared_unmatched,
-            len(prots),
-        )
-
-    # Verify that reasonable number of decoys were matched.
-    if proteins.has_decoys:
-        num_unmatched_decoys = unmatched_prots[target_column][~shared].sum()
-        total_decoys = (~prots[target_column]).sum()
-        if num_unmatched_decoys / total_decoys > 0.05:
-            raise ValueError(
-                "Fewer than 5% of decoy peptides could be mapped to proteins."
-                " Was the correct FASTA file and digest settings used?"
-            )
-
-    prots = prots.loc[~unmatched, :]
-    prots["decoy"] = (
-        prots["mokapot protein group"]
-        .str.split(",", expand=True)[0]
-        .map(lambda x: proteins.protein_map.get(x, x))
+    prots = verify_match(
+        prots, target_column, "mokapot protein group", proteins
     )
 
     prot_idx = utils.groupby_max(prots, ["decoy"], score_column)
@@ -185,3 +177,105 @@ def group_without_decoys(peptides, target_column, proteins):
         decoy_map.get
     )
     return prots
+
+
+def strip_peptide(pep_series):
+    """Strip a peptide sequence
+
+    Parameters
+    ----------
+    pep_series : pandas.Series
+        A series of peptide sequences
+
+    Returns
+    -------
+    pandas.Series
+        The stripped peptide sequences
+    """
+    # Strip modifications and flanking AA's from peptide sequences.
+    seqs = (
+        pep_series.str.replace(r"[\[\(].*?[\]\)]", "")
+        .str.replace(r"^.*?\.", "")
+        .str.replace(r"\..*?$", "")
+    )
+
+    # Sometimes folks use lowercase letters for the termini or mods:
+    if all(seqs.str.islower()):
+        seqs = seqs.upper()
+    else:
+        seqs = seqs.str.replace(r"[a-z]", "")
+
+    return seqs
+
+
+def verify_match(peptides, target_column, protein_column, proteins):
+    """Quality control how well matching peptides to proteins went.
+
+    Also adds some additional columns.
+
+    Parameters
+    ----------
+    peptides : pandas.DataFrame
+        The peptides dataframe.
+    target_column : str
+        The target column.
+    protein_column : str
+        The column containing the protein groups.
+    proteins : a FastaProteins object
+
+    Returns
+    -------
+    pandas.DataFrame
+        The matched peptides
+    """
+    # Verify that unmatched peptides are shared:
+    unmatched = pd.isna(peptides[protein_column])
+    if not proteins.has_decoys:
+        unmatched[~peptides[target_column]] = False
+
+    unmatched_prots = peptides.loc[unmatched, :]
+    shared = unmatched_prots["stripped sequence"].isin(
+        proteins.shared_peptides
+    )
+
+    shared_unmatched = (~shared).sum()
+    num_shared = len(shared) - shared_unmatched
+    LOGGER.debug(
+        "%i out of %i peptides were discarded as shared peptides.",
+        num_shared,
+        len(peptides),
+    )
+
+    if shared_unmatched:
+        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
+        if shared_unmatched / len(peptides) > 0.10:
+            raise ValueError(
+                "Fewer than 90% of all peptides could be matched to proteins. "
+                "Verify that your digest settings are correct."
+            )
+
+        LOGGER.warning(
+            "%i out of %i peptides could not be mapped."
+            "Check your digest settings.",
+            shared_unmatched,
+            len(peptides),
+        )
+
+    # Verify that reasonable number of decoys were matched.
+    if proteins.has_decoys:
+        num_unmatched_decoys = unmatched_prots[target_column][~shared].sum()
+        total_decoys = (~peptides[target_column]).sum()
+        if num_unmatched_decoys / total_decoys > 0.05:
+            raise ValueError(
+                "Fewer than 5% of decoy peptides could be mapped to proteins."
+                " Was the correct FASTA file and digest settings used?"
+            )
+
+    peptides = peptides.loc[~unmatched, :]
+    peptides["decoy"] = (
+        peptides["mokapot protein group"]
+        .str.split(",", expand=True)[0]
+        .map(lambda x: proteins.protein_map.get(x, x))
+    )
+
+    return peptides
