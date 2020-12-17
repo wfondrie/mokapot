@@ -3,7 +3,6 @@ Implementation of the picked-protein approach for protein-level
 confidence estimates.
 """
 import logging
-import numpy as np
 import pandas as pd
 
 from .peptides import match_decoy
@@ -37,9 +36,8 @@ def crosslink_picked_protein(
     pep_df = []
     for prefix, pep, targ in zip(prefixes, peptide_columns, target_columns):
         stripped = f"{prefix} stripped sequence"
-        protein_group = f"{prefix} mokapot protein group"
         prots[stripped] = strip_peptide(prots[pep])
-        prots = prots.rename(columns={pep: f"{prefix} best peptide"})
+        prots = prots.rename(columns={pep: f"{prefix} peptide"})
 
         df = prots.loc[:, [stripped, targ]]
         df.columns = ["stripped sequence", "target"]
@@ -54,12 +52,38 @@ def crosslink_picked_protein(
         pep_df["proteins"] = group_without_decoys(pep_df, "target", proteins)
 
     pep_df = verify_match(pep_df, "target", "proteins", proteins)
+    pep_df = pep_df.set_index("stripped sequence")
 
-    # TODO:
-    # - Map proteins groups from pep_df back to prots
-    # - Conduct TDC
-    # - Select and return a dataframe with final columns.
-    return None
+    for prefix in prefixes:
+        stripped = f"{prefix} stripped sequence"
+        prots = pd.merge(
+            prots, pep_df, left_on=[stripped], right_on=["stripped sequence"]
+        )
+        prots = prots.rename(
+            columns={
+                "proteins": f"{prefix} mokapot protein group",
+                "decoy": f"{prefix} decoy",
+            }
+        )
+
+    prots["decoy"] = prots.apply(
+        lambda x: "-".join(sorted(list(x[["alpha decoy", "beta decoy"]]))),
+        axis=0,
+    )
+
+    prot_idx = utils.groupby_max(prots, ["decoy"], score_column)
+    final_cols = [
+        "alpha mokapot protein group",
+        "beta mokapot protein group",
+        "alpha peptide",
+        "beta peptide",
+        "alpha stripped sequence",
+        "beta stripped sequence",
+        score_column,
+        *target_columns,
+    ]
+
+    return prots.loc[prot_idx, final_cols]
 
 
 def picked_protein(
