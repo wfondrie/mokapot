@@ -517,7 +517,7 @@ class CrosslinkConfidence(Confidence):
         """How to print the class"""
         base = (
             "A mokapot.confidence.CrosslinkConfidence object:\n"
-            f"\t- CSMs at q<={self._eval_fdr:g}: {self.accepted['psms']}\n"
+            f"\t- CSMs at q<={self._eval_fdr:g}: {self.accepted['csms']}\n"
             f"\t- Peptide pairs at q<={self._eval_fdr:g}: "
             f"{self.accepted['peptide_pairs']}\n"
         )
@@ -530,6 +530,33 @@ class CrosslinkConfidence(Confidence):
 
         return base
 
+    def plot_qvalues(self, level="csms", threshold=0.1, ax=None, **kwargs):
+        """
+        Plot the cumulative number of discoveries over range of q-values.
+
+        The available levels can be found using
+        :py:meth:`~mokapot.confidence.Confidence.levels` attribute.
+
+        Parameters
+        ----------
+        level : str, optional
+            The level of q-values to report.
+        threshold : float, optional
+            Indicates the maximum q-value to plot.
+        ax : matplotlib.pyplot.Axes, optional
+            The matplotlib Axes on which to plot. If `None` the current
+            Axes instance is used.
+        **kwargs : dict, optional
+            Arguments passed to :py:func:`matplotlib.pyplot.plot`.
+
+        Returns
+        -------
+        matplotlib.pyplot.Axes
+            An :py:class:`matplotlib.axes.Axes` with the cumulative
+            number of accepted target PSMs or peptides.
+        """
+        return super().plot_qvalues(level, threshold, ax, **kwargs)
+
     def _assign_confidence(self, desc=True):
         """
         Assign confidence to CSMs and peptides.
@@ -541,7 +568,7 @@ class CrosslinkConfidence(Confidence):
         """
         levels = ("csms", "peptide_pairs")
         peptide_idx = utils.groupby_max(
-            self._data, self._combined_peptide_column, self._score_column
+            self._data, self._combined_peptides_column, self._score_column
         )
 
         peptides = self._data.loc[peptide_idx]
@@ -577,7 +604,7 @@ class CrosslinkConfidence(Confidence):
             )
 
             # Make output tables pretty
-            data = data.drop(self._target_column, axis=1).rename(
+            data = data.drop(self._num_target_column, axis=1).rename(
                 columns={self._score_column: "mokapot score"}
             )
 
@@ -609,8 +636,10 @@ class CrosslinkConfidence(Confidence):
 
             level = level.lower()
             data["mokapot PEP"] = pep
-            self.confidence_estimates[level] = data.loc[targets, :]
-            self.decoy_confidence_estimates[level] = data.loc[~targets, :]
+
+            targ_idx = targets == 2
+            self.confidence_estimates[level] = data.loc[targ_idx, :]
+            self.decoy_confidence_estimates[level] = data.loc[~targ_idx, :]
 
         if "protein_pairs" not in self.confidence_estimates.keys():
             self.confidence_estimates["protein_pairs"] = None

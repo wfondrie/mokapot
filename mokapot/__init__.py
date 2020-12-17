@@ -8,9 +8,13 @@ try:
 except DistributionNotFound:
     pass
 
-from mokapot.dataset import LinearPsmDataset
+from mokapot.dataset import LinearPsmDataset, CrosslinkPsmDataset
 from mokapot.model import Model, PercolatorModel, save_model, load_model
 from mokapot.brew import brew
 from mokapot.parsers import read_pin, read_percolator
-from mokapot.confidence import LinearConfidence, plot_qvalues
+from mokapot.confidence import (
+    LinearConfidence,
+    CrosslinkConfidence,
+    plot_qvalues,
+)
 from mokapot.proteins import make_decoys, digest, FastaProteins

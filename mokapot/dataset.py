@@ -542,7 +542,7 @@ class CrosslinkPsmDataset(PsmDataset):
     csms : pandas.DataFrame
         A collection of CSMs. Each row should contain information about both
         peptides for a cross-linked peptide pair.
-    target_column : tuple of str
+    target_columns : tuple of str
         A tuple of two strings that indicate the columns specifying if the
         :math:{\alpha}-peptide and :math:{\beta}-peptide of a cross-linked
         peptide pair is a target (`True`) or a decoy (`False`). These columns
@@ -608,12 +608,7 @@ class CrosslinkPsmDataset(PsmDataset):
 
         # Finish initialization
         other_columns = sum(
-            [
-                self._target_columns,
-                self._peptide_columns,
-                self._protein_columns,
-            ],
-            [],
+            [list(self._target_columns), list(self._peptide_columns),], [],
         )
 
         if protein_columns is not None:
@@ -679,10 +674,11 @@ class CrosslinkPsmDataset(PsmDataset):
             return self._combined_peptides
 
         self._combined_peptides = []
-        for peps in self.data.loc[:, self._peptide_columns].iterrows():
-            self._combined_peptides.append(sorted(list(peps)))
+        for _, peps in self.data.loc[:, self._peptide_columns].iterrows():
+            self._combined_peptides.append("-".join(sorted(peps.tolist())))
 
-        return pd.Series(self._combined_peptides)
+        self._combined_peptides = pd.Series(self._combined_peptides)
+        return self._combined_peptides
 
     @property
     def targets(self):
@@ -724,7 +720,7 @@ class CrosslinkPsmDataset(PsmDataset):
         )
         unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
         new_labels = np.ones(len(qvals))
-        new_labels[~self.targets] = -1
+        new_labels[~(self.targets == 2)] = -1
         new_labels[unlabeled] = 0
         return new_labels
 
@@ -763,9 +759,9 @@ class CrosslinkPsmDataset(PsmDataset):
 
         if self._group_column is None:
             LOGGER.info("Assigning confidence...")
-            return CrosslinkConfidence(self, scores, eval_fdr, desc=desc)
+            return CrosslinkConfidence(self, scores, desc, eval_fdr)
 
-        return CrosslinkConfidence(self, scores, desc)
+        return CrosslinkConfidence(self, scores, desc, eval_fdr)
 
 
 # Utility Functions -----------------------------------------------------------
