@@ -22,7 +22,7 @@ from triqler import qvality
 
 from . import qvalues
 from . import utils
-from .picked_protein import picked_protein
+from .picked_protein import picked_protein, crosslink_picked_protein
 
 LOGGER = logging.getLogger(__name__)
 
@@ -147,6 +147,7 @@ class Confidence:
         "proteins": "Proteins",
         "csms": "Cross-Linked PSMs",
         "peptide_pairs": "Peptide Pairs",
+        "protein_pairs": "Protein Pairs",
     }
 
     def __init__(self, psms, scores, desc):
@@ -566,7 +567,7 @@ class CrosslinkConfidence(Confidence):
         desc : bool
             Are higher scores better?
         """
-        levels = ("csms", "peptide_pairs")
+        levels = ["csms", "peptide_pairs"]
         peptide_idx = utils.groupby_max(
             self._data, self._combined_peptides_column, self._score_column
         )
@@ -577,15 +578,23 @@ class CrosslinkConfidence(Confidence):
         level_data = [self._data, peptides]
 
         if self._has_proteins:
-            proteins = None
+            proteins = crosslink_picked_protein(
+                peptides,
+                self._target_columns,
+                self._num_target_column,
+                self._peptide_columns,
+                self._score_column,
+                self._proteins,
+            )
             levels += ["protein_pairs"]
             level_data += [proteins]
             LOGGER.info("\t- Found %i unique protein pairs.", len(proteins))
-            raise NotImplementedError
+
+        print(proteins)
 
         for level, data in zip(levels, level_data):
             data = data.sort_values(
-                self._score_column, ascending=True
+                self._score_column, ascending=False
             ).reset_index(drop=True)
 
             scores = data.loc[:, self._score_column].values

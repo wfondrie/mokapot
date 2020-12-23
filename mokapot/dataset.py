@@ -414,6 +414,11 @@ class LinearPsmDataset(PsmDataset):
         )
 
         self._data[target_column] = self._data[target_column].astype(bool)
+        if pd.isna(self._data[target_column]).values.any():
+            raise ValueError(
+                "The 'target_column' could not be coerced to boolean."
+            )
+
         num_targets = (self.targets).sum()
         num_decoys = (~self.targets).sum()
         LOGGER.info(
@@ -626,7 +631,14 @@ class CrosslinkPsmDataset(PsmDataset):
             copy_data=copy_data,
         )
 
-        self._data.loc[:, target_columns] = csms[target_columns].astype(bool)
+        self._data.loc[:, self._target_columns] = self._data.loc[
+            :, self._target_columns
+        ].astype(bool)
+        if pd.isna(self._data.loc[:, self._target_columns]).values.any():
+            raise ValueError(
+                "The 'target_columns' could not be coerced to boolean."
+            )
+
         num_targets = self.data[target_columns].sum(axis=1).values
         self._num_tt = (num_targets == 2).sum()
         self._num_td = (num_targets == 1).sum()

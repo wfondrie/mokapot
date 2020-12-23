@@ -3,6 +3,7 @@ Implementation of the picked-protein approach for protein-level
 confidence estimates.
 """
 import logging
+import numpy as np
 import pandas as pd
 
 from .peptides import match_decoy
@@ -12,7 +13,12 @@ LOGGER = logging.getLogger(__name__)
 
 
 def crosslink_picked_protein(
-    peptides, target_columns, peptide_columns, score_column, proteins
+    peptides,
+    target_columns,
+    num_target_column,
+    peptide_columns,
+    score_column,
+    proteins,
 ):
     """Perform the picked-protein approach with cross-linked data
 
@@ -22,6 +28,8 @@ def crosslink_picked_protein(
         The dataframe of peptide pairs.
     target_columns : tuple of str
         The columns that indicate whether each peptide is a target.
+    num_target_column : str
+        The column containing the number of target hits.
     peptide_columns : tuple of str
         The columns that indicate each peptide sequence.
     score_column : str
@@ -29,8 +37,16 @@ def crosslink_picked_protein(
     proteins : a FastaProteins object
         A FastaProteins object.
     """
-    keep = sum([*target_columns, *peptide_columns, score_column], [])
-    prots = peptides.loc[keep]
+    keep = sum(
+        [
+            list(target_columns),
+            list(peptide_columns),
+            [score_column],
+            [num_target_column],
+        ],
+        [],
+    )
+    prots = peptides.loc[:, keep]
     prefixes = ["alpha", "beta"]
 
     pep_df = []
@@ -40,18 +56,20 @@ def crosslink_picked_protein(
         prots = prots.rename(columns={pep: f"{prefix} peptide"})
 
         df = prots.loc[:, [stripped, targ]]
-        df.columns = ["stripped sequence", "target"]
+        df.columns = ["stripped sequence", "target_xv76"]
         pep_df.append(df)
 
-    pep_df = pd.concat(df)
+    pep_df = pd.concat(pep_df).drop_duplicates()
     del df
 
     if proteins.has_decoys:
         pep_df["proteins"] = group_with_decoys(pep_df, proteins)
     else:
-        pep_df["proteins"] = group_without_decoys(pep_df, "target", proteins)
+        pep_df["proteins"] = group_without_decoys(
+            pep_df, "target_xv76", proteins
+        )
 
-    pep_df = verify_match(pep_df, "target", "proteins", proteins)
+    pep_df = verify_match(pep_df, "target_xv76", "proteins", proteins)
     pep_df = pep_df.set_index("stripped sequence")
 
     for prefix in prefixes:
@@ -66,10 +84,10 @@ def crosslink_picked_protein(
             }
         )
 
-    prots["decoy"] = prots.apply(
-        lambda x: "-".join(sorted(list(x[["alpha decoy", "beta decoy"]]))),
-        axis=0,
-    )
+    decoy_cols = ["alpha decoy", "beta decoy"]
+    prots = prots.dropna(subset=decoy_cols)
+
+    prots["decoy"] = ["-".join(x) for x in np.sort(prots[decoy_cols], axis=1)]
 
     prot_idx = utils.groupby_max(prots, ["decoy"], score_column)
     final_cols = [
@@ -81,8 +99,8 @@ def crosslink_picked_protein(
         "beta stripped sequence",
         score_column,
         *target_columns,
+        num_target_column,
     ]
-
     return prots.loc[prot_idx, final_cols]
 
 
@@ -279,7 +297,7 @@ def verify_match(peptides, target_column, protein_column, proteins):
             )
 
         LOGGER.warning(
-            "%i out of %i peptides could not be mapped."
+            "%i out of %i peptides could not be mapped. "
             "Check your digest settings.",
             shared_unmatched,
             len(peptides),
@@ -297,7 +315,7 @@ def verify_match(peptides, target_column, protein_column, proteins):
 
     peptides = peptides.loc[~unmatched, :].copy()
     peptides["decoy"] = (
-        peptides["mokapot protein group"]
+        peptides[protein_column]
         .str.split(",", expand=True)[0]
         .map(lambda x: proteins.protein_map.get(x, x))
     )

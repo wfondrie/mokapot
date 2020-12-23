@@ -143,8 +143,8 @@ def crosslink_tdc(scores, num_targets, desc=True):
     one_decoy = (num_targets == 1).astype(int).cumsum()
     two_decoy = (num_targets == 0).astype(int).cumsum()
 
-    numerator = one_decoy - two_decoy
-    numerator[numerator <= 0] = 1
+    numerator = one_decoy - 2 * two_decoy + 1
+    numerator[numerator < 1] = 1
 
     fdr = np.divide(
         numerator,
