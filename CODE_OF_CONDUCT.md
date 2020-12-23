@@ -1,1 +1,1 @@
-See https://mokapot.readthdocs.io/en/latest/code_of_conduct.html
+See https://mokapot.readthedocs.io/en/latest/code_of_conduct.html
