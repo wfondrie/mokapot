@@ -38,6 +38,7 @@ setuptools.setup(
     use_scm_version=True,
     setup_requires=["setuptools-scm"],
     extras_require={
+        "qranker": ["pytorch>=1.7.1", "skorch>=0.9.1"],
         "docs": [
             "numpydoc>=1.0.0",
             "sphinx-argparse>=0.2.5",
