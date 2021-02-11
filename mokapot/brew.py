@@ -131,11 +131,15 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     # Here, f[0] is the name of the best feature, and f[3] is a boolean
     if feat_total > pred_total:
         using_best_feat = True
-        scores = [
-            p.data[f[0]].values * int(f[3]) for p, f in zip(psms, best_feats)
-        ]
+        scores = []
+        descs = []
+        for dat, (feat, _, _, desc) in zip(psms, best_feats):
+            scores.append(dat.data[feat].values)
+            descs.append(desc)
+
     else:
         using_best_feat = False
+        descs = [True] * len(psms)
 
     if using_best_feat:
         logging.warning(
@@ -152,8 +156,8 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
 
     LOGGER.info("")
     res = [
-        p.assign_confidence(s, eval_fdr=test_fdr, desc=True)
-        for p, s in zip(psms, scores)
+        p.assign_confidence(s, eval_fdr=test_fdr, desc=d)
+        for p, s, d in zip(psms, scores, descs)
     ]
 
     if len(res) == 1:

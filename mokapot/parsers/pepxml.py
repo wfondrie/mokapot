@@ -87,7 +87,7 @@ def read_pepxml(
 
     nonfeat_cols += exclude_features
     feat_cols = [c for c in psms.columns if c not in nonfeat_cols]
-    psms = psms.apply(_log_pvalues, features=feat_cols)
+    psms = psms.apply(_log_features, features=feat_cols)
 
     if to_df:
         return psms
@@ -122,7 +122,7 @@ def _parse_pepxml(pepxml_file, decoy_prefix):
         A :py:class:`pandas.DataFrame` containing the information about each
         PSM.
     """
-
+    LOGGER.info("Reading %s...", pepxml_file)
     parser = etree.iterparse(str(pepxml_file), tag="{*}spectrum_query")
     parse_fun = partial(_parse_spectrum, decoy_prefix=decoy_prefix)
     psms = map(parse_fun, parser)
@@ -201,14 +201,14 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
             if not psm["label"]:
                 psm["label"] = not psm["proteins"][-1].startswith(decoy_prefix)
         else:
-            psm[element.get("name")] = float(element.get("value"))
+            psm[element.get("name")] = element.get("value")
 
     psm["proteins"] = "\t".join(psm["proteins"])
     return psm
 
 
-def _log_pvalues(col, features):
-    """Log-transform columns that are p-values.
+def _log_features(col, features):
+    """Log-transform columns that are p-values or E-values.
 
     This function tries to detect feature columns that are p-values using a
     simple heuristic. If the column is a p-value, then it returns the -log (base
@@ -231,14 +231,43 @@ def _log_pvalues(col, features):
     if col.name not in features:
         return col
 
-    # A simple heuristic to find p-value features:
-    # p-values are between 0 and 1
-    if col.max() <= 1 and col.min() >= 0:
+    col = col.astype(str).str.lower()
+
+    # Detect columns written in scientific notation and log them:
+    # This is specifically needed to preserve precision.
+    if col.str.contains("e").any() and (col.astype(float) >= 0).all():
+        split = col.str.split("e", expand=True)
+        root = split.loc[:, 0]
+        root = root.astype(float)
+        power = split.loc[:, 1]
+        power[pd.isna(power)] = "0"
+        power = power.astype(int)
+
+        zero_idx = root == 0
+        root[zero_idx] = 1
+        power[zero_idx] = power[~zero_idx].min()
+        diff = power.max() - power.min()
+        if abs(diff) >= 4:
+            LOGGER.info("  - log-transformed the '%s' feature.", col.name)
+            return np.log10(root) + power
+        else:
+            return col.astype(float)
+
+    # For other columns:
+    col = col.astype(float)
+
+    # A simple heuristic to find p-value / E-value features:
+    # Non-negative:
+    if col.min() >= 0:
         # Make sure this isn't a binary column:
-        if ((col < 1) & (col > 0)).any():
-            # Only log if values span >3 orders of magnitude:
-            col[col == 0] = np.finfo(col.dtype).tiny
-            if col.max() / col.min() >= 100:
+        if not np.array_equal(col.values, col.values.astype(bool)):
+            # Only log if values span >3 orders of magnitude,
+            # excluding values that are exactly zero:
+            zero_idx = col == 0
+            col_min = col[~zero_idx].min()
+            if col.max() / col_min >= 10000:
+                col[zero_idx] = col_min / 10
+                LOGGER.info("  - log-transformed the '%s' feature.", col.name)
                 return -np.log10(col)
 
     return col
