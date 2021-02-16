@@ -137,6 +137,22 @@ class PsmDataset(ABC):
         else:
             self._feature_columns = utils.tuplize(feature_columns)
 
+        # Check that features don't have missing values:
+        na_mask = self.features.isna().any(axis=0)
+        if na_mask.any():
+            na_idx = np.where(na_mask)[0]
+            keep_idx = np.where(~na_mask)[0]
+            LOGGER.warning(
+                "Missing values detected in the following features:"
+            )
+            for col in [self._feature_columns[i] for i in na_idx]:
+                LOGGER.warning("  - %s", col)
+
+            LOGGER.warning("Dropping features with missing values...")
+            self._feature_columns = tuple(
+                [self._feature_columns[i] for i in keep_idx]
+            )
+
         LOGGER.info("Using %i features:", len(self._feature_columns))
         for i, feat in enumerate(self._feature_columns):
             LOGGER.info("  (%i)\t%s", i + 1, feat)
