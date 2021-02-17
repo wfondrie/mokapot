@@ -12,6 +12,5 @@
   due to a typo.
 - Deprecation warnings from Pandas about the `regex` argument.
 
-
 ### Changed  
 - Refactored and added many new unit and system tests.
