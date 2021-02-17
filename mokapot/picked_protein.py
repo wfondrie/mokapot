@@ -43,16 +43,16 @@ def picked_protein(
     # Strip modifications and flanking AA's from peptide sequences.
     prots["stripped sequence"] = (
         prots["best peptide"]
-        .str.replace(r"[\[\(].*?[\]\)]", "")
-        .str.replace(r"^.*?\.", "")
-        .str.replace(r"\..*?$", "")
+        .str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
+        .str.replace(r"^.*?\.", "", regex=True)
+        .str.replace(r"\..*?$", "", regex=True)
     )
 
     # Sometimes folks use lowercase letters for the termini or mods:
     if all(prots["stripped sequence"].str.islower()):
         seqs = prots["stripped sequence"].upper()
     else:
-        seqs = prots["stripped sequence"].str.replace(r"[a-z]", "")
+        seqs = prots["stripped sequence"].str.replace(r"[a-z]", "", regex=True)
 
     prots["stripped sequence"] = seqs
 
