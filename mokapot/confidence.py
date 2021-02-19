@@ -128,9 +128,13 @@ class GroupedConfidence:
     def __getattr__(self, attr):
         """Make groups accessible easily"""
         try:
-            return self.grouped_confidence_estimates[attr]
+            return self.group_confidence_estimates[attr]
         except KeyError:
             raise AttributeError
+
+    def __len__(self):
+        """Report the number of groups"""
+        return len(self.group_confidence_estimates)
 
 
 class Confidence:
