@@ -186,4 +186,5 @@ question, someone else has a similar one.
    cli.rst
    FAQ <faq.rst>
    Contributing <contributing.rst>
-   Code of Conduct <code_of_conduct.md>
+   Code of Conduct <CODE_OF_CONDUCT.md>
+   Changelog <CHANGELOG.md>
