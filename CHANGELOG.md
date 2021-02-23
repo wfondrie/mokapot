@@ -3,7 +3,7 @@
 ## [Unreleased]  
 ### Added  
 - Support for parsing PSMs from PepXML input files.
-- A changelog
+- This changelog.
 
 ### Fixed  
 - When the learned model was worse than the best feature and the lower scores
@@ -14,3 +14,4 @@
 
 ### Changed  
 - Refactored and added many new unit and system tests.
+- New pull-requests must now improve or maintain test coverage.
