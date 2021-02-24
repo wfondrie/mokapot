@@ -82,6 +82,8 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     test_idx = [p._split(folds) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
 
+    print(train_sets)
+
     # Create args for map:
     map_args = [
         _fit_model,
@@ -90,11 +92,13 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         range(folds),
     ]
 
-    # Train models in parallel
+    # Train models optionally in parallel
     with ProcessPoolExecutor(max_workers=max_workers) as prc:
         if max_workers == 1:
             map_fun = map
         else:
+            map_args[1] = list(map_args[1])
+            map_args[3] = list(map_args[3])
             map_fun = prc.map
 
         models = list(map_fun(*map_args))
@@ -119,7 +123,6 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
     if not model.override:
-        LOGGER.info("")
         best_feats = [p._find_best_feature(test_fdr) for p in psms]
         feat_total = sum([best_feat[1] for best_feat in best_feats])
     else:
@@ -221,6 +224,12 @@ def _predict(dset, test_idx, models, test_fdr):
             )
         except AttributeError:
             scores.append(mod.predict(test_set))
+        except RuntimeError:
+            raise RuntimeError(
+                "Failed to calibrate scores between cross-validation folds, "
+                "because no target PSMs could be found below 'test_fdr'. Try "
+                "raising 'test_fdr'."
+            )
 
     rev_idx = np.argsort(sum(test_idx, [])).tolist()
     return np.concatenate(scores)[rev_idx]
@@ -248,6 +257,7 @@ def _fit_model(train_set, model, fold):
     LOGGER.info("=== Analyzing Fold %i ===", fold + 1)
     reset = False
     try:
+        print(f"Fold {fold}\n", train_set)
         model.fit(train_set)
     except RuntimeError as msg:
         if str(msg) != "Model performs worse after training.":

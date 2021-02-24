@@ -15,3 +15,4 @@
 ### Changed  
 - Refactored and added many new unit and system tests.
 - New pull-requests must now improve or maintain test coverage.
+- Improved error messages.
