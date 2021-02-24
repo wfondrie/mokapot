@@ -10,21 +10,6 @@ np.random.seed(42)
 
 
 @pytest.fixture
-def psms(psm_df_1000):
-    """A small LinearPsmDataset"""
-    df, _ = psm_df_1000
-    psms = mokapot.LinearPsmDataset(
-        psms=df,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        copy_data=True,
-    )
-    return psms
-
-
-@pytest.fixture
 def svm():
     """A simple Percolator model"""
     return PercolatorModel(train_fdr=0.05, max_iter=10)

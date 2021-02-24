@@ -507,7 +507,7 @@ def load_model(model_file):
         model.is_trained = True
 
     # Then try loading it with pickle:
-    except UnicodeDecodeError:
+    except KeyError:
         logging.info("Loading mokapot model.")
         with open(model_file, "rb") as mod_in:
             model = pickle.load(mod_in)
