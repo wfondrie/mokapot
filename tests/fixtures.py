@@ -4,6 +4,7 @@ This file contains fixtures that are used at multiple points in the tests.
 import pytest
 import numpy as np
 import pandas as pd
+from mokapot import LinearPsmDataset
 
 
 @pytest.fixture(scope="session")
@@ -53,6 +54,21 @@ def psm_df_1000(tmp_path):
         fasta_ref.write(fasta_data)
 
     return (pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)]), fasta)
+
+
+@pytest.fixture
+def psms(psm_df_1000):
+    """A small LinearPsmDataset"""
+    df, _ = psm_df_1000
+    psms = LinearPsmDataset(
+        psms=df,
+        target_column="target",
+        spectrum_columns="spectrum",
+        peptide_column="peptide",
+        feature_columns="score",
+        copy_data=True,
+    )
+    return psms
 
 
 def _make_fasta(

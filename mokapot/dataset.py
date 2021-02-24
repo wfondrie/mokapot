@@ -305,7 +305,13 @@ class PsmDataset(ABC):
             An array of calibrated scores.
         """
         labels = self._update_labels(scores, eval_fdr, desc)
-        target_score = np.min(scores[labels == 1])
+        pos = labels == 1
+        if not pos.sum():
+            raise RuntimeError(
+                "No target PSMs were below the 'eval_fdr' threshold."
+            )
+
+        target_score = np.min(scores[pos])
         decoy_score = np.median(scores[labels == -1])
 
         return (scores - target_score) / (target_score - decoy_score)
