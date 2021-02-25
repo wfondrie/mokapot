@@ -1,6 +1,8 @@
 """Test the pepxml parser"""
 import pytest
 import mokapot
+import numpy as np
+from lxml import etree
 
 
 @pytest.fixture
@@ -13,12 +15,42 @@ def small_pepxml(tmp_path):
     return out_file
 
 
-def test_parsing_success(small_pepxml):
+@pytest.fixture
+def not_pepxml(tmp_path):
+    """Create a file that is not a PepXML."""
+    out_file = str(tmp_path / "test.tsv")
+    with open(out_file, "w+") as out_ref:
+        out_ref.write(r"Blah\tblah\blah\nblah\tblah\blah\n")
+
+    return out_file
+
+
+def test_pepxml_success(small_pepxml):
     """Test that no errors occur"""
     mokapot.read_pepxml(small_pepxml, decoy_prefix="rev_")
     mokapot.read_pepxml(
         small_pepxml, open_modification_bin_size=0.01, decoy_prefix="rev_"
     )
+
+
+def test_pepxml2df(small_pepxml):
+    """Test that we can create a dataframe"""
+    single = mokapot.read_pepxml(small_pepxml, decoy_prefix="rev_", to_df=True)
+
+    print(single)
+    assert len(single) == 4
+    assert len(single["spectrum_id"].unique()) == 2
+    np.testing.assert_array_equal(single["charge_2"], np.array([1, 1, 1, 0]))
+    np.testing.assert_array_equal(single["charge_3"], np.array([0, 0, 0, 1]))
+
+
+def test_not_pepxml(not_pepxml):
+    """Test that parsing fails gracefully"""
+    try:
+        mokapot.read_pepxml(not_pepxml)
+    except ValueError as msg:
+        if not str(msg).endswith("PepXML file or is malformed."):
+            raise
 
 
 PEPXML_EXAMPLE = r"""<?xml version="1.0" encoding="UTF-8"?>
@@ -65,7 +97,7 @@ PEPXML_EXAMPLE = r"""<?xml version="1.0" encoding="UTF-8"?>
 </search_hit>
 </search_result>
 </spectrum_query>
-<spectrum_query start_scan="9" assumed_charge="2" spectrum="UM_F_50cm_2019_0420.9.9.2" end_scan="9" index="2" precursor_neutral_mass="822.5355" retention_time_sec="123.442">
+<spectrum_query start_scan="9" assumed_charge="3" spectrum="UM_F_50cm_2019_0420.9.9.2" end_scan="9" index="2" precursor_neutral_mass="822.5355" retention_time_sec="123.442">
 <search_result>
 <search_hit peptide="RPAPLLR" massdiff="1.0120" calc_neutral_pep_mass="821.5235" peptide_next_aa="V" num_missed_cleavages="0" num_tol_term="2" num_tot_proteins="1" tot_num_ions="12" hit_rank="1" num_matched_ions="5" protein="rev_sp|O00445|SYT5_HUMAN Synaptotagmin-5 OS=Homo sapiens OX=9606 GN=SYT5 PE=1 SV=2" peptide_prev_aa="K" is_rejected="0">
 <search_score name="hyperscore" value="9.293"/>
