@@ -16,6 +16,9 @@ def small_pepxml(tmp_path):
 def test_parsing_success(small_pepxml):
     """Test that no errors occur"""
     mokapot.read_pepxml(small_pepxml, decoy_prefix="rev_")
+    mokapot.read_pepxml(
+        small_pepxml, open_modification_bin_size=0.01, decoy_prefix="rev_"
+    )
 
 
 PEPXML_EXAMPLE = r"""<?xml version="1.0" encoding="UTF-8"?>
