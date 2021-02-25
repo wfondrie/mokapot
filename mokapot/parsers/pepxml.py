@@ -20,7 +20,7 @@ def read_pepxml(
     pepxml_files,
     decoy_prefix="decoy_",
     exclude_features=None,
-    modification_bin_size=None,
+    open_modification_bin_size=None,
     to_df=False,
 ):
     """Read PepXML files.
@@ -32,7 +32,7 @@ def read_pepxml(
     Specifically, mokapot will extract the search engine scores as a set of
     features (found under the :code:`search_scores` tag). Additionally, mokapot
     will add the peptide lengths, mass error, the number of enzymatic termini
-    and the number of missed cleavages are added as features.
+    and the number of missed cleavages as features.
 
     Parameters
     ----------
@@ -44,9 +44,12 @@ def read_pepxml(
     exclude_features : str or tuple of str, optional
         One or more features to exclude from the dataset. This is useful in the
         case that a search engine score may be biased again decoy PSMs/CSMs.
-    modification_bin_size : float, optional
+    open_modification_bin_size : float, optional
         If specificied, modification masses are binned according to the value.
-        This is most useful for open modification search results.
+        The binned mass difference is appended to the end of the peptide and
+        will be used to when grouping peptides for peptide-level confidence
+        estimation. Use this option for open modification search results. We
+        recommend 0.01 as a good starting point.
     to_df : bool, optional
         Return a :py:class:`pandas.DataFrame` instead of a
         :py:class:`~mokapot.dataset.LinearPsmDataset`.
@@ -74,11 +77,22 @@ def read_pepxml(
             "PeptideProphet; hence, they should not be analyzed with mokapot."
         )
 
-    # Calculate massdiff features
-    psms["exp_mass"] = psms["exp_mass"] / psms["charge"] + proton
-    psms["calc_mass"] = psms["calc_mass"] / psms["charge"] + proton
+    # For open modification searches:
     psms["mass_diff"] = psms["exp_mass"] - psms["calc_mass"]
-    psms["abs_mass_diff"] = psms["mass_diff"].abs()
+    if open_modification_bin_size is not None:
+        bins = np.arange(
+            psms["mass_diff"].min(),
+            psms["mass_diff"].max() + 1,
+            step=open_modification_bin_size,
+        )
+        bin_idx = np.digitize(psms["mass_diff"], bins)
+        mods = (bins[bin_idx] + (open_modification_bin_size / 2.0)).round(4)
+        psms["peptide"] = psms["peptide"] + "[" + mods.astype(str) + "]"
+
+    # Calculate massdiff features
+    exp_mz = psms["exp_mass"] / psms["charge"] + proton
+    calc_mz = psms["calc_mass"] / psms["charge"] + proton
+    psms["abs_mz_diff"] = (exp_mz - calc_mz).abs()
 
     # Log number of candidates:
     if "num_matched_peptides" in psms.columns:
