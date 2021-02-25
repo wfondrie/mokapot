@@ -161,7 +161,13 @@ def _parse_pepxml(pepxml_file, decoy_prefix):
     parser = etree.iterparse(str(pepxml_file), tag="{*}spectrum_query")
     parse_fun = partial(_parse_spectrum, decoy_prefix=decoy_prefix)
     psms = map(parse_fun, parser)
-    return pd.DataFrame.from_records(itertools.chain.from_iterable(psms))
+    try:
+        df = pd.DataFrame.from_records(itertools.chain.from_iterable(psms))
+    except etree.XMLSyntaxError:
+        raise ValueError(
+            f"{pepxml_file} is not a PepXML file or is malformed."
+        )
+    return df
 
 
 def _parse_spectrum(spectrum, decoy_prefix):
@@ -315,7 +321,7 @@ def _log_features(col, features):
     if col.min() >= 0:
         # Make sure this isn't a binary column:
         if not np.array_equal(col.values, col.values.astype(bool)):
-            # Only log if values span >3 orders of magnitude,
+            # Only log if values span >4 orders of magnitude,
             # excluding values that are exactly zero:
             zero_idx = col == 0
             col_min = col[~zero_idx].min()
