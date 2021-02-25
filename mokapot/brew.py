@@ -82,8 +82,6 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     test_idx = [p._split(folds) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
 
-    print(train_sets)
-
     # Create args for map:
     map_args = [
         _fit_model,
@@ -257,7 +255,6 @@ def _fit_model(train_set, model, fold):
     LOGGER.info("=== Analyzing Fold %i ===", fold + 1)
     reset = False
     try:
-        print(f"Fold {fold}\n", train_set)
         model.fit(train_set)
     except RuntimeError as msg:
         if str(msg) != "Model performs worse after training.":
