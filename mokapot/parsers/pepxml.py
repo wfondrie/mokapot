@@ -82,10 +82,10 @@ def read_pepxml(
     if open_modification_bin_size is not None:
         bins = np.arange(
             psms["mass_diff"].min(),
-            psms["mass_diff"].max() + 1,
+            psms["mass_diff"].max() + open_modification_bin_size,
             step=open_modification_bin_size,
         )
-        bin_idx = np.digitize(psms["mass_diff"], bins)
+        bin_idx = np.digitize(psms["mass_diff"], bins) - 1
         mods = (bins[bin_idx] + (open_modification_bin_size / 2.0)).round(4)
         psms["peptide"] = psms["peptide"] + "[" + mods.astype(str) + "]"
 
@@ -221,7 +221,7 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
     psm = spec_info.copy()
     psm["calc_mass"] = float(psm_info.get("calc_neutral_pep_mass"))
     psm["peptide"] = psm_info.get("peptide")
-    psm["proteins"] = [psm_info.get("protein")]
+    psm["proteins"] = [psm_info.get("protein").split(" ")[0]]
     psm["label"] = not psm["proteins"][0].startswith(decoy_prefix)
 
     # Begin features:
@@ -257,7 +257,7 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
             psm["peptide"] = mod_pep
 
         elif "alternative_protein" in element.tag:
-            psm["proteins"].append(element.get("protein"))
+            psm["proteins"].append(element.get("protein").split(" ")[0])
             if not psm["label"]:
                 psm["label"] = not psm["proteins"][-1].startswith(decoy_prefix)
 

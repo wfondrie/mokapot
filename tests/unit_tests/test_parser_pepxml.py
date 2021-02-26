@@ -43,6 +43,29 @@ def test_pepxml2df(small_pepxml):
     np.testing.assert_array_equal(single["charge_2"], np.array([1, 1, 1, 0]))
     np.testing.assert_array_equal(single["charge_3"], np.array([0, 0, 0, 1]))
 
+    multiple = mokapot.read_pepxml(
+        [small_pepxml, small_pepxml], decoy_prefix="rev_", to_df=True
+    )
+
+    assert len(multiple) == 8
+
+
+def test_pepxml_oms_bin_size(small_pepxml):
+    """Test that bins are working"""
+    psms = mokapot.read_pepxml(
+        small_pepxml,
+        decoy_prefix="rev_",
+        to_df=True,
+        open_modification_bin_size=0.5,
+    )
+    mass = (
+        psms["peptide"]
+        .str.replace(r"^.*\[", "", regex=True)
+        .str.replace(r"\]", "", regex=True)
+        .astype(float)
+    )
+    assert ((mass - psms["mass_diff"]) <= 0.25).all()
+
 
 def test_not_pepxml(not_pepxml):
     """Test that parsing fails gracefully"""
