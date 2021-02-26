@@ -1,17 +1,18 @@
 """
 This is the command line interface for mokapot
 """
-import os
 import sys
 import time
 import logging
 import datetime
+from functools import partial
+from pathlib import Path
 
 import numpy as np
 
-from mokapot import __version__
+from . import __version__
 from .config import Config
-from .parsers import read_pin
+from .parsers import read_pin, read_pepxml
 from .brew import brew
 from .model import PercolatorModel
 from .proteins import FastaProteins
@@ -41,7 +42,7 @@ def main():
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
     logging.info(
-        "Department of Genome Sciences at the University of " "Washington."
+        "Department of Genome Sciences at the University of Washington."
     )
     logging.info("Command issued:")
     logging.info("%s", " ".join(sys.argv))
@@ -52,13 +53,12 @@ def main():
     np.random.seed(config.seed)
 
     # Parse Datasets
-    if config.aggregate or len(config.pin_files) == 1:
-        datasets = read_pin(config.pin_files)
+    parse = get_parser(config)
+    if config.aggregate or len(config.psm_files) == 1:
+        datasets = parse(config.psm_files)
     else:
-        datasets = [read_pin(f) for f in config.pin_files]
-        prefixes = [
-            os.path.splitext(os.path.basename(f))[0] for f in config.pin_files
-        ]
+        datasets = [parse(f) for f in config.psm_files]
+        prefixes = [Path(f).stem for f in config.psm_files]
 
     # Parse FASTA, if required:
     if config.proteins is not None:
@@ -74,7 +74,7 @@ def main():
             decoy_prefix=config.decoy_prefix,
         )
 
-        if config.aggregate or len(config.pin_files) == 1:
+        if config.aggregate or len(config.psm_files) == 1:
             datasets.add_proteins(proteins)
         else:
             for dataset in datasets:
@@ -95,7 +95,7 @@ def main():
     )
 
     if config.dest_dir is not None:
-        os.makedirs(config.dest_dir, exist_ok=True)
+        Path(config.dest_dir).mkdir(exist_ok=True)
 
     if config.save_models:
         logging.info("Saving models...")
@@ -106,13 +106,13 @@ def main():
                 out_file = ".".join([config.file_root, out_file])
 
             if config.dest_dir is not None:
-                out_file = os.path.join(config.dest_dir, out_file)
+                out_file = Path(config.dest_dir, out_file)
 
-            trained_model.save(out_file)
+            trained_model.save(str(out_file))
 
     # Determine how to write the results:
     logging.info("Writing results...")
-    if config.aggregate or len(config.pin_files) == 1:
+    if config.aggregate or len(config.psm_files) == 1:
         psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)
     else:
         for dat, prefix in zip(psms, prefixes):
@@ -127,6 +127,46 @@ def main():
     logging.info("")
     logging.info("=== DONE! ===")
     logging.info("mokapot analysis completed in %s", total_time)
+
+
+def get_parser(config):
+    """Figure out which parser to use.
+
+    Note that this just looks at file extensions, but in the future it might be
+    good to check the contents of the file. I'm just not sure how to do this
+    in an efficient way, particularly for gzipped files.
+
+    Parameters
+    ----------
+    config : argparse object
+         The configuration details.
+
+    Returns
+    -------
+    callable
+         Returns the correct parser for the files.
+
+    """
+    pepxml_ext = {".pep.xml", ".pepxml", ".xml"}
+    num_pepxml = 0
+    for psm_file in config.psm_files:
+        ext = Path(psm_file).suffixes
+        if len(ext) > 2:
+            ext = "".join(ext[-2:])
+        else:
+            ext = "".join(ext)
+
+        if ext.lower() in pepxml_ext:
+            num_pepxml += 1
+
+    if num_pepxml == len(config.psm_files):
+        return partial(
+            read_pepxml,
+            open_modification_bin_size=config.open_modification_bin_size,
+            decoy_prefix=config.decoy_prefix,
+        )
+
+    return read_pin
 
 
 if __name__ == "__main__":
