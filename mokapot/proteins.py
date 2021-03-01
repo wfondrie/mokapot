@@ -426,9 +426,13 @@ def _parse_protein(raw_protein):
     sequence : str
         The protein sequence.
     """
-    entry = raw_protein.split("\n", 1)
+    entry = raw_protein.splitlines()
     prot = entry[0].split(" ")[0]
-    seq = entry[1].replace("\n", "")
+    if len(entry) == 1:
+        logging.warning("No sequence was detected for %s.", prot)
+        return prot, ""
+
+    seq = "".join(entry[1])
     return prot, seq
 
 
