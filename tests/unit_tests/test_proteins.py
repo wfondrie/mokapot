@@ -1,6 +1,29 @@
 """Test that we can parse a FASTA file correctly"""
 import pytest
-from mokapot import FastaProteins
+import mokapot
+from mokapot import FastaProteins, digest, make_decoys
+
+
+@pytest.fixture
+def protein():
+    """A tryptic protein and its peptides with 2 missed cleavages"""
+    prot = "AAAAAKBBBBBRPCCCCCKRDDDDKEEEEEE"
+    peps = {
+        "AAAAAK",
+        "AAAAAKBBBBBR",
+        "AAAAAKBBBBBRPCCCCCK",
+        "BBBBBR",
+        "BBBBBRPCCCCCK",
+        "BBBBBRPCCCCCKR",
+        "PCCCCCK",
+        "PCCCCCKR",
+        "PCCCCCKRDDDDK",
+        "RDDDDK",
+        "RDDDDKEEEEEE",
+        "DDDDKEEEEEE",
+        "EEEEEE",
+    }
+    return prot, peps
 
 
 @pytest.fixture
@@ -164,3 +187,60 @@ def test_decoy_fasta(target_fasta, decoy_fasta):
         "wf|target4": "decoy_wf|target4",
     }
     assert prot.protein_map == protein_map
+
+
+def test_mc_digest(protein):
+    """Test a tryptic digest with missed cleavages"""
+    prot, peps = protein
+    digested = digest(prot, missed_cleavages=2)
+    assert digested == peps
+
+
+def test_no_mc_digest(protein):
+    "Test a tryptic digest without missed cleavages"
+    prot, peps = protein
+    no_mc = []
+    for pep in peps:
+        seq = pep[:-1]
+        if ("K" not in seq) and ("R" not in seq):
+            no_mc.append(pep)
+
+    peps = set(no_mc)
+    digested = digest(prot, missed_cleavages=0)
+    assert digested == peps
+
+
+def test_short_digest(protein):
+    """Test a tryptic digest allowing for shorter peptides"""
+    prot, peps = protein
+    peps.add("DDDDK")
+    digested = digest(prot, missed_cleavages=2, min_length=2)
+    assert digested == peps
+
+
+def test_psup_digest(protein):
+    """Test a tryptic digest with proline suppression."""
+    prot, peps = protein
+    no_p = []
+    for pep in peps:
+        if not pep.endswith("BR") and not pep.startswith("P"):
+            no_p.append(pep)
+
+    no_p += ["BBBBBRPCCCCCKRDDDDK", "AAAAAKBBBBBRPCCCCCKR"]
+    peps = set(no_p)
+    digested = digest(prot, enzyme_regex="[KR](?!P)", missed_cleavages=2)
+    assert digested == peps
+
+
+def test_make_decoys(target_fasta, tmp_path):
+    """test the make_decoys() function"""
+    concat_file = str(tmp_path / "concat.fasta")
+    make_decoys(target_fasta, concat_file)
+    before = len(mokapot.proteins._parse_fasta_files(target_fasta))
+    after = len(mokapot.proteins._parse_fasta_files(concat_file))
+    assert 2 * before == after
+
+    sep_file = str(tmp_path / "decoy.fasta")
+    make_decoys(target_fasta, sep_file, concatenate=False)
+    after = len(mokapot.proteins._parse_fasta_files(sep_file))
+    assert before == after
