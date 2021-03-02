@@ -13,6 +13,8 @@
 - Easy access to grouped confidence estimates in the Python API were not working
   due to a typo.  
 - Deprecation warnings from Pandas about the `regex` argument.  
+- Sometimes peptides were removed as shared incorrectly when part of a protein
+  group.  
 
 ### Changed  
 - Refactored and added many new unit and system tests.
