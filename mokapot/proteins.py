@@ -433,7 +433,6 @@ def _parse_protein(raw_protein):
         return prot, ""
 
     seq = "".join(entry[1:])
-    print(seq)
     return prot, seq
 
 
