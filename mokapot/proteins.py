@@ -432,7 +432,8 @@ def _parse_protein(raw_protein):
         logging.warning("No sequence was detected for %s.", prot)
         return prot, ""
 
-    seq = "".join(entry[1])
+    seq = "".join(entry[1:])
+    print(seq)
     return prot, seq
 
 
