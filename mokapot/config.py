@@ -34,9 +34,9 @@ class Config:
 def _parser():
     """The parser"""
     desc = (
-        f"mokapot version {__version__}\n"
+        f"mokapot version {__version__}.\n"
         "Written by William E. Fondrie (wfondrie@uw.edu) in the \n"
-        "Department of Genome Sciences at the University of Washington\n\n"
+        "Department of Genome Sciences at the University of Washington.\n\n"
         "Official code website: https://github.com/wfondrie/mokapot\n\n"
         "More documentation and examples: https://mokapot.readthedocs.io"
     )
@@ -145,7 +145,7 @@ def _parser():
         action="store_true",
         help=(
             "Was a semi-enzymatic digest used to assign PSMs? If"
-            "'so, the protein database will likely contain "
+            " so, the protein database will likely contain "
             "shared peptides and yield unhelpful protein-level confidence "
             "estimates. We do not recommend using this option."
         ),
