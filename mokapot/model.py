@@ -1,17 +1,17 @@
-"""
-mokapot implements an algorithm for training machine learning models to
-distinguish high-scoring target peptide-spectrum matches (PSMs) from
-decoy PSMs using an iterative procedure. It is the :py:class:`Model`
-class that contains this logic. A :py:class:`Model` instance can be
-created from any object with a scikit-learn estimator interface,
-allowing a wide variety of models to be used. Once initialized,
-the :py:meth:`Model.fit` method trains the underyling classifier
-using :doc:`a collection of PSMs <dataset>` with this iterative
-approach.
+"""mokapot implements an algorithm for training machine learning models to
+distinguish high-scoring target peptide-spectrum matches (PSMs) from decoy PSMs
+using an iterative procedure. It is the :py:class:`Model` class that contains
+this logic. A :py:class:`Model` instance can be created from any object with a
+`scikit-learn estimator interface
+<https://scikit-learn.org/stable/developers/develop.html>`_, allowing a wide
+variety of models to be used. Once initialized, the :py:meth:`Model.fit` method
+trains the underyling classifier using :doc:`a collection of PSMs <dataset>`
+with this iterative approach.
 
 Additional subclasses of the :py:class:`Model` class are available for
 typical use cases. For example, use :py:class:`PercolatorModel` if you
 want to emulate the behavior of Percolator.
+
 """
 import copy
 import logging
@@ -186,8 +186,8 @@ class Model:
         str
             The output file name.
 
-        Note
-        ----
+        Notes
+        -----
         Because classes may change between mokapot and scikit-learn
         versions, a saved model may not work when either is changed
         from the version that created the model.
@@ -465,8 +465,8 @@ def save_model(model, out_file):
     str
         The output file name.
 
-    Note
-    ----
+    Notes
+    -----
     Because classes may change between mokapot and scikit-learn versions,
     a saved model may not work when either is changed from the version
     that created the model.
@@ -478,7 +478,7 @@ def load_model(model_file):
     """
     Load a saved model for mokapot.
 
-    The saved model can either be a saved :py:class:`mokapot.model.Model`
+    The saved model can either be a saved :py:class:`~mokapot.model.Model`
     object or the output model weights from Percolator. In Percolator,
     these can be obtained using the :code:`--weights` argument.
 
@@ -491,6 +491,11 @@ def load_model(model_file):
     -------
     mokapot.model.Model
         The loaded :py:class:`mokapot.model.Model` object.
+
+    Warning
+    -------
+    Unpickling data in Python is unsafe. Make sure that the model is from
+    a source you trust.
     """
     # Try a percolator model first:
     try:

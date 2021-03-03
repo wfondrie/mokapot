@@ -45,7 +45,7 @@ def read_pepxml(
         One or more features to exclude from the dataset. This is useful in the
         case that a search engine score may be biased again decoy PSMs/CSMs.
     open_modification_bin_size : float, optional
-        If specificied, modification masses are binned according to the value.
+        If specified, modification masses are binned according to the value.
         The binned mass difference is appended to the end of the peptide and
         will be used when grouping peptides for peptide-level confidence
         estimation. Use this option for open modification search results. We
