@@ -27,9 +27,10 @@ For more information, check out our
 ## Citing  
 If you use mokapot in your work, please cite:  
 
-> Fondrie, W. E. & Noble, W. S. mokapot: Fast and flexible semi-supervised
-> learning for peptide detection. *bioRxiv* (2020)
-> doi:10.1101/2020.12.01.407270.
+> Fondrie W. E. & Noble W. S. mokapot: Fast and Flexible Semisupervised
+> Learning for Peptide Detection. J Proteome Res (2021) doi:
+> 10.1021/acs.jproteome.0c01010. PMID: 33596079.
+> [Link](https://doi.org/10.1021/acs.jproteome.0c01010)
 
 ## Installation  
 
@@ -76,6 +77,3 @@ interpreter and affords greater flexibility:
 
 Check out our [documentation](https://mokapot.readthedocs.io) for more details
 and examples of mokapot in action.
-
-
-[![Built with Spacemacs](https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg)](http://spacemacs.org)  

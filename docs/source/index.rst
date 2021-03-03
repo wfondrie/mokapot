@@ -30,10 +30,10 @@ Citing
 If you use mokapot in your work, please cite:
 
 .. epigraph::
-   Fondrie, W. E. & Noble, W. S. mokapot: Fast and flexible semi-supervised
-   learning for peptide detection. bioRxiv 2020.12.01.407270 (2020)
-   doi:10.1101/2020.12.01.407270. `[Link]
-   <https://www.biorxiv.org/content/10.1101/2020.12.01.407270v2>`_
+   Fondrie W. E. & Noble W. S. mokapot: Fast and Flexible Semisupervised
+   Learning for Peptide Detection. J Proteome Res (2021) doi:
+   10.1021/acs.jproteome.0c01010. PMID: 33596079. `[Link]
+   <https://doi.org/10.1021/acs.jproteome.0c01010>`_
 
 
 Introduction
