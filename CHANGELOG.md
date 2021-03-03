@@ -1,6 +1,6 @@
 # Changelog for mokapot  
 
-## [Unreleased]  
+## [0.6.0] - 2021-03-03  
 ### Added  
 - Support for parsing PSMs from PepXML input files.
 - This changelog.

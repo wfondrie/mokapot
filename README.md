@@ -57,7 +57,8 @@ $ pip3 install git+git://github.com/wfondrie/mokapot
 Before you can use mokapot, you need PSMs assigned by a search engine available
 in the [Percolator tab-delimited file
 format](https://github.com/percolator/percolator/wiki/Interface#tab-delimited-file-format)
-(often referred to as the Percolator input, or "PIN", file format). 
+(often referred to as the Percolator input, or "PIN", file format) or as a 
+PepXML file. 
 
 Simple mokapot analyses can be performed at the command line:
 
