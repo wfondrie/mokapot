@@ -467,7 +467,7 @@ class LinearPsmDataset(PsmDataset):
 
     @property
     def targets(self):
-        """A :py:class`numpy.ndarray` indicating whether each PSM is a target
+        """A :py:class:`numpy.ndarray` indicating whether each PSM is a target
         sequence.
         """
         return self.data[self._target_column].values

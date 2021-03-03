@@ -209,7 +209,7 @@ class Model:
         Returns
         -------
         numpy.ndarray
-            A vector containing the score for each PSM.
+            A :py:class:`numpy.ndarray` containing the score for each PSM.
         """
         if not self.is_trained:
             raise NotFittedError("This model is untrained. Run fit() first.")
@@ -492,10 +492,10 @@ def load_model(model_file):
     mokapot.model.Model
         The loaded :py:class:`mokapot.model.Model` object.
 
-    Warning
-    -------
+    Warnings
+    --------
     Unpickling data in Python is unsafe. Make sure that the model is from
-    a source you trust.
+    a source that you trust.
     """
     # Try a percolator model first:
     try:
@@ -687,7 +687,7 @@ def _get_scores(model, feat):
     Returns
     -------
     np.ndarray
-        The score for each PSM in feat.
+        A :py:class:`numpy.ndarray` containing the score for each PSM in feat.
     """
     try:
         return model.decision_function(feat)
