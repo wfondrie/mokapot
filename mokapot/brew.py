@@ -90,11 +90,13 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         range(folds),
     ]
 
-    # Train models in parallel
+    # Train models optionally in parallel
     with ProcessPoolExecutor(max_workers=max_workers) as prc:
         if max_workers == 1:
             map_fun = map
         else:
+            map_args[1] = list(map_args[1])
+            map_args[3] = list(map_args[3])
             map_fun = prc.map
 
         models = list(map_fun(*map_args))
@@ -119,7 +121,6 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
     if not model.override:
-        LOGGER.info("")
         best_feats = [p._find_best_feature(test_fdr) for p in psms]
         feat_total = sum([best_feat[1] for best_feat in best_feats])
     else:
@@ -131,11 +132,15 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     # Here, f[0] is the name of the best feature, and f[3] is a boolean
     if feat_total > pred_total:
         using_best_feat = True
-        scores = [
-            p.data[f[0]].values * int(f[3]) for p, f in zip(psms, best_feats)
-        ]
+        scores = []
+        descs = []
+        for dat, (feat, _, _, desc) in zip(psms, best_feats):
+            scores.append(dat.data[feat].values)
+            descs.append(desc)
+
     else:
         using_best_feat = False
+        descs = [True] * len(psms)
 
     if using_best_feat:
         logging.warning(
@@ -152,8 +157,8 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
 
     LOGGER.info("")
     res = [
-        p.assign_confidence(s, eval_fdr=test_fdr, desc=True)
-        for p, s in zip(psms, scores)
+        p.assign_confidence(s, eval_fdr=test_fdr, desc=d)
+        for p, s, d in zip(psms, scores, descs)
     ]
 
     if len(res) == 1:
@@ -217,6 +222,12 @@ def _predict(dset, test_idx, models, test_fdr):
             )
         except AttributeError:
             scores.append(mod.predict(test_set))
+        except RuntimeError:
+            raise RuntimeError(
+                "Failed to calibrate scores between cross-validation folds, "
+                "because no target PSMs could be found below 'test_fdr'. Try "
+                "raising 'test_fdr'."
+            )
 
     rev_idx = np.argsort(sum(test_idx, [])).tolist()
     return np.concatenate(scores)[rev_idx]

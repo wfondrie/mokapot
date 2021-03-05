@@ -34,6 +34,7 @@ setuptools.setup(
         "numba>=0.48.0",
         "triqler>=0.3.0",
         "matplotlib>=3.1.3",
+        "lxml>=4.6.2",
     ],
     use_scm_version=True,
     setup_requires=["setuptools-scm"],

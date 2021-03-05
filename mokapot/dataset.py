@@ -1,19 +1,20 @@
-"""
-The :py:class:`LinearPsmDataset` and :py:class:`CrossLinkedPsmDataset`
-classes are used to define collections peptide-spectrum matches. The
-:py:class:`LinearPsmDataset` class is suitable for most types of
-data-dependent acquisition proteomics experiments.
+"""The :py:class:`LinearPsmDataset` classe is used to define a collection
+peptide-spectrum matches. The :py:class:`LinearPsmDataset` class is suitable for
+most types of data-dependent acquisition proteomics experiments.
 
-Although either class can be constructed from a
-:py:class:`pandas.DataFrame`, it is often easier to load the PSMs directly
-from a file in the `Percolator tab-delimited format
+Although the class can be constructed from a :py:class:`pandas.DataFrame`, it
+is often easier to load the PSMs directly from a file in the `Percolator
+tab-delimited format
 <https://github.com/percolator/percolator/wiki/Interface#tab-delimited-file-format>`_
 (also known as the Percolator input format, or "PIN") using the
-:py:func:`mokapot.read_pin` function.
+:py:func:`~mokapot.read_pin()` function or from a PepXML file using the
+:py:func:`~mokapot.read_pepxml()` function. If protein-level confidence
+estimates are desired, make sure to use the
+:py:meth:`~LinearPsmDataset.add_proteins()` method.
 
-Instances of these classes are required to train a
-:py:class:`mokapot.model.Model` object, use the :py:func:`mokapot.brew`
-function, or :doc:`assign confidence estimates <confidence>`.
+One of more instance of this class are required to use the
+:py:func:`~mokapot.brew()` function.
+
 """
 import logging
 from abc import ABC, abstractmethod
@@ -136,6 +137,22 @@ class PsmDataset(ABC):
         else:
             self._feature_columns = utils.tuplize(feature_columns)
 
+        # Check that features don't have missing values:
+        na_mask = self.features.isna().any(axis=0)
+        if na_mask.any():
+            na_idx = np.where(na_mask)[0]
+            keep_idx = np.where(~na_mask)[0]
+            LOGGER.warning(
+                "Missing values detected in the following features:"
+            )
+            for col in [self._feature_columns[i] for i in na_idx]:
+                LOGGER.warning("  - %s", col)
+
+            LOGGER.warning("Dropping features with missing values...")
+            self._feature_columns = tuple(
+                [self._feature_columns[i] for i in keep_idx]
+            )
+
         LOGGER.info("Using %i features:", len(self._feature_columns))
         for i, feat in enumerate(self._feature_columns):
             LOGGER.info("  (%i)\t%s", i + 1, feat)
@@ -194,8 +211,7 @@ class PsmDataset(ABC):
         return self._proteins is not None
 
     def add_proteins(self, proteins, **kwargs):
-        """
-        Add protein information to the dataset.
+        """Add protein information to the dataset.
 
         Protein sequence information is required to compute protein-level
         confidence estimates using the picked-protein approach.
@@ -203,14 +219,14 @@ class PsmDataset(ABC):
         Parameters
         ----------
         proteins : a FastaProteins object or str
-            The :py:class:`mokapot.FastaProteins` object defines the mapping
-            of peptides to proteins and the mapping of decoy proteins to their
-            corresponding target proteins. Alternatively, a string specifying
-            a FASTA file can be specified which will be parsed to define
-            these mappings.
+            The :py:class:`mokapot.proteins.FastaProteins` object defines the
+            mapping of peptides to proteins and the mapping of decoy proteins
+            to their corresponding target proteins. Alternatively, a string
+            specifying a FASTA file can be specified which will be parsed to
+            define these mappings.
         **kwargs : dict
-            If `proteins` is a string, then **kwargs are keyword arguments
-            passed to the :py:class:`mokapot.FastaProteins` constructor.
+            Keyword arguments to be passed to the
+            :py:class:`mokapot.proteins.FastaProteins` constructor.
         """
         if not isinstance(proteins, FastaProteins):
             proteins = FastaProteins(proteins, **kwargs)
@@ -288,7 +304,13 @@ class PsmDataset(ABC):
             An array of calibrated scores.
         """
         labels = self._update_labels(scores, eval_fdr, desc)
-        target_score = np.min(scores[labels == 1])
+        pos = labels == 1
+        if not pos.sum():
+            raise RuntimeError(
+                "No target PSMs were below the 'eval_fdr' threshold."
+            )
+
+        target_score = np.min(scores[pos])
         decoy_score = np.median(scores[labels == -1])
 
         return (scores - target_score) / (target_score - decoy_score)
@@ -332,43 +354,42 @@ class PsmDataset(ABC):
 class LinearPsmDataset(PsmDataset):
     """Store and analyze a collection of PSMs.
 
-    Stores a collection of PSMs from data-dependent acquisition
-    proteomics experiments and defines the necessary fields
-    for mokapot analysis.
+    Store a collection of PSMs from data-dependent acquisition proteomics
+    experiments and and pepare them for mokapot analysis.
 
     Parameters
     ----------
     psms : pandas.DataFrame
-        A collection of PSMs.
+        A collection of PSMs, where the rows are PSMs and the columns are
+        features or metadata describing them.
     target_column : str
-        The column specifying whether each PSM is a target (`True`) or a
-        decoy (`False`). This column will be coerced to boolean, so the
-        specifying targets as `1` and decoys as `-1` will not work
-        correctly.
+        The column specifying whether each PSM is a target (`True`) or a decoy
+        (`False`). This column will be coerced to boolean, so the specifying
+        targets as `1` and decoys as `-1` will not work correctly.
     spectrum_columns : str or tuple of str
-        The column(s) that collectively identify unique mass spectra.
-        Multiple columns can be useful to avoid combining scans from
-        multiple mass spectrometry runs.
+        The column(s) that collectively identify unique mass spectra. Multiple
+        columns can be useful to avoid combining scans from multiple mass
+        spectrometry runs.
     peptide_column : str
-        The column that defines a unique peptide. Modifications should
+        The column that defines a unique peptide. Modifications should be
         indicated either in square brackets :code:`[]` or parentheses
-        :code:`()`. The exact modification format within those entities
-        does not matter, so long as it is consistent.
+        :code:`()`. The exact modification format within these entities does
+        not matter, so long as it is consistent.
     protein_column : str, optional
-        The column that specifies which protein(s) the detected peptide
-        might have originated from. This column is not used to compute
-        protein-level confidence estimates (see :py:meth:`add_proteins()`).
+        The column that specifies which protein(s) the detected peptide might
+        have originated from. This column is not used to compute protein-level
+        confidence estimates (see :py:meth:`add_proteins()`).
     group_column : str, optional
         A factor by which to group PSMs for grouped confidence estimation.
     feature_columns : str or tuple of str, optional
         The column(s) specifying the feature(s) for mokapot analysis. If
-        `None`, these are assumed to be all columns not specified in the
-        previous parameters.
+        :code:`None`, these are assumed to be all of the columns that were not
+        specified in the previous parameters.
     copy_data : bool, optional
         If true, a deep copy of `psms` is created, so that changes to the
-        original collection of PSMs is not propagated to this object. This
-        uses more memory, but is safer since it prevents accidental
-        modification of the underlying data.
+        original collection of PSMs is not propagated to this object. This uses
+        more memory, but is safer since it prevents accidental modification of
+        the underlying data.
 
     Attributes
     ----------
@@ -381,6 +402,7 @@ class LinearPsmDataset(PsmDataset):
     targets : numpy.ndarray
     columns : list of str
     has_proteins : bool
+
     """
 
     def __init__(
@@ -449,7 +471,9 @@ class LinearPsmDataset(PsmDataset):
 
     @property
     def targets(self):
-        """An array indicating whether each PSM is a target sequence."""
+        """A :py:class:`numpy.ndarray` indicating whether each PSM is a target
+        sequence.
+        """
         return self.data[self._target_column].values
 
     @property
@@ -458,12 +482,11 @@ class LinearPsmDataset(PsmDataset):
         return self.data.loc[:, self._peptide_column]
 
     def _update_labels(self, scores, eval_fdr=0.01, desc=True):
-        """
-        Return the label for each PSM, given it's score.
+        """Return the label for each PSM, given it's score.
 
-        This method is used during model training to define positive
-        examples, which are traditionally the target PSMs that fall
-        within a specified FDR threshold.
+        This method is used during model training to define positive examples,
+        which are traditionally the target PSMs that fall within a specified
+        FDR threshold.
 
         Parameters
         ----------
@@ -477,10 +500,10 @@ class LinearPsmDataset(PsmDataset):
         Returns
         -------
         np.ndarray
-            The label of each PSM, where 1 indicates a positive example,
-            -1 indicates a negative example, and 0 removes the PSM from
-            training. Typically, 0 is reserved for targets, below a
-            specified FDR threshold.
+            The label of each PSM, where 1 indicates a positive example, -1
+            indicates a negative example, and 0 removes the PSM from training.
+            Typically, 0 is reserved for targets, below a specified FDR
+            threshold.
         """
         qvals = qvalues.tdc(scores, target=self.targets, desc=desc)
         unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
@@ -490,35 +513,32 @@ class LinearPsmDataset(PsmDataset):
         return new_labels
 
     def assign_confidence(self, scores=None, desc=True, eval_fdr=0.01):
-        """
-        Assign confidence to PSMs and peptides.
+        """Assign confidence to PSMs peptides, and optionally, proteins.
 
-        Two forms of confidence estimates are calculated: q-values,
-        which are the minimum false discovery rate (FDR) at which a
-        given PSMs would be accepted, and posterior error probabilities
-        (PEPs), which probability that the given PSM is incorrect. For
-        more information see the :doc:`Confidence Estimation
-        <confidence>` page.
+        Two forms of confidence estimates are calculated: q-values---the
+        minimum false discovery rate (FDR) at which a given PSM would be
+        accepted---and posterior error probabilities (PEPs)---the probability
+        that a given PSM is incorrect. For more information see the
+        :doc:`Confidence Estimation <confidence>` page.
 
         Parameters
         ----------
         scores : numpy.ndarray
-            The scores used to rank the PSMs. The default,
-            :code:`None`, uses the feature that accepts the most
-            PSMs at an FDR of `eval_fdr`.
+            The scores by which to rank the PSMs. The default, :code:`None`,
+            uses the feature that accepts the most PSMs at an FDR threshold of
+            `eval_fdr`.
         desc : bool
             Are higher scores better?
         eval_fdr : float
-            The FDR threshold at which to report and evaluate
-            performance. If `scores` is not :code:`None`, this
-            parameter has no affect on the analysis itself, only on
-            logging messages.
+            The FDR threshold at which to report and evaluate performance. If
+            `scores` is not :code:`None`, this parameter has no affect on the
+            analysis itself, only on logging messages.
 
         Returns
         -------
         LinearConfidence
-            A :py:class:`LinearConfidence` object storing the
-            confidence estimates for the collection of PSMs.
+            A :py:class:`~mokapot.confidence.LinearConfidence` object storing
+            the confidence estimates for the collection of PSMs.
         """
         if scores is None:
             feat, _, _, desc = self._find_best_feature(eval_fdr)

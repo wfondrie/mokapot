@@ -209,7 +209,7 @@ def read_fasta(
     decoy_prefix="decoy_",
 ):
     """
-    Parse a FASTA file into a dictionary.
+    Parse a FASTA file into two dictionaries.
 
     Parameters
     ----------
@@ -243,7 +243,6 @@ def read_fasta(
     # Read in the fasta files
     LOGGER.info("Parsing FASTA files and digesting proteins...")
     fasta = _parse_fasta_files(fasta_files)
-
     # Build the initial mapping
     proteins = {}
     peptides = defaultdict(set)
@@ -281,14 +280,19 @@ def read_fasta(
     decoy_map = {}
     no_decoys = 0
     has_decoys = False
+    has_targets = False
     for prot_name in proteins:
         if not prot_name.startswith(decoy_prefix):
+            has_targets = True
             decoy = decoy_prefix + prot_name
             decoy_map[prot_name] = decoy
             if decoy in proteins.keys():
                 has_decoys = True
             else:
                 no_decoys += 1
+
+    if not has_targets:
+        raise ValueError("Only decoy proteins were found in the FASTA file.")
 
     if no_decoys and no_decoys < len(decoy_map):
         LOGGER.warning(
@@ -426,9 +430,13 @@ def _parse_protein(raw_protein):
     sequence : str
         The protein sequence.
     """
-    entry = raw_protein.split("\n", 1)
+    entry = raw_protein.splitlines()
     prot = entry[0].split(" ")[0]
-    seq = entry[1].replace("\n", "")
+    if len(entry) == 1:
+        logging.warning("No sequence was detected for %s.", prot)
+        return prot, ""
+
+    seq = "".join(entry[1:])
     return prot, seq
 
 
@@ -607,7 +615,7 @@ def _group_proteins(proteins, peptides):
         A map of peptides to their protein groups.
     """
     grouped = {}
-    for prot, peps in proteins.items():
+    for prot, peps in sorted(proteins.items(), key=lambda x: -len(x[1])):
         if not grouped:
             grouped[prot] = peps
             continue
@@ -623,13 +631,15 @@ def _group_proteins(proteins, peptides):
         # Create new entries from subsets:
         for match in matches:
             new_prot = ", ".join([match, prot])
-
             # Update grouped proteins:
             grouped[new_prot] = grouped.pop(match)
 
             # Update peptides:
             for pep in grouped[new_prot]:
                 peptides[pep].remove(match)
+                if prot in peptides[pep]:
+                    peptides[pep].remove(prot)
+
                 peptides[pep].add(new_prot)
 
     return grouped, peptides

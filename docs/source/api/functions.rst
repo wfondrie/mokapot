@@ -6,6 +6,7 @@ Functions
 Primary Functions
 -----------------
 .. autofunction:: read_pin
+.. autofunction:: read_pepxml
 .. autofunction:: brew
 
 

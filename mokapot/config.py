@@ -34,9 +34,9 @@ class Config:
 def _parser():
     """The parser"""
     desc = (
-        f"mokapot version {__version__}\n"
+        f"mokapot version {__version__}.\n"
         "Written by William E. Fondrie (wfondrie@uw.edu) in the \n"
-        "Department of Genome Sciences at the University of Washington\n\n"
+        "Department of Genome Sciences at the University of Washington.\n\n"
         "Official code website: https://github.com/wfondrie/mokapot\n\n"
         "More documentation and examples: https://mokapot.readthedocs.io"
     )
@@ -46,11 +46,12 @@ def _parser():
     )
 
     parser.add_argument(
-        "pin_files",
+        "psm_files",
         type=str,
         nargs="+",
         help=(
-            "A collection of PSMs in the Percolator tab-" "delimited format."
+            "A collection of PSMs in the Percolator tab-delimited or PepXML "
+            "format."
         ),
     )
 
@@ -59,9 +60,8 @@ def _parser():
         "--dest_dir",
         type=str,
         help=(
-            "The directory in which to write the result "
-            "files. Defaults to the current working "
-            "directory"
+            "The directory in which to write the result files. Defaults to "
+            "the current working directory"
         ),
     )
 
@@ -145,7 +145,7 @@ def _parser():
         action="store_true",
         help=(
             "Was a semi-enzymatic digest used to assign PSMs? If"
-            "'so, the protein database will likely contain "
+            " so, the protein database will likely contain "
             "shared peptides and yield unhelpful protein-level confidence "
             "estimates. We do not recommend using this option."
         ),
@@ -246,6 +246,19 @@ def _parser():
             "The number of cross-validation folds to use. "
             "PSMs originating from the same mass spectrum "
             "are always in the same fold."
+        ),
+    )
+
+    parser.add_argument(
+        "--open_modification_bin_size",
+        type=float,
+        help=(
+            "This parameter only affect reading PSMs from PepXML files. "
+            "If specified, modification masses are binned according to the "
+            "value. The binned mass difference is appended to the end of the "
+            "peptide and will be used when grouping peptides for peptide-level"
+            " confidence estimation. Using this option for open modification "
+            "search results. We reommend 0.01 as a good starting point."
         ),
     )
 

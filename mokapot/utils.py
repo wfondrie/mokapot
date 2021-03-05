@@ -20,24 +20,6 @@ def groupby_max(df, by_cols, max_col):
     return idx
 
 
-def unnormalize_weights(weights, intercept, feat_mean, feat_std):
-    """Take in normalized weights, return unnormalized weights"""
-    new_weights = np.divide(
-        weights, feat_std, out=np.zeros_like(weights), where=(feat_std != 0)
-    )
-
-    int_sub = np.divide(
-        feat_mean,
-        feat_std,
-        out=np.zeros_like(feat_mean),
-        where=(feat_std != 0),
-    )
-
-    intercept = intercept - (int_sub * weights).sum()
-
-    return new_weights, intercept
-
-
 def flatten(split):
     """Get the indices from split"""
     return list(itertools.chain.from_iterable(split))
@@ -51,6 +33,8 @@ def safe_divide(numerator, denominator, ones=False):
     if isinstance(denominator, pd.Series):
         denominator = denominator.values
 
+    numerator = numerator.astype(float)
+    denominator = denominator.astype(float)
     if ones:
         out = np.ones_like(numerator)
     else:

@@ -61,6 +61,11 @@ def tdc(scores, target, desc=True):
     if scores.shape[0] != target.shape[0]:
         raise ValueError("'scores' and 'target' must be the same length")
 
+    # Unsigned integers can cause weird things to happen.
+    # Convert all scores to floats to for safety.
+    if np.issubdtype(scores.dtype, np.integer):
+        scores = scores.astype(np.float_)
+
     # Sort and estimate FDR
     if desc:
         srt_idx = np.argsort(-scores)

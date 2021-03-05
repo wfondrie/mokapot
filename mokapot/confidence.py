@@ -1,16 +1,19 @@
-"""
-One of the primary purposes of mokapot is to assign confidence estimates to PSMs.
-This task is accomplished by ranking PSMs according to a score or metric and
-using an appropriate confidence estimation procedure for the type of data.
-mokapot can provide confidence estimates based any score, regardless of
-whether it was the result of a learned :py:func:`mokapot.model.Model`
-instance or provided independently.
+"""One of the primary purposes of mokapot is to assign confidence estimates to
+PSMs. This task is accomplished by ranking PSMs according to a score and using
+an appropriate confidence estimation procedure for the type of data. mokapot
+can provide confidence estimates based any score, regardless of whether it was
+the result of a learned :py:func:`~mokapot.model.Model` instance or provided
+independently.
 
 The following classes store the confidence estimates for a dataset based on the
-provided score. In either case, they provide utilities to access, save, and
-plot these estimates for the various relevant levels (i.e. PSMs, peptides, and
-proteins). The :py:func:`LinearConfidence` class is appropriate for most
-proteomics datasets.
+provided score. They provide utilities to access, save, and plot these
+estimates for the various relevant levels (i.e. PSMs, peptides, and proteins).
+The :py:func:`LinearConfidence` class is appropriate for most data-dependent
+acquisition proteomics datasets.
+
+We recommend using the :py:func:`~mokapot.brew()` function or the
+:py:meth:`~mokapot.LinearPsmDataset.assign_confidence()` method to obtain these
+confidence estimates, rather than initializing the classes below directly.
 """
 import os
 import copy
@@ -29,8 +32,12 @@ LOGGER = logging.getLogger(__name__)
 
 # Classes ---------------------------------------------------------------------
 class GroupedConfidence:
-    """
-    Performed grouped confidence estimation for a collection of PSMs.
+    """Perform grouped confidence estimation for a collection of PSMs.
+
+    Groups are defined by the :py:class:`~mokapot.dataset.LinearPsmDataset`.
+    Confidence estimates for each group can be retrieved by using the group
+    name as an attribute, or from the
+    :py:meth:`~GroupedConfidence.group_confidence_estimates` property.
 
     Parameters
     ----------
@@ -43,6 +50,11 @@ class GroupedConfidence:
     eval_fdr : float
         The FDR threshold at which to report performance. This parameter
         has no affect on the analysis itself, only logging messages.
+
+    Attributes
+    ----------
+    groups: List
+    group_confidence_estimates: Dict
     """
 
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
@@ -65,7 +77,7 @@ class GroupedConfidence:
             .index
         )
 
-        self.group_confidence_estimates = {}
+        self._group_confidence_estimates = {}
         for group, group_df in psms._data.groupby(psms._group_column):
             LOGGER.info("Group: %s == %s", self.group_column, group)
             group_psms._data = None
@@ -75,7 +87,17 @@ class GroupedConfidence:
             res = group_psms.assign_confidence(
                 group_scores * (2 * desc - 1), desc=desc, eval_fdr=eval_fdr
             )
-            self.group_confidence_estimates[group] = res
+            self._group_confidence_estimates[group] = res
+
+    @property
+    def group_confidence_estimates(self):
+        """A dictionary of the confidence estimates for each group."""
+        return self._group_confidence_estimates
+
+    @property
+    def groups(self):
+        """The groups for confidence estimation"""
+        return list(self._group_confidence_estimates.keys())
 
     def to_txt(self, dest_dir=None, file_root=None, sep="\t", decoys=False):
         """
@@ -128,15 +150,17 @@ class GroupedConfidence:
     def __getattr__(self, attr):
         """Make groups accessible easily"""
         try:
-            return self.grouped_confidence_estimates[attr]
+            return self.group_confidence_estimates[attr]
         except KeyError:
             raise AttributeError
 
+    def __len__(self):
+        """Report the number of groups"""
+        return len(self.group_confidence_estimates)
+
 
 class Confidence:
-    """
-    Estimate and store the statistical confidence for a collection of
-    PSMs.
+    """Estimate and store the statistical confidence for a collection of PSMs.
 
     :meta private:
     """
@@ -151,9 +175,7 @@ class Confidence:
     }
 
     def __init__(self, psms, scores, desc):
-        """
-        Initialize a PsmConfidence object.
-        """
+        """Initialize a PsmConfidence object."""
         self._data = psms.metadata
         self._score_column = _new_column("score", self._data)
         self._has_proteins = psms.has_proteins
@@ -232,8 +254,7 @@ class Confidence:
         return out_files
 
     def _perform_tdc(self, psm_columns):
-        """
-        Perform target-decoy competition.
+        """Perform target-decoy competition.
 
         Parameters
         ----------
@@ -254,8 +275,7 @@ class Confidence:
             return None
 
     def plot_qvalues(self, level="psms", threshold=0.1, ax=None, **kwargs):
-        """
-        Plot the cumulative number of discoveries over range of q-values.
+        """Plot the cumulative number of discoveries over range of q-values.
 
         The available levels can be found using
         :py:meth:`~mokapot.confidence.Confidence.levels` attribute.
@@ -320,6 +340,7 @@ class LinearConfidence(Confidence):
         A dictionary of confidence estimates at each level.
     decoy_confidence_estimates : Dict[str, pandas.DataFrame]
         A dictionary of confidence estimates for the decoys at each level.
+
     """
 
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
