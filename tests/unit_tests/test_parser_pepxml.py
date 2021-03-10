@@ -39,7 +39,7 @@ def test_pepxml2df(small_pepxml):
 
     print(single)
     assert len(single) == 4
-    assert len(single["spectrum_id"].unique()) == 2
+    assert len(single["scan"].unique()) == 2
     np.testing.assert_array_equal(single["charge_2"], np.array([1, 1, 1, 0]))
     np.testing.assert_array_equal(single["charge_3"], np.array([0, 0, 0, 1]))
 
