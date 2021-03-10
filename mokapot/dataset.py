@@ -714,7 +714,9 @@ class CrosslinkPsmDataset(PsmDataset):
 
     @property
     def targets(self):
-        """An array indicating the number of targets in each CSM."""
+        """A :py:class:`numpy.ndarray` containing the number of target
+        peptides  in each CSM.
+        """
         return self.data.loc[:, self._target_columns].sum(axis=1).values
 
     @property
@@ -757,13 +759,13 @@ class CrosslinkPsmDataset(PsmDataset):
         return new_labels
 
     def assign_confidence(self, scores=None, desc=True, eval_fdr=0.01):
-        """Assign confidence to crosslinked PSMs and peptides.
+        """Assign confidence to crosslinked CSMs and peptides.
 
-        Two forms of confidence estimates are calculated: q-values, which are
-        the minimum false discovery rate at which a given CSMs would be
-        accepted, and posterior error probabilities (PEPs), which probability
-        that the given CSM is incorrect. For more information see the
-        :doc:`PsmConfidence <confidence>` page.
+        Two forms of confidence estimates are calculated: q-values---the
+        minimum false discovery rate (FDR) at which a given CSM would be
+        accepted---and posterior error probabilities (PEPs)---the probability
+        that a given CSM is incorrect. For more information see the
+        :doc:`Confidence Estimation <confidence>` page.
 
         Parameters
         ----------
@@ -779,7 +781,7 @@ class CrosslinkPsmDataset(PsmDataset):
 
         Returns
         -------
-        CrosslinkPsmConfidence
+        CrosslinkConfidence
             A :py:class:`CrosslinkConfidence` object storing the
             confidence for the provided CSMs.
 
@@ -791,9 +793,14 @@ class CrosslinkPsmDataset(PsmDataset):
 
         if self._group_column is None:
             LOGGER.info("Assigning confidence...")
-            return CrosslinkConfidence(self, scores, desc, eval_fdr)
-
-        return CrosslinkConfidence(self, scores, desc, eval_fdr)
+            return CrosslinkConfidence(
+                self, scores, eval_fdr=eval_fdr, desc=desc
+            )
+        else:
+            LOGGER.info("Assigin confidence withing groups...")
+            return GroupedConfidence(
+                self, scores, eval_fdr=eval_fdr, desc=desc
+            )
 
 
 # Utility Functions -----------------------------------------------------------

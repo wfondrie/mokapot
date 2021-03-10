@@ -10,7 +10,7 @@ import pandas as pd
 from lxml import etree
 
 from .. import utils
-from ..dataset import LinearPsmDataset
+from ..dataset import LinearPsmDataset, CrosslinkPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ def read_pepxml(
     """Read PepXML files.
 
     Read peptide-spectrum matches (PSMs) from one or more pepxml files,
-    aggregating them into a single
-    :py:class:`~mokapot.dataset.LinearPsmDataset`.
+    aggregating them into a :py:class:`~mokapot.dataset.LinearPsmDataset` and
+    a :py:class:`~mokapot.dataset.CrosslinkPsmDataset` (if applicable).
 
     Specifically, mokapot will extract the search engine scores as a set of
     features (found under the :code:`search_scores` tag). Additionally, mokapot
@@ -56,14 +56,80 @@ def read_pepxml(
 
     Returns
     -------
-    LinearPsmDataset or pandas.DataFrame
+    LinearPsmDataset, pandas.DataFrame, or None
         A :py:class:`~mokapot.dataset.LinearPsmDataset` or
-        :py:class:`pandas.DataFrame` containing the parsed PSMs.
+        :py:class:`pandas.DataFrame` containing the parsed PSMs. Returns
+        :code:`None` if no PSMs are detected.
+    CrosslinkePsmDataset or pandas.DataFrame
+        A :py:class:`~mokapot.dataset.CrosslinkPsmDataset` or
+        :py:class`pandas.DataFrame` containing crosslinked peptide spectrum
+        matches (CSMs). Returns :code:`None` if no CSMs are detected.
+
     """
     proton = 1.00727646677
     pepxml_files = utils.tuplize(pepxml_files)
-    psms = pd.concat([_parse_pepxml(f, decoy_prefix) for f in pepxml_files])
+    psms = [_parse_pepxml(f, decoy_prefix) for f in pepxml_files]
+    psms, csms = zip(*psms)
 
+    try:
+        psms = pd.concat(psms)
+    except ValueError:
+        psms = None
+
+    try:
+        csms = pd.concat(csms)
+        LOGGER.info("Parsed crosslinked PSMs...")
+    except ValueError:
+        csms = None
+
+    if psms is None and csms is None:
+        raise ValueError("No PSMs were found in the PepXML file(s).")
+
+    psms, psms_feat = _create_features(
+        psms, exclude_features, open_modification_bin_size
+    )
+
+    csms, csms_feat = _create_features(
+        csms, exclude_features, open_modification_bin_size
+    )
+
+    if to_df:
+        return psms, csms
+
+    psms = LinearPsmDataset(
+        psms=psms,
+        target_column="label",
+        spectrum_columns=("spectrum_id",),
+        peptide_column="peptide",
+        protein_column="proteins",
+        feature_columns=feat_cols,
+        copy_data=False,
+    )
+
+    csms = CrosslinkPsmDataset(
+        csms=csms,
+        target_columns=("alpha_label", "beta_label"),
+        spectrum_columns=("spectrum_id",),
+        peptide_columns=("alpha_peptide", "beta_peptide"),
+        protein_columns=("alpha_proteins", "beta_proteins"),
+        copy_data=False,
+    )
+
+    return psms, csms
+
+
+def _create_features(psms, exclude_features, open_modification_bin_size):
+    """Create features from a psm dataframe.
+
+    Parameters
+    ----------
+    psms : pandas.DataFrame
+        A dataframe of PSMs or CSMs
+    exclude_features : list of str
+        Features to be excluded.
+    open_modification_bin_size : float
+        The bin size for open modification searches.
+    """
     # Check that these PSMs are not from Percolator or PeptideProphet:
     illegal_cols = {
         "Percolator q-Value",
@@ -113,6 +179,12 @@ def read_pepxml(
         "calc_mass",
         "peptide",
         "proteins",
+        "alpha_label",
+        "beta_label",
+        "alpha_peptide",
+        "beta_peptide",
+        "alpha_proteins",
+        "beta_proteins",
     ]
 
     if exclude_features is not None:
@@ -123,21 +195,7 @@ def read_pepxml(
     nonfeat_cols += exclude_features
     feat_cols = [c for c in psms.columns if c not in nonfeat_cols]
     psms = psms.apply(_log_features, features=feat_cols)
-
-    if to_df:
-        return psms
-
-    dset = LinearPsmDataset(
-        psms=psms,
-        target_column="label",
-        spectrum_columns=("spectrum_id",),
-        peptide_column="peptide",
-        protein_column="proteins",
-        feature_columns=feat_cols,
-        copy_data=False,
-    )
-
-    return dset
+    return psms, feat_cols
 
 
 def _parse_pepxml(pepxml_file, decoy_prefix):
