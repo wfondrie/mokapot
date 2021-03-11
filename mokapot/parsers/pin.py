@@ -94,6 +94,7 @@ def read_pin(pin_files, group_column=None, to_df=False, copy_data=False):
         )
 
     # Convert labels to the correct format.
+    print(pin_df[labels[0]])
     pin_df[labels[0]] = pin_df[labels[0]].astype(int)
     if any(pin_df[labels[0]] == -1):
         pin_df[labels[0]] = ((pin_df[labels[0]] + 1) / 2).astype(bool)
@@ -142,10 +143,12 @@ def read_percolator(perc_file):
         cols = perc.readline().rstrip().split("\t")
         dir_line = perc.readline().rstrip().split("\t")[0]
         if dir_line.lower() != "defaultdirection":
-            perc.seek(1)
+            perc.seek(0)
+            _ = perc.readline()
 
         psms = pd.concat((c for c in _parse_in_chunks(perc, cols)), copy=False)
 
+    print(psms.head())
     return psms
 
 

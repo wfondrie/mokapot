@@ -30,3 +30,8 @@ def test_pin_parsing(std_pin):
 
     dat = mokapot.read_pin(std_pin)
     pd.testing.assert_frame_equal(df.loc[:, ("sCore",)], dat.features)
+
+
+def test_pin_wo_dir():
+    """Test a PIN file without a DefaultDirection line"""
+    dat = mokapot.read_pin("data/scope2_FP97AA.pin")
