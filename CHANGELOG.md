@@ -1,10 +1,12 @@
 # Changelog for mokapot  
 
-## [Unreleased]
+## [0.6.1] - 2021-03-11
 ### Fixed
 - Parsing Percolator tab-delimited files with a "DefaultDirection" line.
 - `Label` column is now converted to boolean during PIN file parsing. 
   Previously, problems occurred if the `Label` column was of dtype `object`.
+- Parsing modifications from pepXML files were indexed incorrectly on the
+  peptide string.
 
 ## [0.6.0] - 2021-03-03  
 ### Added  
