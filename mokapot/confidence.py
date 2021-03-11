@@ -15,9 +15,9 @@ We recommend using the :py:func:`~mokapot.brew()` function or the
 :py:meth:`~mokapot.LinearPsmDataset.assign_confidence()` method to obtain these
 confidence estimates, rather than initializing the classes below directly.
 """
-import os
 import copy
 import logging
+from pathlib import Path
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -26,6 +26,7 @@ from triqler import qvality
 from . import qvalues
 from . import utils
 from .picked_protein import picked_protein
+from .writers.flashlfq import write_flashlfq
 
 LOGGER = logging.getLogger(__name__)
 
@@ -230,14 +231,14 @@ class Confidence:
         if file_root is not None:
             file_base = file_root + "." + file_base
         if dest_dir is not None:
-            file_base = os.path.join(dest_dir, file_base)
+            file_base = Path(dest_dir, file_base)
 
         out_files = []
         for level, qvals in self.confidence_estimates.items():
             if qvals is None:
                 continue
 
-            out_file = file_base + f".{level}.txt"
+            out_file = str(file_base) + f".{level}.txt"
             qvals.to_csv(out_file, sep=sep, index=False)
             out_files.append(out_file)
 
@@ -246,7 +247,7 @@ class Confidence:
                 if qvals is None:
                     continue
 
-                out_file = file_base + f".decoys.{level}.txt"
+                out_file = str(file_base) + f".decoys.{level}.txt"
                 qvals.to_csv(out_file, sep=sep, index=False)
                 out_files.append(out_file)
 
@@ -331,7 +332,6 @@ class LinearConfidence(Confidence):
         A dictionary of confidence estimates at each level.
     decoy_confidence_estimates : Dict[str, pandas.DataFrame]
         A dictionary of confidence estimates for the decoys at each level.
-
     """
 
     def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
@@ -341,6 +341,11 @@ class LinearConfidence(Confidence):
         self._data[self._target_column] = psms.targets
         self._psm_columns = psms._spectrum_columns
         self._peptide_column = psms._peptide_column
+        self._protein_column = psms._protein_column
+        self._filename_column = psms._filename_column
+        self._mass_column = psms._mass_column
+        self._rt_column = psms._rt_column
+        self._charge_column = psms._charge_column
         self._eval_fdr = eval_fdr
 
         LOGGER.info("Performing target-decoy competition...")
@@ -461,12 +466,62 @@ class LinearConfidence(Confidence):
 
             level = level.lower()
             data["mokapot PEP"] = pep
+            if level != "proteins" and self._protein_column is not None:
+                data[self._protein_column] = data.pop(self._protein_column)
+
             self.confidence_estimates[level] = data.loc[targets, :]
             self.decoy_confidence_estimates[level] = data.loc[~targets, :]
 
         if "proteins" not in self.confidence_estimates.keys():
             self.confidence_estimates["proteins"] = None
             self.decoy_confidence_estimates["proteins"] = None
+
+    def to_flashlfq(self, dest_dir=None, file_root=None):
+        """Save peptides for quantification with FlashLFQ.
+
+        `FlashLFQ <https://github.com/smith-chem-wisc/FlashLFQ>`_ is an
+        open-source tool for label-free quantification. For mokapot to save
+        results in a compatible format, a few extra columns are required to
+        be present, which specify the MS data file name, the theoretical
+        peptide monoisotopic mass, the retention time, and the charge for each
+        PSM. If these are not present, saving to the FlashLFQ format is
+        disabled.
+
+        Parameters
+        ----------
+        dest_dir : str or None, optional
+            The directory in which to save the files. `None` will use the
+            current working directory.
+        file_root : str or None, optional
+            An optional prefix for the confidence estimate files. The
+            suffix will always be `mokapot.flashlfq.txt`.
+
+        Returns
+        -------
+        str
+            The path to the saved file.
+
+        """
+        out_file = "mokapot.flashlfq.txt"
+        if file_root is not None:
+            out_file = file_root + "." + out_file
+
+        if dest_dir is not None:
+            out_file = Path(dest_dir, out_file)
+
+        write_flashlfq(
+            peptides=self.peptides,
+            out_file=out_file,
+            filename_column=self._filename_column,
+            peptide_column=self._peptide_column,
+            mass_column=self._mass_column,
+            rt_column=self._rt_column,
+            charge_column=self._charge_column,
+            protein_column=self._protein_column,
+            eval_fdr=self._eval_fdr,
+        )
+
+        return out_file
 
 
 class CrossLinkedConfidence(Confidence):

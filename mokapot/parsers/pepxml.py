@@ -103,8 +103,7 @@ def read_pepxml(
         [psms, pd.get_dummies(psms["charge"], prefix="charge")], axis=1
     )
 
-    psms = psms.drop("charge", axis=1)
-
+    # psms = psms.drop("charge", axis=1)
     # -log10 p-values
     nonfeat_cols = [
         "ms_data_file",
@@ -115,6 +114,7 @@ def read_pepxml(
         "calc_mass",
         "peptide",
         "proteins",
+        "charge",
     ]
 
     if exclude_features is not None:
@@ -132,10 +132,14 @@ def read_pepxml(
     dset = LinearPsmDataset(
         psms=psms,
         target_column="label",
-        spectrum_columns=("ms_data_file", "scan", "ret_time"),
+        spectrum_columns=("ms_data_file", "scan", "ret_time", "charge"),
         peptide_column="peptide",
         protein_column="proteins",
         feature_columns=feat_cols,
+        filename_column="ms_data_file",
+        mass_column="calc_mass",
+        rt_column="ret_time",
+        charge_column="charge",
         copy_data=False,
     )
 

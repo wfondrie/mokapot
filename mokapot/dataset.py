@@ -379,13 +379,27 @@ class LinearPsmDataset(PsmDataset):
     protein_column : str, optional
         The column that specifies which protein(s) the detected peptide might
         have originated from. This column is not used to compute protein-level
-        confidence estimates (see :py:meth:`add_proteins()`).
+        confidence estimates (see :py:meth:`add_proteins()`). For FlashLFQ
+        output, mokapot expects these to be tab-delmited.
     group_column : str, optional
         A factor by which to group PSMs for grouped confidence estimation.
     feature_columns : str or tuple of str, optional
         The column(s) specifying the feature(s) for mokapot analysis. If
         :code:`None`, these are assumed to be all of the columns that were not
-        specified in the previous parameters.
+        specified in the other parameters.
+    filename_column : str, optional
+        The column specifying the mass spectrometry data file (e.g. mzML)
+        containing each spectrum. This is required for some output formats,
+        such as FlashLFQ.
+    mass_column : str, optional
+        The column specifying the theoretical mass of each peptide. This is
+        required for some output formats, such as FlashLFQ.
+    rt_column : str, optional
+        The column specifying the retention time of each spectrum, in seconds.
+        This is required for some output formats, such as FlashLFQ.
+    charge_column : str, optional
+        The column specifying the charge state of each PSM. This is required
+        for some output formats, such as FlashLFQ.
     copy_data : bool, optional
         If true, a deep copy of `psms` is created, so that changes to the
         original collection of PSMs is not propagated to this object. This uses
@@ -403,7 +417,6 @@ class LinearPsmDataset(PsmDataset):
     targets : numpy.ndarray
     columns : list of str
     has_proteins : bool
-
     """
 
     def __init__(
@@ -415,17 +428,33 @@ class LinearPsmDataset(PsmDataset):
         protein_column=None,
         group_column=None,
         feature_columns=None,
+        filename_column=None,
+        mass_column=None,
+        rt_column=None,
+        charge_column=None,
         copy_data=True,
     ):
         """Initialize a PsmDataset object."""
         self._target_column = target_column
         self._peptide_column = peptide_column
         self._protein_column = protein_column
+        self._filename_column = filename_column
+        self._mass_column = mass_column
+        self._rt_column = rt_column
+        self._charge_column = charge_column
 
         # Finish initialization
         other_columns = [target_column, peptide_column]
-        if protein_column is not None:
-            other_columns += [protein_column]
+        opt_columns = [
+            protein_column,
+            filename_column,
+            mass_column,
+            rt_column,
+            charge_column,
+        ]
+        for opt_column in opt_columns:
+            if opt_column is not None:
+                other_columns += [opt_column]
 
         super().__init__(
             psms=psms,
@@ -528,7 +557,8 @@ class LinearPsmDataset(PsmDataset):
         eval_fdr : float
             The FDR threshold at which to report and evaluate performance. If
             `scores` is not :code:`None`, this parameter has no affect on the
-            analysis itself, only on logging messages.
+            analysis itself, but does affect logging messages and the FDR
+            threshold applied for some output formats, such as FlashLFQ.
 
         Returns
         -------
