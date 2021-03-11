@@ -291,6 +291,7 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
                 idx = offset + int(mod.get("position"))
                 mass = mod.get("mass")
                 mod_pep = mod_pep[:idx] + "[" + mass + "]" + mod_pep[idx:]
+                offset += 2 + len(mass)
 
             psm["peptide"] = mod_pep
 
