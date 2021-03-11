@@ -1,5 +1,11 @@
 # Changelog for mokapot  
 
+## [Unreleased]
+### Fixed
+- Parsing Percolator tab-delimited files with a "DefaultDirection" line.
+- `Label` column is now converted to boolean during PIN file parsing. 
+  Previously, problems occurred if the `Label` column was of dtype `object`.
+
 ## [0.6.0] - 2021-03-03  
 ### Added  
 - Support for parsing PSMs from PepXML input files.
