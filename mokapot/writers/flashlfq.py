@@ -69,19 +69,11 @@ def write_flashlfq(
     out_df["Scan Retention Time"] = peptides.loc[passing, rt_column]
     out_df["Precursor Charge"] = peptides.loc[passing, charge_column]
 
-    proteins = _format_accession(peptides.loc[passing, protein_column])
+    proteins = (
+        peptides.loc[passing, protein_column]
+        .str.replace("|", "-", regex=False)
+        .str.replace("\t", "|", regex=False)
+    )
     out_df["Protein Accession"] = proteins
-    out_df.to_csv(out_file, sep="\t")
-
-
-def _format_accession(proteins):
-    """Return compatible accessions from pin files"""
-    prot_list = proteins.str.split("\t")
-    new_prots = []
-    for prot in prot_list:
-        if "|" in prot:
-            prot = prot.split("|")[1]
-
-        new_prots.append(prot)
-
-    return "|".join(new_prots)
+    out_df.to_csv(out_file, sep="\t", index=False)
+    return out_file
