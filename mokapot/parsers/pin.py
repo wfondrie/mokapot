@@ -87,14 +87,12 @@ def read_pin(pin_files, group_column=None, to_df=False, copy_data=False):
             raise ValueError(f"More than one '{name}' column found.")
 
     if not all([specid, peptides, proteins, labels, spectra]):
-        print([specid, peptides, proteins, labels, spectra])
         raise ValueError(
             "This PIN format is incompatible with mokapot. Please"
             " verify that the required columns are present."
         )
 
     # Convert labels to the correct format.
-    print(pin_df[labels[0]])
     pin_df[labels[0]] = pin_df[labels[0]].astype(int)
     if any(pin_df[labels[0]] == -1):
         pin_df[labels[0]] = ((pin_df[labels[0]] + 1) / 2).astype(bool)
@@ -148,7 +146,6 @@ def read_percolator(perc_file):
 
         psms = pd.concat((c for c in _parse_in_chunks(perc, cols)), copy=False)
 
-    print(psms.head())
     return psms
 
 
