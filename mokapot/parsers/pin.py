@@ -92,7 +92,6 @@ def read_pin(
     LinearPsmDataset
         A :py:class:`~mokapot.dataset.LinearPsmDataset` object containing the
         PSMs from all of the PIN files.
-
     """
     logging.info("Parsing PSMs...")
 
