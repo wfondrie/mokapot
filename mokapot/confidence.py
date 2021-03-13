@@ -342,10 +342,7 @@ class LinearConfidence(Confidence):
         self._psm_columns = psms._spectrum_columns
         self._peptide_column = psms._peptide_column
         self._protein_column = psms._protein_column
-        self._filename_column = psms._filename_column
-        self._mass_column = psms._mass_column
-        self._rt_column = psms._rt_column
-        self._charge_column = psms._charge_column
+        self._optional_columns = psms._optional_columns
         self._eval_fdr = eval_fdr
 
         LOGGER.info("Performing target-decoy competition...")
@@ -512,11 +509,11 @@ class LinearConfidence(Confidence):
         write_flashlfq(
             peptides=self.peptides,
             out_file=out_file,
-            filename_column=self._filename_column,
+            filename_column=self._optional_columns["filename"],
             peptide_column=self._peptide_column,
-            mass_column=self._mass_column,
-            rt_column=self._rt_column,
-            charge_column=self._charge_column,
+            mass_column=self._optional_columns["calcmass"],
+            rt_column=self._optional_columns["rt"],
+            charge_column=self._optional_columns["charge"],
             protein_column=self._protein_column,
             eval_fdr=self._eval_fdr,
         )

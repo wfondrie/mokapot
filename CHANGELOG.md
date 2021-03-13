@@ -1,7 +1,16 @@
 # Changelog for mokapot  
 
-## [0.6.1] - 2021-03-11
-### Fixed
+## [unreleased]
+### Added
+- Support for downstream quantitation with
+  [FlashLFQ](https://github.com/smith-chem-wisc/FlashLFQ). This is accomplished
+  through the `to_flashlfq()` method of `LinearConfidence` objects. Note that
+  to support the FlashLFQ format, you'll need to specify additional columns in
+  `read_pin()` or use a PepXML input file (`read_pepxml()`).
+- Tests accompanying the support for the above format.
+
+## [0.6.1] - 2021-03-11  
+### Fixed  
 - Parsing Percolator tab-delimited files with a "DefaultDirection" line.
 - `Label` column is now converted to boolean during PIN file parsing. 
   Previously, problems occurred if the `Label` column was of dtype `object`.

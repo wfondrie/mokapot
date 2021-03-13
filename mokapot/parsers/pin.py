@@ -107,8 +107,8 @@ def read_pin(
     peptides = [c for c in pin_df.columns if c.lower() == "peptide"]
     proteins = [c for c in pin_df.columns if c.lower() == "proteins"]
     labels = [c for c in pin_df.columns if c.lower() == "label"]
-    spectra = [c for c in pin_df.columns if c.lower() in ["scannr", "expmass"]]
-    nonfeat = sum([specid, spectra, peptides, proteins, labels], [])
+    scan = [c for c in pin_df.columns if c.lower() == "scannr"][0]
+    nonfeat = sum([specid, [scan], peptides, proteins, labels], [])
 
     # Optional columns
     filename = _check_column(filename_column, pin_df, "filename")
@@ -116,12 +116,12 @@ def read_pin(
     expmass = _check_column(expmass_column, pin_df, "expmass")
     ret_time = _check_column(rt_column, pin_df, "ret_time")
     charge = _check_column(charge_column, pin_df, "charge_column")
-    spectra += sum([filename, ret_time], [])
+    spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
 
     # Only add charge to features if there aren't other charge columns:
     alt_charge = [c for c in pin_df.columns if c.lower().startswith("charge")]
-    if len(alt_charge) > 1:
-        nonfeat += charge
+    if charge is not None and len(alt_charge) > 1:
+        nonfeat.append(charge)
 
     # Add the grouping column
     if group_column is not None:
@@ -129,7 +129,10 @@ def read_pin(
         if group_column not in pin_df.columns:
             raise ValueError(f"The '{group_column} column was not found.")
 
-    nonfeat += sum([filename, calcmass, expmass, ret_time], [])
+    for col in [filename, calcmass, expmass, ret_time]:
+        if col is not None:
+            nonfeat.append(col)
+
     features = [c for c in pin_df.columns if c not in nonfeat]
 
     # Check for errors:
@@ -160,6 +163,12 @@ def read_pin(
         protein_column=proteins[0],
         group_column=group_column,
         feature_columns=features,
+        filename_column=filename,
+        scan_column=scan,
+        calcmass_column=calcmass,
+        expmass_column=expmass,
+        rt_column=ret_time,
+        charge_column=charge,
         copy_data=False,
     )
 
@@ -233,9 +242,12 @@ def _parse_in_chunks(file_obj, columns, chunk_size=int(1e8)):
 def _check_column(col, df, default):
     """Check that a column exists in the dataframe."""
     if col is None:
-        return [c for c in df.columns if c.lower() == default]
+        try:
+            return [c for c in df.columns if c.lower() == default][0]
+        except IndexError:
+            return None
 
     if col not in df.columns:
         raise ValueError(f"The '{col}' column was not found.")
 
-    return [col]
+    return col

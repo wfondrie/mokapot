@@ -390,16 +390,24 @@ class LinearPsmDataset(PsmDataset):
     filename_column : str, optional
         The column specifying the mass spectrometry data file (e.g. mzML)
         containing each spectrum. This is required for some output formats,
-        such as FlashLFQ.
-    mass_column : str, optional
-        The column specifying the theoretical mass of each peptide. This is
-        required for some output formats, such as FlashLFQ.
+        such as mzTab and FlashLFQ.
+    scan_column : str, optional
+        The column specifying the scan number for each spectrum. Each value
+        in the column should be an integer. This is required for some output
+        formats, such as mzTab.
+    calcmass_column : str, optional
+        The column specifying the theoretical monoisotopic mass of each
+        peptide. This is required for some output formats, such as mzTab and
+        FlashLFQ.
+    expmass_column : str, optional
+        The column specifying the measured neutral precursor mass. This is
+        required for the some ouput formats, such as mzTab.
     rt_column : str, optional
         The column specifying the retention time of each spectrum, in seconds.
-        This is required for some output formats, such as FlashLFQ.
+        This is required for some output formats, such as mzTab and FlashLFQ.
     charge_column : str, optional
         The column specifying the charge state of each PSM. This is required
-        for some output formats, such as FlashLFQ.
+        for some output formats, such as mzTab and FlashLFQ.
     copy_data : bool, optional
         If true, a deep copy of `psms` is created, so that changes to the
         original collection of PSMs is not propagated to this object. This uses
@@ -429,7 +437,9 @@ class LinearPsmDataset(PsmDataset):
         group_column=None,
         feature_columns=None,
         filename_column=None,
-        mass_column=None,
+        scan_column=None,
+        calcmass_column=None,
+        expmass_column=None,
         rt_column=None,
         charge_column=None,
         copy_data=True,
@@ -438,23 +448,24 @@ class LinearPsmDataset(PsmDataset):
         self._target_column = target_column
         self._peptide_column = peptide_column
         self._protein_column = protein_column
-        self._filename_column = filename_column
-        self._mass_column = mass_column
-        self._rt_column = rt_column
-        self._charge_column = charge_column
+
+        self._optional_columns = {
+            "filename": filename_column,
+            "scan": scan_column,
+            "calcmass": calcmass_column,
+            "expmass": expmass_column,
+            "rt": rt_column,
+            "charge": charge_column,
+        }
 
         # Finish initialization
         other_columns = [target_column, peptide_column]
-        opt_columns = [
-            protein_column,
-            filename_column,
-            mass_column,
-            rt_column,
-            charge_column,
-        ]
-        for opt_column in opt_columns:
+        if protein_column is not None:
+            other_columns.append(protein_column)
+
+        for _, opt_column in self._optional_columns.items():
             if opt_column is not None:
-                other_columns += [opt_column]
+                other_columns.append(opt_column)
 
         super().__init__(
             psms=psms,
