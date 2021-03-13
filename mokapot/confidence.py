@@ -499,6 +499,16 @@ class LinearConfidence(Confidence):
             The path to the saved file.
 
         """
+        required = ["filename", "calcmass", "rt", "charge"]
+        missing = [c for c in required if c is None]
+        if missing:
+            missing = ", ".join([c + "_column" for c in missing])
+            raise ValueError(
+                "The following parameters must be specified when loading a "
+                "collection of PSMs in order to save them in FlashLFQ format: "
+                f"{missing}"
+            )
+
         out_file = "mokapot.flashlfq.txt"
         if file_root is not None:
             out_file = file_root + "." + out_file

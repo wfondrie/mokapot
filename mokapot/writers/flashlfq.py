@@ -69,11 +69,15 @@ def write_flashlfq(
     out_df["Scan Retention Time"] = peptides.loc[passing, rt_column] / 60
     out_df["Precursor Charge"] = peptides.loc[passing, charge_column]
 
-    proteins = (
-        peptides.loc[passing, protein_column]
-        .str.replace("|", "-", regex=False)
-        .str.replace("\t", "|", regex=False)
-    )
+    if protein_column is not None:
+        proteins = (
+            peptides.loc[passing, protein_column]
+            .str.replace("|", "-", regex=False)
+            .str.replace("\t", "|", regex=False)
+        )
+    else:
+        proteins = ""
+
     out_df["Protein Accession"] = proteins
     out_df.to_csv(out_file, sep="\t", index=False)
     return out_file
