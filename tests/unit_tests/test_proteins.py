@@ -117,7 +117,8 @@ def test_target_fasta(target_fasta):
     assert prot.protein_map == protein_map
 
     # Check shared peptides:
-    assert prot.shared_peptides == {"AAAAABR"}
+    expected = {"wf|target1, wf|target4", "wf|target2"}
+    assert set(prot.shared_peptides["AAAAABR"].split("; ")) == expected
 
 
 def test_parameters(target_fasta):
@@ -161,7 +162,12 @@ def test_parameters(target_fasta):
     assert prot.protein_map == protein_map
 
     # Check shared peptides:
-    assert prot.shared_peptides == {"AAAAABR", "AAB"}
+    shared_peptides = {
+        "AAAAABR": {"wf|target1, wf|target4", "wf|target2"},
+        "AAB": {"wf|target1, wf|target4", "wf|target2"},
+    }
+    found = {k: set(v.split("; ")) for k, v in prot.shared_peptides.items()}
+    assert found == shared_peptides
 
 
 def test_decoy_fasta(target_fasta, decoy_fasta):
