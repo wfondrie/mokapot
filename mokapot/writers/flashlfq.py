@@ -13,21 +13,28 @@ LOGGER = logging.getLogger(__name__)
 
 def write_flashlfq(
     peptides,
+    proteins,
     out_file,
     filename_column,
     peptide_column,
     mass_column,
     rt_column,
     charge_column,
-    protein_column,
     eval_fdr,
 ):
     """Write results for quantification with FlashLFQ
+
+    If proteins are provided, use the mokapot protein groups. Else,
+    use the protein_column.
 
     Parameters
     ----------
     peptides : pandas.DataFrame
         The peptides from a LinearConfidence object.
+    proteins : str or FastaProteins object, optional
+        If a string, the column specifying the proteins for a peptide.
+        If a FastaProteins object, the parsed protein groups will be used for
+        the assignment.
     out_file : str
         The output file.
     filename_column : str
@@ -69,15 +76,29 @@ def write_flashlfq(
     out_df["Scan Retention Time"] = peptides.loc[passing, rt_column] / 60
     out_df["Precursor Charge"] = peptides.loc[passing, charge_column]
 
-    if protein_column is not None:
-        proteins = (
-            peptides.loc[passing, protein_column]
-            .str.replace("|", "-", regex=False)
-            .str.replace("\t", "|", regex=False)
+    if isinstance(proteins, str) or proteins is None:
+        # TODO: Add delimiter sniffing.
+        print("STRING!")
+        prots = peptides.loc[passing, proteins].str.replace(
+            "\t", "; ", regex=False
         )
-    else:
+    elif proteins is None:
         proteins = ""
+    else:
+        prots = base_seq.map(proteins.peptide_map.get)
+        shared = pd.isna(prots)
+        prots.loc[shared] = base_seq[shared].map(proteins.shared_peptides.get)
 
-    out_df["Protein Accession"] = proteins
+    out_df["Protein Accession"] = prots
+    missing = pd.isna(out_df["Protein Accession"])
+    num_missing = missing.sum()
+    if num_missing:
+        LOGGER.warn(
+            "- Discarding %i peptides that could not be mapped to protein "
+            "groups",
+            num_missing,
+        )
+        out_df = out_df.loc[~missing, :]
+
     out_df.to_csv(out_file, sep="\t", index=False)
     return out_file

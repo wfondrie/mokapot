@@ -484,6 +484,9 @@ class LinearConfidence(Confidence):
         PSM. If these are not present, saving to the FlashLFQ format is
         disabled.
 
+        Note that protein grouping in the FlashLFQ results will be more
+        accurate if proteins were added for analysis with mokapot.
+
         Parameters
         ----------
         dest_dir : str or None, optional
@@ -509,6 +512,13 @@ class LinearConfidence(Confidence):
                 f"{missing}"
             )
 
+        if self._has_proteins:
+            proteins = self._proteins
+        elif self._protein_column is not None:
+            proteins = self._protein_column
+        else:
+            proteins = None
+
         out_file = "mokapot.flashlfq.txt"
         if file_root is not None:
             out_file = file_root + "." + out_file
@@ -518,13 +528,13 @@ class LinearConfidence(Confidence):
 
         write_flashlfq(
             peptides=self.peptides,
+            proteins=proteins,
             out_file=out_file,
             filename_column=self._optional_columns["filename"],
             peptide_column=self._peptide_column,
             mass_column=self._optional_columns["calcmass"],
             rt_column=self._optional_columns["rt"],
             charge_column=self._optional_columns["charge"],
-            protein_column=self._protein_column,
             eval_fdr=self._eval_fdr,
         )
 

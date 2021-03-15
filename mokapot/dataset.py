@@ -379,8 +379,7 @@ class LinearPsmDataset(PsmDataset):
     protein_column : str, optional
         The column that specifies which protein(s) the detected peptide might
         have originated from. This column is not used to compute protein-level
-        confidence estimates (see :py:meth:`add_proteins()`). For FlashLFQ
-        output, mokapot expects these to be tab-delmited.
+        confidence estimates (see :py:meth:`add_proteins()`).
     group_column : str, optional
         A factor by which to group PSMs for grouped confidence estimation.
     feature_columns : str or tuple of str, optional

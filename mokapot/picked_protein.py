@@ -75,7 +75,7 @@ def picked_protein(
 
     unmatched_prots = prots.loc[unmatched, :]
     shared = unmatched_prots["stripped sequence"].isin(
-        proteins.shared_peptides
+        proteins.shared_peptides.keys()
     )
 
     shared_unmatched = (~shared).sum()
@@ -95,7 +95,7 @@ def picked_protein(
             )
 
         LOGGER.warning(
-            "%i out of %i peptides could not be mapped."
+            "%i out of %i peptides could not be mapped. "
             "Check your digest settings.",
             shared_unmatched,
             len(prots),

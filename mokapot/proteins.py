@@ -68,8 +68,9 @@ class FastaProteins:
     protein_map : Dict[str, str]
         A dictionary mapping decoy proteins to the target proteins from
         which they were generated.
-    shared_peptides : Set[str]
-        A set of peptides that are shared by more than one protein group.
+    shared_peptides : Dict[str]
+        A dictionary mapping shared peptides to the proteins that may have
+        generated them.
     has_decoys : bool
         Did the FASTA file have decoy proteins in it?
     """
@@ -265,9 +266,9 @@ def read_fasta(
                 peptides[pep].add(prot)
 
     total_prots = len(fasta)
-    LOGGER.info("\t- Parsed and digested %i proteins.", total_prots)
-    LOGGER.info("\t- %i had no peptides.", len(fasta) - len(proteins))
-    LOGGER.info("\t- Retained %i proteins.", len(proteins))
+    LOGGER.info("  - Parsed and digested %i proteins.", total_prots)
+    LOGGER.info("  - %i had no peptides.", len(fasta) - len(proteins))
+    LOGGER.info("  - Retained %i proteins.", len(proteins))
     del fasta
 
     # Sort proteins by number of peptides:
@@ -312,30 +313,30 @@ def read_fasta(
     if not has_decoys:
         LOGGER.info("No decoy sequences were found in the FASTA file.")
         LOGGER.info(
-            "\t - Creating decoy protein groups that mirror the target "
+            "  - Creating decoy protein groups that mirror the target "
             "proteins."
         )
 
     # unique peptides:
     LOGGER.info("Discarding shared peptides...")
-    shared_peptides = set()
+    shared_peptides = {}
     unique_peptides = {}
     for pep, prots in peptides.items():
         if len(prots) == 1:
             unique_peptides[pep] = next(iter(prots))
         else:
-            shared_peptides.add(pep)
+            shared_peptides[pep] = "; ".join(prots)
 
     total_proteins = len(set(p for p in unique_peptides.values()))
 
     LOGGER.info(
-        "\t- Discarded %i peptides and %i proteins groups.",
+        "  - Discarded %i peptides and %i proteins groups.",
         len(peptides) - len(unique_peptides),
         len(proteins) - total_proteins,
     )
 
     LOGGER.info(
-        "\t- Retained %i peptides from %i protein groups.",
+        "  - Retained %i peptides from %i protein groups.",
         len(unique_peptides),
         total_proteins,
     )
