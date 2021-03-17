@@ -34,6 +34,11 @@ def psm_df_1000(tmp_path):
         "score": np.concatenate(
             [rng.normal(3, size=200), rng.normal(size=300)]
         ),
+        "filename": "test.mzML",
+        "calcmass": rng.uniform(500, 2000, size=500),
+        "expmass": rng.uniform(500, 2000, size=500),
+        "ret_time": rng.uniform(0, 60 * 120, size=500),
+        "charge": rng.choice([2, 3, 4], size=500),
     }
 
     decoys = {
@@ -42,6 +47,11 @@ def psm_df_1000(tmp_path):
         "group": rng.choice(2, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "score": rng.normal(size=500),
+        "filename": "test.mzML",
+        "calcmass": rng.uniform(500, 2000, size=500),
+        "expmass": rng.uniform(500, 2000, size=500),
+        "ret_time": rng.uniform(0, 60 * 120, size=500),
+        "charge": rng.choice([2, 3, 4], size=500),
     }
 
     fasta_data = "\n".join(
@@ -66,6 +76,12 @@ def psms(psm_df_1000):
         spectrum_columns="spectrum",
         peptide_column="peptide",
         feature_columns="score",
+        filename_column="filename",
+        scan_column="spectrum",
+        calcmass_column="calcmass",
+        expmass_column="expmass",
+        rt_column="ret_time",
+        charge_column="charge",
         copy_data=True,
     )
     return psms

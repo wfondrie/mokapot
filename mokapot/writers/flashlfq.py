@@ -117,7 +117,7 @@ def _format_flashlfq(conf):
             "\t", "; ", regex=False
         )
     elif proteins is None:
-        proteins = ""
+        prots = ""
     else:
         prots = base_seq.map(proteins.peptide_map.get)
         shared = pd.isna(prots)
