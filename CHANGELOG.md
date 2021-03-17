@@ -23,8 +23,16 @@
   `importlib.metadata` to the standard library, saving a few hundred
   milliseconds.
 
-## [0.6.1] - 2021-03-11  
+## [0.6.2] - 2021-03-12  
+### Added
+- Now checks to verify there are no debugging print statements in the code
+  base when linting.
+
 ### Fixed  
+- Removed debugging print statements.
+
+## [0.6.1] - 2021-03-11
+### Fixed
 - Parsing Percolator tab-delimited files with a "DefaultDirection" line.
 - `Label` column is now converted to boolean during PIN file parsing. 
   Previously, problems occurred if the `Label` column was of dtype `object`.

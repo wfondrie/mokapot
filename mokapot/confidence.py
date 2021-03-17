@@ -461,7 +461,6 @@ class LinearConfidence(Confidence):
                     scores[targets], scores[~targets], includeDecoys=True
                 )
             except SystemExit as msg:
-                print(msg)
                 if "no decoy hits available for PEP calculation" in str(msg):
                     pep = 0
                 else:
