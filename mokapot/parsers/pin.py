@@ -207,7 +207,6 @@ def read_percolator(perc_file):
 
         psms = pd.concat((c for c in _parse_in_chunks(perc, cols)), copy=False)
 
-    print(psms.head())
     return psms
 
 
