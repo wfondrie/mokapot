@@ -24,7 +24,6 @@ import pandas as pd
 
 from . import qvalues
 from . import utils
-from .proteins import read_fasta
 from .proteins import FastaProteins
 from .confidence import (
     LinearConfidence,

@@ -36,8 +36,6 @@ setuptools.setup(
         "matplotlib>=3.1.3",
         "lxml>=4.6.2",
     ],
-    use_scm_version=True,
-    setup_requires=["setuptools-scm"],
     extras_require={
         "docs": [
             "numpydoc>=1.0.0",

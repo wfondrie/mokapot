@@ -26,7 +26,7 @@ from triqler import qvality
 from . import qvalues
 from . import utils
 from .picked_protein import picked_protein
-from .writers.flashlfq import write_flashlfq
+from .writers import to_flashlfq
 
 LOGGER = logging.getLogger(__name__)
 
@@ -473,8 +473,8 @@ class LinearConfidence(Confidence):
             self.confidence_estimates["proteins"] = None
             self.decoy_confidence_estimates["proteins"] = None
 
-    def to_flashlfq(self, dest_dir=None, file_root=None):
-        """Save peptides for quantification with FlashLFQ.
+    def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
+        """Save confidenct peptides for quantification with FlashLFQ.
 
         `FlashLFQ <https://github.com/smith-chem-wisc/FlashLFQ>`_ is an
         open-source tool for label-free quantification. For mokapot to save
@@ -489,12 +489,8 @@ class LinearConfidence(Confidence):
 
         Parameters
         ----------
-        dest_dir : str or None, optional
-            The directory in which to save the files. `None` will use the
-            current working directory.
-        file_root : str or None, optional
-            An optional prefix for the confidence estimate files. The
-            suffix will always be `mokapot.flashlfq.txt`.
+        out_file : str, optional
+            The output file to write.
 
         Returns
         -------
@@ -502,43 +498,7 @@ class LinearConfidence(Confidence):
             The path to the saved file.
 
         """
-        required = ["filename", "calcmass", "rt", "charge"]
-        missing = [c for c in required if c is None]
-        if missing:
-            missing = ", ".join([c + "_column" for c in missing])
-            raise ValueError(
-                "The following parameters must be specified when loading a "
-                "collection of PSMs in order to save them in FlashLFQ format: "
-                f"{missing}"
-            )
-
-        if self._has_proteins:
-            proteins = self._proteins
-        elif self._protein_column is not None:
-            proteins = self._protein_column
-        else:
-            proteins = None
-
-        out_file = "mokapot.flashlfq.txt"
-        if file_root is not None:
-            out_file = file_root + "." + out_file
-
-        if dest_dir is not None:
-            out_file = Path(dest_dir, out_file)
-
-        write_flashlfq(
-            peptides=self.peptides,
-            proteins=proteins,
-            out_file=out_file,
-            filename_column=self._optional_columns["filename"],
-            peptide_column=self._peptide_column,
-            mass_column=self._optional_columns["calcmass"],
-            rt_column=self._optional_columns["rt"],
-            charge_column=self._optional_columns["charge"],
-            eval_fdr=self._eval_fdr,
-        )
-
-        return out_file
+        return to_flashlfq(self, out_file)
 
 
 class CrossLinkedConfidence(Confidence):
