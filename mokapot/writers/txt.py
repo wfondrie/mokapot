@@ -8,27 +8,27 @@ import pandas as pd
 def to_txt(conf, dest_dir=None, file_root=None, sep="\t", decoys=False):
     """Save confidence estimates to delimited text files.
 
-    Parameters
-    ----------
-    conf : Confidence object or tuple of Confidence objects
-        One or more :py:class:`~mokapot.confidence.LinearConfidence` objects.
-    dest_dir : str or None, optional
-        The directory in which to save the files. `None` will use the current
-        working directory.
-   file_root : str or None, optional
-        An optional prefix for the confidence estimate files. The suffix will
-        always be "mokapot.{level}.txt" where "{level}" indicates the level at
-        which confidence estimation was performed (i.e. PSMs, peptides,
-        proteins).
-    sep : str, optional
-        The delimiter to use.
-    decoys : bool, optional
-        Save decoys confidence estimates as well?
+     Parameters
+     ----------
+     conf : Confidence object or tuple of Confidence objects
+         One or more :py:class:`~mokapot.confidence.LinearConfidence` objects.
+     dest_dir : str or None, optional
+         The directory in which to save the files. `None` will use the current
+         working directory.
+    file_root : str or None, optional
+         An optional prefix for the confidence estimate files. The suffix will
+         always be "mokapot.{level}.txt" where "{level}" indicates the level at
+         which confidence estimation was performed (i.e. PSMs, peptides,
+         proteins).
+     sep : str, optional
+         The delimiter to use.
+     decoys : bool, optional
+         Save decoys confidence estimates as well?
 
-    Returns
-    -------
-    list of str
-        The paths to the saved files.
+     Returns
+     -------
+     list of str
+         The paths to the saved files.
 
     """
     try:
