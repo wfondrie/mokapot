@@ -127,7 +127,7 @@ def _format_flashlfq(conf):
     missing = pd.isna(out_df["Protein Accession"])
     num_missing = missing.sum()
     if num_missing:
-        LOGGER.warn(
+        LOGGER.warning(
             "- Discarding %i peptides that could not be mapped to protein "
             "groups",
             num_missing,

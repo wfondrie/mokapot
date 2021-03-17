@@ -116,3 +116,8 @@ def test_fasta_proteins(mock_conf, mock_proteins, tmp_path):
     df = pd.read_table(mokapot.to_flashlfq(conf, tmp_path / "test.txt"))
     expected = pd.Series(["X|Y|Z", "A|B|C; X|Y|Z"], name="Protein Accession")
     pd.testing.assert_series_equal(df["Protein Accession"], expected)
+
+    conf._proteins.shared_peptides = {}
+    df = pd.read_table(mokapot.to_flashlfq(conf, tmp_path / "test.txt"))
+    expected = pd.Series(["X|Y|Z"], name="Protein Accession")
+    pd.testing.assert_series_equal(df["Protein Accession"], expected)
