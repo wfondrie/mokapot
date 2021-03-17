@@ -26,7 +26,7 @@ from triqler import qvality
 from . import qvalues
 from . import utils
 from .picked_protein import picked_protein
-from .writers import to_flashlfq
+from .writers import to_flashlfq, to_txt
 
 LOGGER = logging.getLogger(__name__)
 
@@ -100,9 +100,15 @@ class GroupedConfidence:
         """The groups for confidence estimation"""
         return list(self._group_confidence_estimates.keys())
 
-    def to_txt(self, dest_dir=None, file_root=None, sep="\t", decoys=False):
-        """
-        Save confidence estimates to delimited text files.
+    def to_txt(
+        self,
+        dest_dir=None,
+        file_root=None,
+        sep="\t",
+        decoys=False,
+        combine=False,
+    ):
+        """Save confidence estimates to delimited text files.
 
         Parameters
         ----------
@@ -110,19 +116,36 @@ class GroupedConfidence:
             The directory in which to save the files. `None` will use the
             current working directory.
         file_root : str or None, optional
-            An optional prefix for the confidence estimate files. The
-            suffix will always be `mokapot.psms.txt` and
-            `mokapot.peptides.txt`.
+            An optional prefix for the confidence estimate files. The suffix
+            will be "mokapot.{level}.txt", where "{level}" indicates the level
+            at which confidence estimation was performed (i.e. PSMs, peptides,
+            proteins) if :code:`combine=True`. If :code:`combine=False` (the
+            default), additionally the group value is prepended, yeilding a
+            suffix "{group}.mokapot.{level}.txt".
         sep : str, optional
             The delimiter to use.
         decoys : bool, optional
             Save decoys confidence estimates as well?
+        combine : bool, optional
+            Should groups be combined into a single file?
 
         Returns
         -------
         list of str
             The paths to the saved files.
+
         """
+        if combine:
+            res = self.group_confidence_estimates.values()
+            ret_files = to_txt(
+                res,
+                dest_dir=dest_dir,
+                file_root=file_root,
+                sep=sep,
+                decoys=decoys,
+            )
+            return ret_files
+
         ret_files = []
         for group, res in self.group_confidence_estimates.items():
             prefix = file_root + f".{group}"
@@ -205,8 +228,7 @@ class Confidence:
         return list(self.confidence_estimates.keys())
 
     def to_txt(self, dest_dir=None, file_root=None, sep="\t", decoys=False):
-        """
-        Save confidence estimates to delimited text files.
+        """Save confidence estimates to delimited text files.
 
         Parameters
         ----------
@@ -214,9 +236,10 @@ class Confidence:
             The directory in which to save the files. `None` will use the
             current working directory.
         file_root : str or None, optional
-            An optional prefix for the confidence estimate files. The
-            suffix will always be `mokapot.psms.txt` and
-            `mokapot.peptides.txt`.
+            An optional prefix for the confidence estimate files. The suffix
+            will always be "mokapot.{level}.txt", where "{level}" indicates the
+            level at which confidence estimation was performed (i.e. PSMs,
+            peptides, proteins).
         sep : str, optional
             The delimiter to use.
         decoys : bool, optional
@@ -226,32 +249,15 @@ class Confidence:
         -------
         list of str
             The paths to the saved files.
+
         """
-        file_base = "mokapot"
-        if file_root is not None:
-            file_base = file_root + "." + file_base
-        if dest_dir is not None:
-            file_base = Path(dest_dir, file_base)
-
-        out_files = []
-        for level, qvals in self.confidence_estimates.items():
-            if qvals is None:
-                continue
-
-            out_file = str(file_base) + f".{level}.txt"
-            qvals.to_csv(out_file, sep=sep, index=False)
-            out_files.append(out_file)
-
-        if decoys:
-            for level, qvals in self.decoy_confidence_estimates.items():
-                if qvals is None:
-                    continue
-
-                out_file = str(file_base) + f".decoys.{level}.txt"
-                qvals.to_csv(out_file, sep=sep, index=False)
-                out_files.append(out_file)
-
-        return out_files
+        return to_txt(
+            self,
+            dest_dir=dest_dir,
+            file_root=file_root,
+            sep=sep,
+            decoys=decoys,
+        )
 
     def _perform_tdc(self, psm_columns):
         """Perform target-decoy competition.

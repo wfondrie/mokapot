@@ -4,10 +4,24 @@
 ### Added
 - Support for downstream quantitation with
   [FlashLFQ](https://github.com/smith-chem-wisc/FlashLFQ). This is accomplished
-  through the `to_flashlfq()` method of `LinearConfidence` objects. Note that
-  to support the FlashLFQ format, you'll need to specify additional columns in
-  `read_pin()` or use a PepXML input file (`read_pepxml()`).
-- Tests accompanying the support for the above format.
+  through the `mokapot.to_flashlfq()` function or the `to_flashlfq()` method of
+  `LinearConfidence` objects. Note that to support the FlashLFQ format, you'll
+  need to specify additional columns in `read_pin()` or use a PepXML input file
+  (`read_pepxml()`). 
+- Added a top-level function for exporting confident PSMs, peptides, and
+  proteins from one or more `LinearConfidence` objects as a tab-delimited file:
+  `mokapot.to_txt()`.
+- Tests accompanying the support for the features above.
+
+### Changed
+- Corresponding with support for new formats, the `mokapot.read_pin()` function
+  and the `LinearPsmDataset` constructor now have many new optional parameters.
+  These specify the columns containing the metadata needed to write the added
+  formats.
+- Starting mokapot should be slightly faster for Python >= 3.8. We were able to
+  eliminate the runtime call to setuptools, because of the recent addition of
+  `importlib.metadata` to the standard library, saving a few hundred
+  milliseconds.
 
 ## [0.6.1] - 2021-03-11  
 ### Fixed  
