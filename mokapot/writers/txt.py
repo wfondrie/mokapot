@@ -82,7 +82,7 @@ def _get_level_data(conf, decoys):
         results[level].append(qvals)
 
     if decoys:
-        for level, qvals in conf.decoy_confidence_estiamtes.items():
+        for level, qvals in conf.decoy_confidence_estimates.items():
             if qvals is None:
                 continue
 

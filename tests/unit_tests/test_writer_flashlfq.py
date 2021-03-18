@@ -6,51 +6,7 @@ import mokapot
 import numpy as np
 import pandas as pd
 
-from ..fixtures import psm_df_1000, psms
-
-
-@pytest.fixture
-def mock_proteins():
-    class proteins:
-        def __init__(self):
-            self.peptide_map = {"ABCDXYZ": "X|Y|Z"}
-            self.shared_peptides = {"ABCDEFG": "A|B|C; X|Y|Z"}
-
-    return proteins()
-
-
-@pytest.fixture
-def mock_conf():
-    "Create a mock-up of a LinearConfidence object"
-
-    class conf:
-        def __init__(self):
-            self._optional_columns = {
-                "filename": "filename",
-                "calcmass": "calcmass",
-                "rt": "ret_time",
-                "charge": "charge",
-            }
-
-            self._protein_column = "protein"
-            self._peptide_column = "peptide"
-            self._eval_fdr = 0.5
-            self._proteins = None
-            self._has_proteins = False
-
-            self.peptides = pd.DataFrame(
-                {
-                    "filename": "a/b/c.mzML",
-                    "calcmass": [1, 2],
-                    "ret_time": [60, 120],
-                    "charge": [2, 3],
-                    "peptide": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
-                    "mokapot q-value": [0.001, 0.1],
-                    "protein": ["A|B|C\tB|C|A", "A|B|C"],
-                }
-            )
-
-    return conf()
+from ..fixtures import psm_df_1000, psms, mock_conf, mock_proteins
 
 
 def test_sanity(psms, tmp_path):
@@ -74,7 +30,7 @@ def test_basic(mock_conf, tmp_path):
     df = pd.read_table(mokapot.to_flashlfq(conf, tmp_path / "test.txt"))
     expected = pd.DataFrame(
         {
-            "File Name": ["a/b/c.mzML"] * 2,
+            "File Name": ["c.mzML"] * 2,
             "Base Sequence": ["ABCDXYZ", "ABCDEFG"],
             "Full Sequence": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
             "Peptide Monoisotopic Mass": [1, 2],

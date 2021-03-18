@@ -126,3 +126,50 @@ def _random_peptide(length, random_state):
         list(random_state.choice(list("ACDEFGHILMNPQSTVWY"), length - 1))
         + ["K"]
     )
+
+
+@pytest.fixture
+def mock_proteins():
+    class proteins:
+        def __init__(self):
+            self.peptide_map = {"ABCDXYZ": "X|Y|Z"}
+            self.shared_peptides = {"ABCDEFG": "A|B|C; X|Y|Z"}
+
+    return proteins()
+
+
+@pytest.fixture
+def mock_conf():
+    "Create a mock-up of a LinearConfidence object"
+
+    class conf:
+        def __init__(self):
+            self._optional_columns = {
+                "filename": "filename",
+                "calcmass": "calcmass",
+                "rt": "ret_time",
+                "charge": "charge",
+            }
+
+            self._protein_column = "protein"
+            self._peptide_column = "peptide"
+            self._eval_fdr = 0.5
+            self._proteins = None
+            self._has_proteins = False
+
+            self.peptides = pd.DataFrame(
+                {
+                    "filename": "a/b/c.mzML",
+                    "calcmass": [1, 2],
+                    "ret_time": [60, 120],
+                    "charge": [2, 3],
+                    "peptide": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
+                    "mokapot q-value": [0.001, 0.1],
+                    "protein": ["A|B|C\tB|C|A", "A|B|C"],
+                }
+            )
+
+            self.confidence_estimates = {"peptides": self.peptides}
+            self.decoy_confidence_estimates = {"peptides": self.peptides}
+
+    return conf()

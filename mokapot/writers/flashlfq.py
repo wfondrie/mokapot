@@ -3,6 +3,7 @@
 Details about the format can be found here:
 https://github.com/smith-chem-wisc/FlashLFQ/wiki/Identification-Input-Formats#generic
 """
+from pathlib import Path
 import logging
 
 import pandas as pd
@@ -96,7 +97,9 @@ def _format_flashlfq(conf):
     passing = peptides["mokapot q-value"] <= eval_fdr
 
     out_df = pd.DataFrame()
-    out_df["File Name"] = peptides.loc[passing, filename_column]
+    out_df["File Name"] = peptides.loc[passing, filename_column].apply(
+        lambda x: Path(x).name
+    )
 
     seq = peptides.loc[passing, peptide_column]
     base_seq = (

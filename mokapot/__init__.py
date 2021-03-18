@@ -23,6 +23,6 @@ from .dataset import LinearPsmDataset
 from .model import Model, PercolatorModel, save_model, load_model
 from .brew import brew
 from .parsers import read_pin, read_percolator, read_pepxml
-from .writers import to_flashlfq
+from .writers import to_flashlfq, to_txt
 from .confidence import LinearConfidence, plot_qvalues
 from .proteins import make_decoys, digest, FastaProteins
