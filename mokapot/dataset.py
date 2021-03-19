@@ -24,7 +24,8 @@ import pandas as pd
 
 from . import qvalues
 from . import utils
-from .proteins import FastaProteins
+from .parsers.fasta import read_fasta
+from .proteins import Proteins
 from .confidence import (
     LinearConfidence,
     CrossLinkedConfidence,
@@ -218,18 +219,18 @@ class PsmDataset(ABC):
 
         Parameters
         ----------
-        proteins : a FastaProteins object or str
-            The :py:class:`mokapot.proteins.FastaProteins` object defines the
+        proteins : a Proteins object or str
+            The :py:class:`~mokapot.proteins.Proteins` object defines the
             mapping of peptides to proteins and the mapping of decoy proteins
             to their corresponding target proteins. Alternatively, a string
             specifying a FASTA file can be specified which will be parsed to
             define these mappings.
         **kwargs : dict
             Keyword arguments to be passed to the
-            :py:class:`mokapot.proteins.FastaProteins` constructor.
+            :py:class:`mokapot.read_fasta()` function.
         """
-        if not isinstance(proteins, FastaProteins):
-            proteins = FastaProteins(proteins, **kwargs)
+        if not isinstance(proteins, Proteins):
+            proteins = read_fasta(proteins, **kwargs)
 
         self._proteins = proteins
 

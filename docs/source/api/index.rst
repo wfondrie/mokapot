@@ -45,6 +45,8 @@ Primary Functions
    read_pin
    read_pepxml
    brew
+   to_txt
+   to_flashlfq
 
 Utility Functions
 *****************

@@ -2,7 +2,7 @@
 
 ## [unreleased]
 ### Added
-- Support for downstream quantitation with
+- Support for downstream peptide and protein quantitation with
   [FlashLFQ](https://github.com/smith-chem-wisc/FlashLFQ). This is accomplished
   through the `mokapot.to_flashlfq()` function or the `to_flashlfq()` method of
   `LinearConfidence` objects. Note that to support the FlashLFQ format, you'll
@@ -11,7 +11,10 @@
 - Added a top-level function for exporting confident PSMs, peptides, and
   proteins from one or more `LinearConfidence` objects as a tab-delimited file:
   `mokapot.to_txt()`.
+- Added a top-level function for reading FASTA files for protein-level 
+  confidence estimates: `mokapot.read_fasta()`.
 - Tests accompanying the support for the features above.
+- Added a "mokapot cookbook" to the documentation with helpful code snippets.
 
 ### Changed
 - Corresponding with support for new formats, the `mokapot.read_pin()` function

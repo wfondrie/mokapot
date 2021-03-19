@@ -8,7 +8,8 @@ Primary Functions
 .. autofunction:: read_pin
 .. autofunction:: read_pepxml
 .. autofunction:: brew
-
+.. autofunction:: to_txt
+.. autofunction:: to_flashlfq
 
 Utility Functions
 -----------------
