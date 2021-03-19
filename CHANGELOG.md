@@ -1,7 +1,7 @@
 # Changelog for mokapot  
 
-## [unreleased]
-### Added
+## [0.7.0] - 2021-03-19  
+### Added  
 - Support for downstream peptide and protein quantitation with
   [FlashLFQ](https://github.com/smith-chem-wisc/FlashLFQ). This is accomplished
   through the `mokapot.to_flashlfq()` function or the `to_flashlfq()` method of
