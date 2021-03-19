@@ -1,7 +1,7 @@
 """Test that we can parse a FASTA file correctly"""
 import pytest
 import mokapot
-from mokapot import FastaProteins, digest, make_decoys
+from mokapot import read_fasta, digest, make_decoys
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def test_fasta_with_missing(missing_fasta):
 
     See https://github.com/wfondrie/mokapot/issues/13
     """
-    FastaProteins(missing_fasta)
+    read_fasta(missing_fasta)
 
 
 def test_target_fasta(target_fasta):
@@ -92,7 +92,7 @@ def test_target_fasta(target_fasta):
     short_pep = "AAABK"
 
     # First the default parameters
-    prot = FastaProteins(target_fasta)
+    prot = read_fasta(target_fasta)
     assert prot.decoy_prefix == "decoy_"
     assert not prot.has_decoys
 
@@ -117,7 +117,8 @@ def test_target_fasta(target_fasta):
     assert prot.protein_map == protein_map
 
     # Check shared peptides:
-    assert prot.shared_peptides == {"AAAAABR"}
+    expected = {"wf|target1, wf|target4", "wf|target2"}
+    assert set(prot.shared_peptides["AAAAABR"].split("; ")) == expected
 
 
 def test_parameters(target_fasta):
@@ -125,7 +126,7 @@ def test_parameters(target_fasta):
     long_pep = "A" + "".join(["AB"] * 24) + "AK"
     short_pep = "AAABK"
 
-    prot = FastaProteins(
+    prot = read_fasta(
         target_fasta,
         missed_cleavages=0,
         clip_nterm_methionine=True,
@@ -161,18 +162,23 @@ def test_parameters(target_fasta):
     assert prot.protein_map == protein_map
 
     # Check shared peptides:
-    assert prot.shared_peptides == {"AAAAABR", "AAB"}
+    shared_peptides = {
+        "AAAAABR": {"wf|target1, wf|target4", "wf|target2"},
+        "AAB": {"wf|target1, wf|target4", "wf|target2"},
+    }
+    found = {k: set(v.split("; ")) for k, v in prot.shared_peptides.items()}
+    assert found == shared_peptides
 
 
 def test_decoy_fasta(target_fasta, decoy_fasta):
     """Test decoys can be provided and used."""
     # Try without targets:
     with pytest.raises(ValueError) as msg:
-        FastaProteins(decoy_fasta)
+        read_fasta(decoy_fasta)
         assert str(msg).startswith("Only decoy proteins were found")
 
     # Now do with both:
-    prot = FastaProteins([target_fasta, decoy_fasta])
+    prot = read_fasta([target_fasta, decoy_fasta])
 
     # Check the peptide_map
     # A target sequence
@@ -236,11 +242,11 @@ def test_make_decoys(target_fasta, tmp_path):
     """test the make_decoys() function"""
     concat_file = str(tmp_path / "concat.fasta")
     make_decoys(target_fasta, concat_file)
-    before = len(mokapot.proteins._parse_fasta_files(target_fasta))
-    after = len(mokapot.proteins._parse_fasta_files(concat_file))
+    before = len(mokapot.parsers.fasta._parse_fasta_files(target_fasta))
+    after = len(mokapot.parsers.fasta._parse_fasta_files(concat_file))
     assert 2 * before == after
 
     sep_file = str(tmp_path / "decoy.fasta")
     make_decoys(target_fasta, sep_file, concatenate=False)
-    after = len(mokapot.proteins._parse_fasta_files(sep_file))
+    after = len(mokapot.parsers.fasta._parse_fasta_files(sep_file))
     assert before == after

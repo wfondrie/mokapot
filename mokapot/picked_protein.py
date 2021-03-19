@@ -25,8 +25,8 @@ def picked_protein(
         The column in `peptides` indicating if the peptide is a target.
     peptide_column : str
         The column in `peptides` containing the peptide sequence.
-    proteins : FastaProteins object
-        A FastaProteins object.
+    proteins : Proteins object
+        A Proteins object.
 
     Returns
     -------
@@ -75,7 +75,7 @@ def picked_protein(
 
     unmatched_prots = prots.loc[unmatched, :]
     shared = unmatched_prots["stripped sequence"].isin(
-        proteins.shared_peptides
+        proteins.shared_peptides.keys()
     )
 
     shared_unmatched = (~shared).sum()
@@ -95,7 +95,7 @@ def picked_protein(
             )
 
         LOGGER.warning(
-            "%i out of %i peptides could not be mapped."
+            "%i out of %i peptides could not be mapped. "
             "Check your digest settings.",
             shared_unmatched,
             len(prots),
@@ -136,7 +136,7 @@ def group_with_decoys(peptides, proteins):
     ----------
     peptides : pandas.DataFrame
         The peptide dataframe.
-    proteins : FastaProteins object
+    proteins : a Proteins object
 
     Returns
     -------
@@ -158,7 +158,7 @@ def group_without_decoys(peptides, target_column, proteins):
         The peptide dataframe.
     target_column : str
         The column indicating if the peptide is a target.
-    proteins : a FastaProteins object
+    proteins : a Proteins object
 
     Returns
     -------

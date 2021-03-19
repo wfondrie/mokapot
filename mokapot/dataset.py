@@ -24,8 +24,8 @@ import pandas as pd
 
 from . import qvalues
 from . import utils
-from .proteins import read_fasta
-from .proteins import FastaProteins
+from .parsers.fasta import read_fasta
+from .proteins import Proteins
 from .confidence import (
     LinearConfidence,
     CrossLinkedConfidence,
@@ -219,18 +219,18 @@ class PsmDataset(ABC):
 
         Parameters
         ----------
-        proteins : a FastaProteins object or str
-            The :py:class:`mokapot.proteins.FastaProteins` object defines the
+        proteins : a Proteins object or str
+            The :py:class:`~mokapot.proteins.Proteins` object defines the
             mapping of peptides to proteins and the mapping of decoy proteins
             to their corresponding target proteins. Alternatively, a string
             specifying a FASTA file can be specified which will be parsed to
             define these mappings.
         **kwargs : dict
             Keyword arguments to be passed to the
-            :py:class:`mokapot.proteins.FastaProteins` constructor.
+            :py:class:`mokapot.read_fasta()` function.
         """
-        if not isinstance(proteins, FastaProteins):
-            proteins = FastaProteins(proteins, **kwargs)
+        if not isinstance(proteins, Proteins):
+            proteins = read_fasta(proteins, **kwargs)
 
         self._proteins = proteins
 
@@ -385,7 +385,28 @@ class LinearPsmDataset(PsmDataset):
     feature_columns : str or tuple of str, optional
         The column(s) specifying the feature(s) for mokapot analysis. If
         :code:`None`, these are assumed to be all of the columns that were not
-        specified in the previous parameters.
+        specified in the other parameters.
+    filename_column : str, optional
+        The column specifying the mass spectrometry data file (e.g. mzML)
+        containing each spectrum. This is required for some output formats,
+        such as mzTab and FlashLFQ.
+    scan_column : str, optional
+        The column specifying the scan number for each spectrum. Each value
+        in the column should be an integer. This is required for some output
+        formats, such as mzTab.
+    calcmass_column : str, optional
+        The column specifying the theoretical monoisotopic mass of each
+        peptide. This is required for some output formats, such as mzTab and
+        FlashLFQ.
+    expmass_column : str, optional
+        The column specifying the measured neutral precursor mass. This is
+        required for the some ouput formats, such as mzTab.
+    rt_column : str, optional
+        The column specifying the retention time of each spectrum, in seconds.
+        This is required for some output formats, such as mzTab and FlashLFQ.
+    charge_column : str, optional
+        The column specifying the charge state of each PSM. This is required
+        for some output formats, such as mzTab and FlashLFQ.
     copy_data : bool, optional
         If true, a deep copy of `psms` is created, so that changes to the
         original collection of PSMs is not propagated to this object. This uses
@@ -403,7 +424,6 @@ class LinearPsmDataset(PsmDataset):
     targets : numpy.ndarray
     columns : list of str
     has_proteins : bool
-
     """
 
     def __init__(
@@ -415,6 +435,12 @@ class LinearPsmDataset(PsmDataset):
         protein_column=None,
         group_column=None,
         feature_columns=None,
+        filename_column=None,
+        scan_column=None,
+        calcmass_column=None,
+        expmass_column=None,
+        rt_column=None,
+        charge_column=None,
         copy_data=True,
     ):
         """Initialize a PsmDataset object."""
@@ -422,10 +448,23 @@ class LinearPsmDataset(PsmDataset):
         self._peptide_column = peptide_column
         self._protein_column = protein_column
 
+        self._optional_columns = {
+            "filename": filename_column,
+            "scan": scan_column,
+            "calcmass": calcmass_column,
+            "expmass": expmass_column,
+            "rt": rt_column,
+            "charge": charge_column,
+        }
+
         # Finish initialization
         other_columns = [target_column, peptide_column]
         if protein_column is not None:
-            other_columns += [protein_column]
+            other_columns.append(protein_column)
+
+        for _, opt_column in self._optional_columns.items():
+            if opt_column is not None:
+                other_columns.append(opt_column)
 
         super().__init__(
             psms=psms,
@@ -528,7 +567,8 @@ class LinearPsmDataset(PsmDataset):
         eval_fdr : float
             The FDR threshold at which to report and evaluate performance. If
             `scores` is not :code:`None`, this parameter has no affect on the
-            analysis itself, only on logging messages.
+            analysis itself, but does affect logging messages and the FDR
+            threshold applied for some output formats, such as FlashLFQ.
 
         Returns
         -------
