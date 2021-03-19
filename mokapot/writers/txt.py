@@ -8,27 +8,33 @@ import pandas as pd
 def to_txt(conf, dest_dir=None, file_root=None, sep="\t", decoys=False):
     """Save confidence estimates to delimited text files.
 
-     Parameters
-     ----------
-     conf : Confidence object or tuple of Confidence objects
-         One or more :py:class:`~mokapot.confidence.LinearConfidence` objects.
-     dest_dir : str or None, optional
-         The directory in which to save the files. `None` will use the current
-         working directory.
-    file_root : str or None, optional
-         An optional prefix for the confidence estimate files. The suffix will
-         always be "mokapot.{level}.txt" where "{level}" indicates the level at
-         which confidence estimation was performed (i.e. PSMs, peptides,
-         proteins).
-     sep : str, optional
-         The delimiter to use.
-     decoys : bool, optional
-         Save decoys confidence estimates as well?
+    Write the confidence estimates for each of the available levels
+    (i.e. PSMs, peptides, proteins) to separate flat text files using the
+    specified delimiter. If more than one collection of confidence estimates
+    is provided, they will be combined, yielding a single file for each level
+    specified by either dataset.
 
-     Returns
-     -------
-     list of str
-         The paths to the saved files.
+    Parameters
+    ----------
+    conf : Confidence object or tuple of Confidence objects
+        One or more :py:class:`~mokapot.confidence.LinearConfidence` objects.
+    dest_dir : str or None, optional
+        The directory in which to save the files. :code:`None` will use the
+        current working directory.
+    file_root : str or None, optional
+        An optional prefix for the confidence estimate files. The suffix will
+        always be "mokapot.{level}.txt" where "{level}" indicates the level at
+        which confidence estimation was performed (i.e. PSMs, peptides,
+        proteins).
+    sep : str, optional
+        The delimiter to use.
+    decoys : bool, optional
+        Save decoys confidence estimates as well?
+
+    Returns
+    -------
+    list of str
+        The paths to the saved files.
 
     """
     try:

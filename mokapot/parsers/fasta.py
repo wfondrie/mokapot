@@ -34,7 +34,10 @@ def read_fasta(
     your database search, see :py:func:`mokapot.make_decoys()`.
 
     Importantly, the parameters below should match the conditions in which the
-    PSMs were assigned as closely as possible.
+    PSMs were assigned as closely as possible. Enzyme specificity is provided
+    using a regular expression. A table of common enzymes can be found here in
+    the mokapot `cookbook
+    <file:///Users/wfondrie/packages/mokapot/docs/build/html/cookbook.html#enzyme-regular-expressions>`_.
 
     Parameters
     ----------

@@ -158,7 +158,8 @@ Then conduct your mokapot analysis:
 This is great for when your upstream and/or downstream analyses are also
 conducted in Python. Additionally, a good deal more flexibility is available
 when using mokapot from the Python interpreter. For more details, see the
-:doc:`Python API <api/index>`.
+:doc:`Python API <api/index>` as well as our :doc:`Cookbook <cookbook>` and
+:doc:`Vignettes <vignettes/index>` for common use cases.
 
 
 Need help?
@@ -182,6 +183,7 @@ question, someone else has a similar one.
    :titlesonly:
 
    self
+   Cookbook <cookbook.rst>
    vignettes/index.rst
    api/index.rst
    cli.rst

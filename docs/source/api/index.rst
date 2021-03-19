@@ -32,6 +32,7 @@ Finally, custom machine learning models can be created using the
    model.rst
    dataset.rst
    confidence.rst
+   proteins.rst
 
 Functions
 ---------
@@ -44,6 +45,7 @@ Primary Functions
 
    read_pin
    read_pepxml
+   read_fasta
    brew
    to_txt
    to_flashlfq
@@ -102,3 +104,20 @@ optionally, proteins.
 
    LinearConfidence
    .. CrossLinkedConfidence
+
+
+Protein Sequences
+-----------------
+
+To calculate protein-level confidence estimates, mokapot needs the original
+protein sequences and digestion parameters used for the database search. These
+are created using the :py:func:`mokapot.read_fasta()` function, which return a
+:py:class:`Proteins` object. :py:class:`Proteins` objects store the mapping of
+peptides to the proteins that may have generated them and the mapping of
+target protein sequences to their corresponding decoys.
+
+.. currentmodule:: mokapot.proteins
+.. autosummary::
+   :nosignatures:
+
+   Proteins
