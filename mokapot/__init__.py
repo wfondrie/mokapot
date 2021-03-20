@@ -1,8 +1,4 @@
-"""
-Initialize the mokapot package.
-"""
-import sys
-
+"""Initialize the mokapot package."""
 try:
     from importlib.metadata import version, PackageNotFoundError
 
