@@ -648,8 +648,6 @@ class CrosslinkConfidence(Confidence):
             level_data += [proteins]
             LOGGER.info("\t- Found %i unique protein pairs.", len(proteins))
 
-        print(proteins)
-
         for level, data in zip(levels, level_data):
             data = data.sort_values(
                 self._score_column, ascending=False
@@ -695,7 +693,6 @@ class CrosslinkConfidence(Confidence):
                     includeDecoys=True,
                 )
             except SystemExit as msg:
-                print(msg)
                 if "no decoy hits available for PEP calculation" in str(msg):
                     pep = 0
                 else:

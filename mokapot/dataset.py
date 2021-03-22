@@ -665,7 +665,7 @@ class CrosslinkPsmDataset(PsmDataset):
         feature_columns=None,
         copy_data=True,
     ):
-        """Initialize a PsmDataset object."""
+        """Initialize a CrosslinkPsmDataset object."""
         self._target_columns = utils.tuplize(target_columns)
         self._peptide_columns = utils.tuplize(peptide_columns)
 
