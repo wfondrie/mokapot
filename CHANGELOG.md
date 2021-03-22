@@ -1,5 +1,10 @@
 # Changelog for mokapot  
 
+## [0.7.1] - 2021-03-22  
+### Changed  
+- Updated the build to align with
+  [PEP517](https://www.python.org/dev/peps/pep-0517/)
+
 ## [0.7.0] - 2021-03-19  
 ### Added  
 - Support for downstream peptide and protein quantitation with
