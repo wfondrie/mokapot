@@ -674,7 +674,7 @@ class CrosslinkPsmDataset(PsmDataset):
 
         # Finish initialization
         other_columns = sum(
-            [list(self._target_columns), list(self._peptide_columns),], [],
+            [list(self._target_columns), list(self._peptide_columns)], []
         )
 
         if protein_columns is not None:
