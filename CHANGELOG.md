@@ -1,5 +1,52 @@
 # Changelog for mokapot  
 
+## [0.7.1] - 2021-03-22  
+### Changed  
+- Updated the build to align with
+  [PEP517](https://www.python.org/dev/peps/pep-0517/)
+
+## [0.7.0] - 2021-03-19  
+### Added  
+- Support for downstream peptide and protein quantitation with
+  [FlashLFQ](https://github.com/smith-chem-wisc/FlashLFQ). This is accomplished
+  through the `mokapot.to_flashlfq()` function or the `to_flashlfq()` method of
+  `LinearConfidence` objects. Note that to support the FlashLFQ format, you'll
+  need to specify additional columns in `read_pin()` or use a PepXML input file
+  (`read_pepxml()`). 
+- Added a top-level function for exporting confident PSMs, peptides, and
+  proteins from one or more `LinearConfidence` objects as a tab-delimited file:
+  `mokapot.to_txt()`.
+- Added a top-level function for reading FASTA files for protein-level 
+  confidence estimates: `mokapot.read_fasta()`.
+- Tests accompanying the support for the features above.
+- Added a "mokapot cookbook" to the documentation with helpful code snippets.
+
+### Changed
+- Corresponding with support for new formats, the `mokapot.read_pin()` function
+  and the `LinearPsmDataset` constructor now have many new optional parameters.
+  These specify the columns containing the metadata needed to write the added
+  formats.
+- Starting mokapot should be slightly faster for Python >= 3.8. We were able to
+  eliminate the runtime call to setuptools, because of the recent addition of
+  `importlib.metadata` to the standard library, saving a few hundred
+  milliseconds.
+
+## [0.6.2] - 2021-03-12  
+### Added
+- Now checks to verify there are no debugging print statements in the code
+  base when linting.
+
+### Fixed  
+- Removed debugging print statements.
+
+## [0.6.1] - 2021-03-11
+### Fixed
+- Parsing Percolator tab-delimited files with a "DefaultDirection" line.
+- `Label` column is now converted to boolean during PIN file parsing. 
+  Previously, problems occurred if the `Label` column was of dtype `object`.
+- Parsing modifications from pepXML files were indexed incorrectly on the
+  peptide string.
+
 ## [0.6.0] - 2021-03-03  
 ### Added  
 - Support for parsing PSMs from PepXML input files.

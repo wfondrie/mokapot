@@ -169,11 +169,12 @@ def _create_features(psms, exclude_features, open_modification_bin_size):
         [psms, pd.get_dummies(psms["charge"], prefix="charge")], axis=1
     )
 
-    psms = psms.drop("charge", axis=1)
-
+    # psms = psms.drop("charge", axis=1)
     # -log10 p-values
     nonfeat_cols = [
-        "spectrum_id",
+        "ms_data_file",
+        "scan",
+        "ret_time",
         "label",
         "exp_mass",
         "calc_mass",
@@ -185,6 +186,7 @@ def _create_features(psms, exclude_features, open_modification_bin_size):
         "beta_peptide",
         "alpha_proteins",
         "beta_proteins",
+        "charge",
     ]
 
     if exclude_features is not None:
@@ -195,7 +197,27 @@ def _create_features(psms, exclude_features, open_modification_bin_size):
     nonfeat_cols += exclude_features
     feat_cols = [c for c in psms.columns if c not in nonfeat_cols]
     psms = psms.apply(_log_features, features=feat_cols)
-    return psms, feat_cols
+
+    if to_df:
+        return psms
+
+    dset = LinearPsmDataset(
+        psms=psms,
+        target_column="label",
+        spectrum_columns=("ms_data_file", "scan", "ret_time"),
+        peptide_column="peptide",
+        protein_column="proteins",
+        feature_columns=feat_cols,
+        filename_column="ms_data_file",
+        scan_column="scan",
+        calcmass_column="calc_mass",
+        expmass_column="exp_mass",
+        rt_column="ret_time",
+        charge_column="charge",
+        copy_data=False,
+    )
+
+    return dset
 
 
 def _parse_pepxml(pepxml_file, decoy_prefix):
@@ -216,11 +238,13 @@ def _parse_pepxml(pepxml_file, decoy_prefix):
         PSM.
     """
     LOGGER.info("Reading %s...", pepxml_file)
-    parser = etree.iterparse(str(pepxml_file), tag="{*}spectrum_query")
-    parse_fun = partial(_parse_spectrum, decoy_prefix=decoy_prefix)
-    psms = map(parse_fun, parser)
+    parser = etree.iterparse(str(pepxml_file), tag="{*}msms_run_summary")
+    parse_fun = partial(_parse_msms_run, decoy_prefix=decoy_prefix)
+    spectra = map(parse_fun, parser)
     try:
+        psms = itertools.chain.from_iterable(spectra)
         df = pd.DataFrame.from_records(itertools.chain.from_iterable(psms))
+        df["ms_data_file"] = df["ms_data_file"].astype("category")
     except etree.XMLSyntaxError:
         raise ValueError(
             f"{pepxml_file} is not a PepXML file or is malformed."
@@ -228,15 +252,47 @@ def _parse_pepxml(pepxml_file, decoy_prefix):
     return df
 
 
-def _parse_spectrum(spectrum, decoy_prefix):
+def _parse_msms_run(msms_run, decoy_prefix):
+    """Parse a single MS/MS run.
+
+    Each of these corresponds to a raw MS data file.
+
+    Parameters
+    ----------
+    msms_run: tuple of anything, lxml.etree.Element
+        The second element of the tuple should be the XML element for a single
+        msms_run. The first is not used, but is necessary for compatibility
+        with using :code:`map()`.
+    decoy_prefix : str
+        The prefix used to indicate a decoy protein in the description lines of
+        the FASTA file.
+
+    Yields
+    ------
+    dict
+        A dictionary describing all of the PSMs in a run.
+
+    """
+    msms_run = msms_run[1]
+    ms_data_file = msms_run.get("base_name")
+    run_ext = msms_run.get("raw_data")
+    if not ms_data_file.endswith(run_ext):
+        ms_data_file += run_ext
+
+    run_info = {"ms_data_file": ms_data_file}
+    for spectrum in msms_run.iter("{*}spectrum_query"):
+        yield _parse_spectrum(spectrum, run_info, decoy_prefix)
+
+
+def _parse_spectrum(spectrum, run_info, decoy_prefix):
     """Parse the PSMs for a single mass spectrum
 
     Parameters
     ----------
-    spectrum: tuple of anything, lxml.etree.Element
-        The second element of the tuple should be the XML element for a single
-        spectrum. The first is not used, but is necessary for compatibility with
-        using :code:`map()`.
+    spectrum : lxml.etree.Element
+        The XML element for a single
+    run_info : dict
+        The parsed run data.
     decoy_prefix : str
         The prefix used to indicate a decoy protein in the description lines of
         the FASTA file.
@@ -246,12 +302,10 @@ def _parse_spectrum(spectrum, decoy_prefix):
     dict
         A dictionary describing all of the PSMs for a spectrum.
     """
-    spectrum = spectrum[1]
-    spec_info = {
-        "spectrum_id": spectrum.get("spectrum"),
-        "charge": int(spectrum.get("assumed_charge")),
-    }
-
+    spec_info = run_info.copy()
+    spec_info["scan"] = int(spectrum.get("end_scan"))
+    spec_info["charge"] = int(spectrum.get("assumed_charge"))
+    spec_info["ret_time"] = float(spectrum.get("retention_time_sec"))
     spec_info["exp_mass"] = float(spectrum.get("precursor_neutral_mass"))
     for psms in spectrum.iter("{*}search_result"):
         for psm in psms.iter("{*}search_hit"):
@@ -311,6 +365,7 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
                 idx = offset + int(mod.get("position"))
                 mass = mod.get("mass")
                 mod_pep = mod_pep[:idx] + "[" + mass + "]" + mod_pep[idx:]
+                offset += 2 + len(mass)
 
             psm["peptide"] = mod_pep
 

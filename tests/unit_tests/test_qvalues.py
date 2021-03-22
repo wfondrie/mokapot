@@ -85,3 +85,19 @@ def test_tdc_ascending(asc_scores):
 
         qvals = tdc(scores, target.astype(dtype), desc=False)
         np.testing.assert_array_equal(qvals, true_qvals)
+
+
+def test_tdc_non_bool():
+    """If targets is not boolean, should get a value errir"""
+    scores = np.array([1, 2, 3, 4, 5])
+    targets = np.array(["1", "0", "1", "0", "blarg"])
+    with pytest.raises(ValueError):
+        tdc(scores, targets)
+
+
+def test_tdc_diff_len():
+    """If the arrays are different lengths, should get a ValueError"""
+    scores = np.array([1, 2, 3, 4, 5])
+    targets = np.array([True] * 3 + [False] * 3)
+    with pytest.raises(ValueError):
+        tdc(scores, targets)

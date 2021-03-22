@@ -12,10 +12,11 @@ import numpy as np
 
 from . import __version__
 from .config import Config
-from .parsers import read_pin, read_pepxml
+from .parsers.pin import read_pin
+from .parsers.pepxml import read_pepxml
+from .parsers.fasta import read_fasta
 from .brew import brew
 from .model import PercolatorModel
-from .proteins import FastaProteins
 
 
 def main():
@@ -63,7 +64,7 @@ def main():
     # Parse FASTA, if required:
     if config.proteins is not None:
         logging.info("Protein-level confidence estimates enabled.")
-        proteins = FastaProteins(
+        proteins = read_fasta(
             config.proteins,
             enzyme=config.enzyme,
             missed_cleavages=config.missed_cleavages,
