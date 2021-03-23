@@ -69,11 +69,57 @@ def test_pepxml_oms_bin_size(small_pepxml):
 
 def test_not_pepxml(not_pepxml):
     """Test that parsing fails gracefully"""
-    try:
+    with pytest.raises(ValueError):
         mokapot.read_pepxml(not_pepxml)
-    except ValueError as msg:
-        if not str(msg).endswith("PepXML file or is malformed."):
-            raise
+
+
+def test_xl_df(small_pepxml):
+    """Test that we can parse crosslinked PSMs"""
+    csms = mokapot.read_pepxml(
+        small_pepxml, decoy_prefix="rev_", parse_csms=True, to_df=True,
+    )
+    print(csms)
+    assert len(csms) == 3
+    assert len(csms["scan"].unique()) == 3
+    np.testing.assert_array_equal(
+        csms["alpha_label"], np.array([False, True, False])
+    )
+    np.testing.assert_array_equal(
+        csms["beta_label"], np.array([True, True, False])
+    )
+
+
+def test_xl_dataset(small_pepxml):
+    """Make sure that we can parse to a CrosslinkPsmDataset"""
+    csms = mokapot.read_pepxml(
+        small_pepxml, decoy_prefix="rev_", parse_csms=True
+    )
+    np.testing.assert_array_equal(csms.targets, np.array([1, 2, 0]))
+    expected_features = [
+        "alpha_score",
+        "alpha_rank",
+        "alpha_link",
+        "alpha_e-value",
+        "alpha_ion_match",
+        "alpha_consecutive_ion_match",
+        "beta_score",
+        "beta_rank",
+        "beta_link",
+        "beta_e-value",
+        "beta_ion_match",
+        "beta_consecutive_ion_match",
+        "kojak_score",
+        "delta_score",
+        "ppm_error",
+        "e-value",
+        "ion_match",
+        "consecutive_ion_match",
+        "mass_diff",
+        "abs_mz_diff",
+        "charge_3",
+        "charge_4",
+    ]
+    assert list(csms.features.columns) == expected_features
 
 
 PEPXML_EXAMPLE = r"""<?xml version="1.0" encoding="UTF-8"?>
@@ -129,6 +175,110 @@ PEPXML_EXAMPLE = r"""<?xml version="1.0" encoding="UTF-8"?>
 </search_hit>
 </search_result>
 </spectrum_query>
+
+<!-- Some crosslinked PSMs -->
+<spectrum_query spectrum="XLpeplib_Beveridge_QEx-HFX_DSS_R1.17647.17647.4" start_scan="17647" end_scan="17647" precursor_neutral_mass="2795.369395" assumed_charge="4" index="90" retention_time_sec="79.4">
+<search_result>
+<search_hit hit_rank="1" peptide="-" peptide_prev_aa="-" peptide_next_aa="-" protein="-" num_tot_proteins="1" calc_neutral_pep_mass="2795.383230" massdiff="0.013835" xlink_type="xl">
+<xlink identifier="BS3" mass="138.068074">
+<linked_peptide peptide="CALGSLVPQIAPVGR" peptide_prev_aa="-" peptide_next_aa="L" protein="rev_sp|CTRB_BOVIN|" peptide_start_pos="1" protein_link_pos_a="1" num_tot_proteins="1" calc_neutral_pep_mass="1536.844554" complement_mass="1258.524840" designation="alpha">
+<modification_info>
+<mod_aminoacid_mass position="1" mass="160.030640" static="57.021460"/>
+</modification_info>
+<xlink_score name="score" value="0.3400"/>
+<xlink_score name="rank" value="1"/>
+<xlink_score name="link" value="1"/>
+<xlink_score name="e-value" value="5.666e+02"/>
+<xlink_score name="ion_match" value="5"/>
+<xlink_score name="consecutive_ion_match" value="4"/>
+</linked_peptide>
+<linked_peptide peptide="MAEEVEEER" peptide_prev_aa="-" peptide_next_aa="L" protein="sp|SRPP_HEVBR|" peptide_start_pos="1" protein_link_pos_a="1" num_tot_proteins="1" calc_neutral_pep_mass="1120.470602" complement_mass="1674.898793" designation="beta">
+<xlink_score name="score" value="0.2350"/>
+<xlink_score name="rank" value="2"/>
+<xlink_score name="link" value="1"/>
+<xlink_score name="e-value" value="8.546e+02"/>
+<xlink_score name="ion_match" value="2"/>
+<xlink_score name="consecutive_ion_match" value="1"/>
+</linked_peptide>
+</xlink>
+<search_score name="kojak_score" value="0.5750"/>
+<search_score name="delta_score" value="0.2000"/>
+<search_score name="ppm_error" value="4.9493"/>
+<search_score name="e-value" value="3.490e+02"/>
+<search_score name="ion_match" value="7"/>
+<search_score name="consecutive_ion_match" value="2"/>
+</search_hit>
+</search_result>
+</spectrum_query>
+
+<spectrum_query spectrum="XLpeplib_Beveridge_QEx-HFX_DSS_R1.17647.17647.4" start_scan="17648" end_scan="17648" precursor_neutral_mass="2795.369395" assumed_charge="3" index="90" retention_time_sec="79.4">
+<search_result>
+<search_hit hit_rank="1" peptide="-" peptide_prev_aa="-" peptide_next_aa="-" protein="-" num_tot_proteins="1" calc_neutral_pep_mass="2795.383230" massdiff="0.013835" xlink_type="xl">
+<xlink identifier="BS3" mass="138.068074">
+<linked_peptide peptide="CALGSLVPQIAPVGR" peptide_prev_aa="-" peptide_next_aa="L" protein="sp|CTRB_BOVIN|" peptide_start_pos="1" protein_link_pos_a="1" num_tot_proteins="1" calc_neutral_pep_mass="1536.844554" complement_mass="1258.524840" designation="alpha">
+<modification_info>
+<mod_aminoacid_mass position="1" mass="160.030640" static="57.021460"/>
+</modification_info>
+<xlink_score name="score" value="0.3400"/>
+<xlink_score name="rank" value="1"/>
+<xlink_score name="link" value="1"/>
+<xlink_score name="e-value" value="5.666e+02"/>
+<xlink_score name="ion_match" value="5"/>
+<xlink_score name="consecutive_ion_match" value="4"/>
+</linked_peptide>
+<linked_peptide peptide="MAEEVEEER" peptide_prev_aa="-" peptide_next_aa="L" protein="sp|SRPP_HEVBR|" peptide_start_pos="1" protein_link_pos_a="1" num_tot_proteins="1" calc_neutral_pep_mass="1120.470602" complement_mass="1674.898793" designation="beta">
+<xlink_score name="score" value="0.2350"/>
+<xlink_score name="rank" value="2"/>
+<xlink_score name="link" value="1"/>
+<xlink_score name="e-value" value="8.546e+02"/>
+<xlink_score name="ion_match" value="2"/>
+<xlink_score name="consecutive_ion_match" value="1"/>
+</linked_peptide>
+</xlink>
+<search_score name="kojak_score" value="0.5750"/>
+<search_score name="delta_score" value="0.2000"/>
+<search_score name="ppm_error" value="4.9493"/>
+<search_score name="e-value" value="3.490e+02"/>
+<search_score name="ion_match" value="7"/>
+<search_score name="consecutive_ion_match" value="2"/>
+</search_hit>
+</search_result>
+</spectrum_query>
+
+<spectrum_query spectrum="XLpeplib_Beveridge_QEx-HFX_DSS_R1.17647.17647.4" start_scan="17649" end_scan="17649" precursor_neutral_mass="2795.369395" assumed_charge="4" index="90" retention_time_sec="79.4">
+<search_result>
+<search_hit hit_rank="1" peptide="-" peptide_prev_aa="-" peptide_next_aa="-" protein="-" num_tot_proteins="1" calc_neutral_pep_mass="2795.383230" massdiff="0.013835" xlink_type="xl">
+<xlink identifier="BS3" mass="138.068074">
+<linked_peptide peptide="CALGSLVPQIAPVGR" peptide_prev_aa="-" peptide_next_aa="L" protein="rev_sp|CTRB_BOVIN|" peptide_start_pos="1" protein_link_pos_a="1" num_tot_proteins="1" calc_neutral_pep_mass="1536.844554" complement_mass="1258.524840" designation="alpha">
+<modification_info>
+<mod_aminoacid_mass position="1" mass="160.030640" static="57.021460"/>
+</modification_info>
+<xlink_score name="score" value="0.3400"/>
+<xlink_score name="rank" value="1"/>
+<xlink_score name="link" value="1"/>
+<xlink_score name="e-value" value="5.666e+02"/>
+<xlink_score name="ion_match" value="5"/>
+<xlink_score name="consecutive_ion_match" value="4"/>
+</linked_peptide>
+<linked_peptide peptide="MAEEVEEER" peptide_prev_aa="-" peptide_next_aa="L" protein="rev_sp|SRPP_HEVBR|" peptide_start_pos="1" protein_link_pos_a="1" num_tot_proteins="1" calc_neutral_pep_mass="1120.470602" complement_mass="1674.898793" designation="beta">
+<xlink_score name="score" value="0.2350"/>
+<xlink_score name="rank" value="2"/>
+<xlink_score name="link" value="1"/>
+<xlink_score name="e-value" value="8.546e+02"/>
+<xlink_score name="ion_match" value="2"/>
+<xlink_score name="consecutive_ion_match" value="1"/>
+</linked_peptide>
+</xlink>
+<search_score name="kojak_score" value="0.5750"/>
+<search_score name="delta_score" value="0.2000"/>
+<search_score name="ppm_error" value="4.9493"/>
+<search_score name="e-value" value="3.490e+02"/>
+<search_score name="ion_match" value="7"/>
+<search_score name="consecutive_ion_match" value="2"/>
+</search_hit>
+</search_result>
+</spectrum_query>
+
 </msms_run_summary>
 </msms_pipeline_analysis>
 """
