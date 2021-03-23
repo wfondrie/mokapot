@@ -1,6 +1,8 @@
 """The :py:class:`LinearPsmDataset` classe is used to define a collection
-peptide-spectrum matches. The :py:class:`LinearPsmDataset` class is suitable for
-most types of data-dependent acquisition proteomics experiments.
+peptide-spectrum matches. The :py:class:`LinearPsmDataset` class is suitable
+for most types of data-dependent acquisition proteomics experiments, whereas
+the :py:class:`CrosslinkPsmDataset` class is for the analysis of crosslinked
+peptides.
 
 Although the class can be constructed from a :py:class:`pandas.DataFrame`, it
 is often easier to load the PSMs directly from a file in the `Percolator
@@ -498,15 +500,15 @@ class LinearPsmDataset(PsmDataset):
 
     def __repr__(self):
         """How to print the class"""
+        feats = "',\n       '".join(self._feature_columns)
         return (
-            f"A mokapot.dataset.LinearPsmDataset with {len(self.data)} "
-            "PSMs:\n"
-            f"\t- Protein confidence estimates enabled: {self.has_proteins}\n"
-            f"\t- Target PSMs: {self.targets.sum()}\n"
-            f"\t- Decoy PSMs: {(~self.targets).sum()}\n"
-            f"\t- Unique spectra: {len(self.spectra.drop_duplicates())}\n"
-            f"\t- Unique peptides: {len(self.peptides.drop_duplicates())}\n"
-            f"\t- Features: {self._feature_columns}"
+            f"A LinearPsmDataset with {len(self.data)} PSMs:\n"
+            f"  - Protein confidence estimates enabled: {self.has_proteins}\n"
+            f"  - Target PSMs: {self.targets.sum()}\n"
+            f"  - Decoy PSMs: {(~self.targets).sum()}\n"
+            f"  - Unique Spectra: {len(self.spectra.drop_duplicates())}\n"
+            f"  - Unique Peptides: {len(self.peptides.drop_duplicates())}\n"
+            f"  - Features: \n      ['{feats}']"
         )
 
     @property
@@ -599,7 +601,7 @@ class LinearPsmDataset(PsmDataset):
 class CrosslinkPsmDataset(PsmDataset):
     """Store and analyze a collection of CSMs
 
-    Stores a collection of cross-linked peptide-spectrum matches (CSMs) from
+    Stores a collection of crosslinked peptide-spectrum matches (CSMs) from
     data-dependent acquisition cross-linking mass spectrometry experiments and
     defines the necessary fields for mokapot analysis.
 
@@ -634,6 +636,27 @@ class CrosslinkPsmDataset(PsmDataset):
         The column(s) specifying the feature(s) for mokapot analysis. If
         `None`, these are assumed to be all columns not specified in the
         previous parameters.
+    filename_column : str, optional
+        The column specifying the mass spectrometry data file (e.g. mzML)
+        containing each spectrum. This is required for some output formats,
+        such as mzTab and FlashLFQ.
+    scan_column : str, optional
+        The column specifying the scan number for each spectrum. Each value
+        in the column should be an integer. This is required for some output
+        formats, such as mzTab.
+    calcmass_column : str, optional
+        The column specifying the theoretical monoisotopic mass of each
+        peptide. This is required for some output formats, such as mzTab and
+        FlashLFQ.
+    expmass_column : str, optional
+        The column specifying the measured neutral precursor mass. This is
+        required for the some ouput formats, such as mzTab.
+    rt_column : str, optional
+        The column specifying the retention time of each spectrum, in seconds.
+        This is required for some output formats, such as mzTab and FlashLFQ.
+    charge_column : str, optional
+        The column specifying the charge state of each PSM. This is required
+        for some output formats, such as mzTab and FlashLFQ.
     copy_data : bool, optional
         If true, a deep copy of `csms` is created, so that changes to the
         original collection of CSMs is not propagated to this object. This uses
@@ -657,31 +680,47 @@ class CrosslinkPsmDataset(PsmDataset):
     def __init__(
         self,
         csms,
-        spectrum_columns,
         target_columns,
+        spectrum_columns,
         peptide_columns,
         protein_columns=None,
         group_column=None,
         feature_columns=None,
+        filename_column=None,
+        scan_column=None,
+        calcmass_column=None,
+        expmass_column=None,
+        rt_column=None,
+        charge_column=None,
         copy_data=True,
     ):
         """Initialize a CrosslinkPsmDataset object."""
         self._target_columns = utils.tuplize(target_columns)
         self._peptide_columns = utils.tuplize(peptide_columns)
-
         check_len(self._target_columns, "target_columns", 2)
         check_len(self._peptide_columns, "peptide_columns", 2)
 
-        # Finish initialization
-        other_columns = sum(
-            [list(self._target_columns), list(self._peptide_columns)], []
-        )
+        self._optional_columns = {
+            "filename": filename_column,
+            "scan": scan_column,
+            "calcmass": calcmass_column,
+            "expmass": expmass_column,
+            "rt": rt_column,
+            "charge": charge_column,
+        }
 
+        # Finish initialization
+        other_columns = list(self._target_columns + self._peptide_columns)
         if protein_columns is not None:
             self._protein_columns = utils.tuplize(protein_columns)
+            check_len(self._protein_columns, "protein_columns", 2)
             other_columns += list(self._protein_columns)
         else:
             self._proteins_columns = None
+
+        for _, opt_column in self._optional_columns.items():
+            if opt_column is not None:
+                other_columns.append(opt_column)
 
         super().__init__(
             psms=csms,
@@ -700,7 +739,7 @@ class CrosslinkPsmDataset(PsmDataset):
                 "The 'target_columns' could not be coerced to boolean."
             )
 
-        num_targets = self.data[target_columns].sum(axis=1).values
+        num_targets = self.data.loc[:, target_columns].sum(axis=1).values
         self._num_tt = (num_targets == 2).sum()
         self._num_td = (num_targets == 1).sum()
         self._num_dd = (num_targets == 0).sum()
@@ -721,16 +760,16 @@ class CrosslinkPsmDataset(PsmDataset):
         """How to print the class"""
         num_spec = len(self.spectra.drop_duplicates())
         num_pep = len(self.combined_peptides.drop_duplicates())
+        feats = "',\n       '".join(self._feature_columns)
         return (
-            f"A mokapot.dataset.CrosslinkPsmDataset with {len(self.data)} "
-            "CSMs:\n"
-            f"\t- Protein confidence estimates enabled: {self.has_proteins}\n"
-            f"\t- Target-target CSMs:   {self._num_tt}\n"
-            f"\t- Target-decoy CSMs:    {self._num_td}\n"
-            f"\t- Decoy-decoy CSMs:     {self._num_dd}\n"
-            f"\t- Unique spectra:       {num_spec}\n"
-            f"\t- Unique peptide pairs: {num_pep}\n"
-            f"\t- Features: {self._feature_columns}"
+            f"A CrosslinkPsmDataset with {len(self.data)} CSMs:\n"
+            f"  - Protein confidence estimates enabled: {self.has_proteins}\n"
+            f"  - Target-Target CSMs:   {self._num_tt}\n"
+            f"  - Target-Decoy CSMs:    {self._num_td}\n"
+            f"  - Decoy-Decoy CSMs:     {self._num_dd}\n"
+            f"  - Unique Spectra:       {num_spec}\n"
+            f"  - Unique Peptide Pairs: {num_pep}\n"
+            f"  - Features: \n      ['{feats}']"
         )
 
     @property

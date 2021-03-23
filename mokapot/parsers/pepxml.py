@@ -87,7 +87,22 @@ def read_pepxml(
         return psms
 
     if parse_csms:
-        return psms
+        dset = CrosslinkPsmDataset(
+            csms=psms,
+            target_columns=("alpha_label", "beta_label"),
+            spectrum_columns=("ms_data_file", "scan", "ret_time"),
+            peptide_columns=("alpha_peptide", "beta_peptide"),
+            protein_columns=("alpha_proteins", "beta_proteins"),
+            group_column=None,
+            feature_columns=psms_feat,
+            filename_column="ms_data_file",
+            scan_column="scan",
+            calcmass_column="calc_mass",
+            expmass_column="exp_mass",
+            rt_column="ret_time",
+            charge_column="charge",
+            copy_data=True,
+        )
     else:
         dset = LinearPsmDataset(
             psms=psms,
@@ -95,6 +110,7 @@ def read_pepxml(
             spectrum_columns=("ms_data_file", "scan", "ret_time"),
             peptide_column="peptide",
             protein_column="proteins",
+            group_column=None,
             feature_columns=psms_feat,
             filename_column="ms_data_file",
             scan_column="scan",
@@ -222,6 +238,7 @@ def _parse_pepxml(pepxml_file, decoy_prefix, parse_xlink):
         df = pd.DataFrame.from_records(itertools.chain.from_iterable(psms))
         df = df.dropna(how="all")
         df["charge"] = df["charge"].astype(int)
+        df["scan"] = df["scan"].astype(int)
         df["ms_data_file"] = df["ms_data_file"].astype("category")
     except etree.XMLSyntaxError:
         raise ValueError(
