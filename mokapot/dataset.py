@@ -832,7 +832,7 @@ class CrosslinkPsmDataset(PsmDataset):
         qvals = qvalues.crosslink_tdc(
             scores, num_targets=self.targets, desc=desc
         )
-        unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
+        unlabeled = np.logical_and(qvals > eval_fdr, self.targets == 2)
         new_labels = np.ones(len(qvals))
         new_labels[~(self.targets == 2)] = -1
         new_labels[unlabeled] = 0

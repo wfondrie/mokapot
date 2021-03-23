@@ -135,20 +135,7 @@ def picked_protein(
     )
 
     # Strip modifications and flanking AA's from peptide sequences.
-    prots["stripped sequence"] = (
-        prots["best peptide"]
-        .str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
-        .str.replace(r"^.*?\.", "", regex=True)
-        .str.replace(r"\..*?$", "", regex=True)
-    )
-
-    # Sometimes folks use lowercase letters for the termini or mods:
-    if all(prots["stripped sequence"].str.islower()):
-        seqs = prots["stripped sequence"].upper()
-    else:
-        seqs = prots["stripped sequence"].str.replace(r"[a-z]", "", regex=True)
-
-    prots["stripped sequence"] = seqs
+    prots["stripped sequence"] = strip_peptide(prots["best peptide"])
 
     # There are two cases we need to deal with:
     # 1. The fasta contained both targets and decoys (ideal)
@@ -250,16 +237,16 @@ def strip_peptide(pep_series):
     """
     # Strip modifications and flanking AA's from peptide sequences.
     seqs = (
-        pep_series.str.replace(r"[\[\(].*?[\]\)]", "")
-        .str.replace(r"^.*?\.", "")
-        .str.replace(r"\..*?$", "")
+        pep_series.str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
+        .str.replace(r"^.*?\.", "", regex=True)
+        .str.replace(r"\..*?$", "", regex=True)
     )
 
     # Sometimes folks use lowercase letters for the termini or mods:
     if all(seqs.str.islower()):
         seqs = seqs.upper()
     else:
-        seqs = seqs.str.replace(r"[a-z]", "")
+        seqs = seqs.str.replace(r"[a-z]", "", regex=True)
 
     return seqs
 
