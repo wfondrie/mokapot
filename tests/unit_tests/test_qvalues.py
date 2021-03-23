@@ -4,9 +4,10 @@ These tests verify that our q-value calculations are correct.
 import pytest
 import numpy as np
 
-from mokapot.qvalues import tdc
+from mokapot.qvalues import tdc, crosslink_tdc
 
 
+# TDC -------------------------------------------------------------------------
 @pytest.fixture
 def desc_scores():
     """Create a series of descending scores and their q-values"""
@@ -101,3 +102,74 @@ def test_tdc_diff_len():
     targets = np.array([True] * 3 + [False] * 3)
     with pytest.raises(ValueError):
         tdc(scores, targets)
+
+
+# Crosslink TDC ---------------------------------------------------------------
+@pytest.fixture
+def desc_xl_scores():
+    """Create a series of descending scores and their q-values"""
+    scores = np.array([10, 9, 9, 8, 7, 7, 6, 5, 4, 3, 2, 2, 1, 1, 1, 1])
+    target = np.array([0, 2, 2, 1, 1, 2, 2, 1, 1, 1, 2, 1, 1, 0, 1, 0])
+    # max(td - 2 * dd + 1, 1) / tt
+    qvals = np.array(
+        [
+            1 / 4,
+            1 / 4,
+            1 / 4,
+            1 / 4,
+            1 / 4,
+            1 / 4,
+            1 / 4,
+            2 / 4,
+            3 / 5,
+            3 / 5,
+            3 / 5,
+            3 / 5,
+            3 / 5,
+            3 / 5,
+            3 / 5,
+            3 / 5,
+        ]
+    )
+    return scores, target, qvals
+
+
+def test_crosslink_tdc_descending(desc_xl_scores):
+    """Test that the crosslink qvalues work for descending scores"""
+    scores, target, true_qvals = desc_xl_scores
+    dtypes = [np.float64, np.uint8, np.int8, np.float32]
+    for dtype in dtypes:
+        qvals = crosslink_tdc(scores.astype(dtype), target, desc=True)
+        np.testing.assert_array_equal(qvals, true_qvals)
+
+        qvals = crosslink_tdc(scores, target.astype(dtype), desc=True)
+        np.testing.assert_array_equal(qvals, true_qvals)
+
+
+def test_crosslink_tdc_ascending(desc_xl_scores):
+    """Test that the crosslink qvalues work for ascending scores"""
+    scores, target, true_qvals = desc_xl_scores
+    scores = -scores
+    dtypes = [np.float64, np.uint8, np.int8, np.float32]
+    for dtype in dtypes:
+        qvals = crosslink_tdc(scores.astype(dtype), target, desc=False)
+        np.testing.assert_array_equal(qvals, true_qvals)
+
+        qvals = crosslink_tdc(scores, target.astype(dtype), desc=False)
+        np.testing.assert_array_equal(qvals, true_qvals)
+
+
+def test_crosslink_tdc_invalid_targets():
+    """Test that an error is raised if num_targets is not 0, 1, or 2"""
+    scores = np.array([1, 2, 3, 4, 5])
+    target = np.array([1, 0, 2, 1, 3])
+    with pytest.raises(ValueError):
+        crosslink_tdc(scores, target)
+
+
+def test_crosslink_tdc_diff_len():
+    """If the arrays are not the same length, we should get an error"""
+    scores = np.array([1, 2, 3, 4, 5])
+    target = np.array([0, 2, 1, 2])
+    with pytest.raises(ValueError):
+        crosslink_tdc(scores, target)
