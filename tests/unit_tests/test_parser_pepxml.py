@@ -76,7 +76,7 @@ def test_not_pepxml(not_pepxml):
 def test_xl_df(small_pepxml):
     """Test that we can parse crosslinked PSMs"""
     csms = mokapot.read_pepxml(
-        small_pepxml, decoy_prefix="rev_", parse_csms=True, to_df=True,
+        small_pepxml, decoy_prefix="rev_", parse_csms=True, to_df=True
     )
     print(csms)
     assert len(csms) == 3
