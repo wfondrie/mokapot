@@ -86,18 +86,11 @@ def tdc(scores, target, desc=True):
         where=(cum_targets != 0),
     )
 
-    # Calculate q-values
-    unique_metric, indices = np.unique(scores, return_counts=True)
-
     # Some arrays need to be flipped so that we can loop through from
     # worse to best score.
     fdr = np.flip(fdr)
-    num_total = np.flip(num_total)
-    if not desc:
-        unique_metric = np.flip(unique_metric)
-        indices = np.flip(indices)
-
-    qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
+    scores = np.flip(scores)
+    qvals = _fdr2qvalue(scores, fdr)
     qvals = np.flip(qvals)
     qvals = qvals[np.argsort(srt_idx)]
 
@@ -158,17 +151,10 @@ def crosslink_tdc(scores, num_targets, desc=True):
         where=(cum_targets != 0),
     )
 
-    # Calculate q-values
-    unique_metric, indices = np.unique(scores, return_counts=True)
-
     # Flip arrays to loop from worst to best score
     fdr = np.flip(fdr)
-    num_total = np.flip(num_total)
-    if not desc:
-        unique_metric = np.flip(unique_metric)
-        indices = np.flip(indices)
-
-    qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
+    scores = np.flip(scores)
+    qvals = _fdr2qvalue(scores, fdr)
     qvals = np.flip(qvals)
     qvals = qvals[np.argsort(srt_idx)]
 
@@ -176,48 +162,39 @@ def crosslink_tdc(scores, num_targets, desc=True):
 
 
 @nb.njit
-def _fdr2qvalue(fdr, num_total, met, indices):
-    """
-    Quickly turn a list of FDRs to q-values.
+def _fdr2qvalue(scores, fdr):
+    """Quickly calculate q-values.
 
-    All of the inputs are assumed to be sorted.
+    Note that the if block logic in this function is to account for multiple
+    tied scores. This function assumes that scores and fdr are sorted such
+    that they are ordered from worst to best score. Additionally, for a series
+    of tied scores, we assume that the first entry in these sorted arrays
+    accounts for all of the PSMs that were tied.
 
     Parameters
     ----------
-    fdr : numpy.ndarray
-        A vector of all unique FDR values.
-
-    num_total : numpy.ndarray
-        A vector of the cumulative number of PSMs at each score.
-
-    met : numpy.ndarray
-        A vector of the scores for each PSM.
-
-    indices : tuple of numpy.ndarray
-        Tuple where the vector at index i indicates the PSMs that
-        shared the unique FDR value in `fdr`.
+    scores : np.array
+        The scores of the PSMs, sorted from worst to best.
+    fdr : np.array
+        The calculated FDR of the PSMs, sorted to match scores. Note that
+        this is not the same thing as sorting the fdr array itself!
 
     Returns
     -------
-    numpy.ndarray
-        A vector of q-values.
+    np.ndarray
+        An array of q-values, in the same order as the input scores.
     """
     min_q = 1
     qvals = np.ones(len(fdr))
-    group_fdr = np.ones(len(fdr))
-    prev_idx = 0
-    for idx in range(met.shape[0]):
-        next_idx = prev_idx + indices[idx]
-        group = slice(prev_idx, next_idx)
-        prev_idx = next_idx
+    start = 0
+    for idx in range(len(qvals)):
+        if idx < len(qvals) - 1 and scores[idx + 1] == scores[start]:
+            continue
 
-        fdr_group = fdr[group]
-        n_group = num_total[group]
-        curr_fdr = fdr_group[np.argmax(n_group)]
-        if curr_fdr < min_q:
-            min_q = curr_fdr
+        if fdr[start] < min_q:
+            min_q = fdr[start]
 
-        group_fdr[group] = curr_fdr
-        qvals[group] = min_q
+        qvals[start : idx + 1] = min_q
+        start = idx + 1
 
     return qvals
