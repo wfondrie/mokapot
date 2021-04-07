@@ -10,7 +10,7 @@ import pandas as pd
 from lxml import etree
 
 from .. import utils
-from ..dataset import LinearPsmDataset
+from ..dataset import LinearPsmDataset, CrosslinkPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,18 +21,21 @@ def read_pepxml(
     decoy_prefix="decoy_",
     exclude_features=None,
     open_modification_bin_size=None,
+    parse_csms=False,
     to_df=False,
 ):
     """Read PepXML files.
 
-    Read peptide-spectrum matches (PSMs) from one or more pepxml files,
-    aggregating them into a single
-    :py:class:`~mokapot.dataset.LinearPsmDataset`.
+    Read peptide-spectrum matches (PSMs) or crosslinked PSMs (CSMs) from one or
+    more pepxml files, aggregating them into a
+    :py:class:`~mokapot.dataset.LinearPsmDataset` or a
+    :py:class:`~mokapot.dataset.CrosslinkPsmDataset`, respectively.
 
     Specifically, mokapot will extract the search engine scores as a set of
-    features (found under the :code:`search_scores` tag). Additionally, mokapot
-    will add the peptide lengths, mass error, the number of enzymatic termini
-    and the number of missed cleavages as features.
+    features (found under the :code:`search_scores` tag, and the
+    :code:`xlink_scores` tag for CSMs). Additionally, mokapot will add the
+    peptide lengths, mass error, the number of enzymatic termini and the number
+    of missed cleavages as features.
 
     Parameters
     ----------
@@ -50,20 +53,89 @@ def read_pepxml(
         will be used when grouping peptides for peptide-level confidence
         estimation. Use this option for open modification search results. We
         recommend 0.01 as a good starting point.
+    parse_csms : bool, optional
+        Parse crosslinked PSMs (CSMs) instead of linear PSMs?
     to_df : bool, optional
         Return a :py:class:`pandas.DataFrame` instead of a
         :py:class:`~mokapot.dataset.LinearPsmDataset`.
 
     Returns
     -------
-    LinearPsmDataset or pandas.DataFrame
+    LinearPsmDataset, CrosslinkPsmDataset, or pandas.DataFrame
         A :py:class:`~mokapot.dataset.LinearPsmDataset` or
-        :py:class:`pandas.DataFrame` containing the parsed PSMs.
-    """
-    proton = 1.00727646677
-    pepxml_files = utils.tuplize(pepxml_files)
-    psms = pd.concat([_parse_pepxml(f, decoy_prefix) for f in pepxml_files])
+        :py:class:`~mokapot.dataset.CrosslinkPsmDataset` containing the
+        parsed PSMs and CSMs, repsectively. Alternatively, a
+        :py:class:`pandas.DataFrame` containing either.
 
+    """
+    pepxml_files = utils.tuplize(pepxml_files)
+    psms = [_parse_pepxml(f, decoy_prefix, parse_csms) for f in pepxml_files]
+
+    try:
+        psms = pd.concat(psms)
+    except ValueError:
+        hit_type = {True: "CSMs", False: "PSMs"}
+        raise ValueError(
+            f"No {hit_type[parse_csms]} were found in the PepXML file(s)."
+        )
+
+    psms, psms_feat = _create_features(
+        psms, exclude_features, open_modification_bin_size
+    )
+
+    if to_df:
+        return psms
+
+    if parse_csms:
+        dset = CrosslinkPsmDataset(
+            csms=psms,
+            target_columns=("alpha_label", "beta_label"),
+            spectrum_columns=("ms_data_file", "scan", "ret_time"),
+            peptide_columns=("alpha_peptide", "beta_peptide"),
+            protein_columns=("alpha_proteins", "beta_proteins"),
+            group_column=None,
+            feature_columns=psms_feat,
+            filename_column="ms_data_file",
+            scan_column="scan",
+            calcmass_column="calc_mass",
+            expmass_column="exp_mass",
+            rt_column="ret_time",
+            charge_column="charge",
+            copy_data=True,
+        )
+    else:
+        dset = LinearPsmDataset(
+            psms=psms,
+            target_column="label",
+            spectrum_columns=("ms_data_file", "scan", "ret_time"),
+            peptide_column="peptide",
+            protein_column="proteins",
+            group_column=None,
+            feature_columns=psms_feat,
+            filename_column="ms_data_file",
+            scan_column="scan",
+            calcmass_column="calc_mass",
+            expmass_column="exp_mass",
+            rt_column="ret_time",
+            charge_column="charge",
+            copy_data=False,
+        )
+
+    return dset
+
+
+def _create_features(psms, exclude_features, open_modification_bin_size):
+    """Create features from a psm dataframe.
+
+    Parameters
+    ----------
+    psms : pandas.DataFrame
+        A dataframe of PSMs or CSMs
+    exclude_features : list of str
+        Features to be excluded.
+    open_modification_bin_size : float
+        The bin size for open modification searches.
+    """
     # Check that these PSMs are not from Percolator or PeptideProphet:
     illegal_cols = {
         "Percolator q-Value",
@@ -90,6 +162,7 @@ def read_pepxml(
         psms["peptide"] = psms["peptide"] + "[" + mods.astype(str) + "]"
 
     # Calculate massdiff features
+    proton = 1.00727646677
     exp_mz = psms["exp_mass"] / psms["charge"] + proton
     calc_mz = psms["calc_mass"] / psms["charge"] + proton
     psms["abs_mz_diff"] = (exp_mz - calc_mz).abs()
@@ -114,6 +187,12 @@ def read_pepxml(
         "calc_mass",
         "peptide",
         "proteins",
+        "alpha_label",
+        "beta_label",
+        "alpha_peptide",
+        "beta_peptide",
+        "alpha_proteins",
+        "beta_proteins",
         "charge",
     ]
 
@@ -126,29 +205,10 @@ def read_pepxml(
     feat_cols = [c for c in psms.columns if c not in nonfeat_cols]
     psms = psms.apply(_log_features, features=feat_cols)
 
-    if to_df:
-        return psms
-
-    dset = LinearPsmDataset(
-        psms=psms,
-        target_column="label",
-        spectrum_columns=("ms_data_file", "scan", "ret_time"),
-        peptide_column="peptide",
-        protein_column="proteins",
-        feature_columns=feat_cols,
-        filename_column="ms_data_file",
-        scan_column="scan",
-        calcmass_column="calc_mass",
-        expmass_column="exp_mass",
-        rt_column="ret_time",
-        charge_column="charge",
-        copy_data=False,
-    )
-
-    return dset
+    return psms, feat_cols
 
 
-def _parse_pepxml(pepxml_file, decoy_prefix):
+def _parse_pepxml(pepxml_file, decoy_prefix, parse_xlink):
     """Parse the PSMs of a PepXML into a DataFrame
 
     Parameters
@@ -158,6 +218,8 @@ def _parse_pepxml(pepxml_file, decoy_prefix):
     decoy_prefix : str
         The prefix used to indicate a decoy protein in the description lines of
         the FASTA file.
+    parse_xlink : bool
+        Parse crosslinked PSMs instead of linear PSMs?
 
     Returns
     -------
@@ -167,11 +229,16 @@ def _parse_pepxml(pepxml_file, decoy_prefix):
     """
     LOGGER.info("Reading %s...", pepxml_file)
     parser = etree.iterparse(str(pepxml_file), tag="{*}msms_run_summary")
-    parse_fun = partial(_parse_msms_run, decoy_prefix=decoy_prefix)
+    parse_fun = partial(
+        _parse_msms_run, decoy_prefix=decoy_prefix, parse_xlink=parse_xlink
+    )
     spectra = map(parse_fun, parser)
     try:
         psms = itertools.chain.from_iterable(spectra)
         df = pd.DataFrame.from_records(itertools.chain.from_iterable(psms))
+        df = df.dropna(how="all")
+        df["charge"] = df["charge"].astype(int)
+        df["scan"] = df["scan"].astype(int)
         df["ms_data_file"] = df["ms_data_file"].astype("category")
     except etree.XMLSyntaxError:
         raise ValueError(
@@ -180,7 +247,7 @@ def _parse_pepxml(pepxml_file, decoy_prefix):
     return df
 
 
-def _parse_msms_run(msms_run, decoy_prefix):
+def _parse_msms_run(msms_run, decoy_prefix, parse_xlink):
     """Parse a single MS/MS run.
 
     Each of these corresponds to a raw MS data file.
@@ -194,6 +261,8 @@ def _parse_msms_run(msms_run, decoy_prefix):
     decoy_prefix : str
         The prefix used to indicate a decoy protein in the description lines of
         the FASTA file.
+    parse_xlink : bool
+        Parse crosslinked PSMs instead of linear PSMs?
 
     Yields
     ------
@@ -209,10 +278,10 @@ def _parse_msms_run(msms_run, decoy_prefix):
 
     run_info = {"ms_data_file": ms_data_file}
     for spectrum in msms_run.iter("{*}spectrum_query"):
-        yield _parse_spectrum(spectrum, run_info, decoy_prefix)
+        yield _parse_spectrum(spectrum, run_info, decoy_prefix, parse_xlink)
 
 
-def _parse_spectrum(spectrum, run_info, decoy_prefix):
+def _parse_spectrum(spectrum, run_info, decoy_prefix, parse_xlink):
     """Parse the PSMs for a single mass spectrum
 
     Parameters
@@ -224,6 +293,8 @@ def _parse_spectrum(spectrum, run_info, decoy_prefix):
     decoy_prefix : str
         The prefix used to indicate a decoy protein in the description lines of
         the FASTA file.
+    parse_xlink : bool
+        Parse crosslinked PSMs instead of linear PSMs?
 
     Yields
     ------
@@ -237,10 +308,10 @@ def _parse_spectrum(spectrum, run_info, decoy_prefix):
     spec_info["exp_mass"] = float(spectrum.get("precursor_neutral_mass"))
     for psms in spectrum.iter("{*}search_result"):
         for psm in psms.iter("{*}search_hit"):
-            yield _parse_psm(psm, spec_info, decoy_prefix=decoy_prefix)
+            yield _parse_hit(psm, spec_info, decoy_prefix, parse_xlink)
 
 
-def _parse_psm(psm_info, spec_info, decoy_prefix):
+def _parse_hit(psm_info, spec_info, decoy_prefix, parse_xlink):
     """Parse a single PSM
 
     Parameters
@@ -252,6 +323,8 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
     decoy_prefix : str
         The prefix used to indicate a decoy protein in the description lines of
         the FASTA file.
+    parse_xlink : bool
+        Parse crosslinked PSMs instead of linear PSMs?
 
     Returns
     -------
@@ -259,10 +332,8 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
         A dictionary containing parsed data about the PSM.
     """
     psm = spec_info.copy()
+    is_xlink = psm_info.get("xlink_type") == "xl"
     psm["calc_mass"] = float(psm_info.get("calc_neutral_pep_mass"))
-    psm["peptide"] = psm_info.get("peptide")
-    psm["proteins"] = [psm_info.get("protein").split(" ")[0]]
-    psm["label"] = not psm["proteins"][0].startswith(decoy_prefix)
 
     # Begin features:
     try:
@@ -280,10 +351,42 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
     except TypeError:
         pass
 
+    if not is_xlink and not parse_xlink:
+        psm.update(_parse_psm(psm_info, decoy_prefix=decoy_prefix))
+    elif is_xlink and parse_xlink:
+        psm.update(_parse_csm(psm_info, decoy_prefix=decoy_prefix))
+    else:
+        psm = {}
+
+    return psm
+
+
+def _parse_psm(psm_info, decoy_prefix):
+    """Parse a PSM
+
+    Parameters
+    ----------
+    psm_info : lxml.etree.Element
+        The XML element containing information about the PSM.
+    decoy_prefix : str
+        The prefix used to indicate a decoy protein in the description lines
+        of the FASTA file.
+
+    Returns
+    -------
+    psm : Dict
+        A dictionary containing the parsed data about the PSM.
+    """
+    psm = {}
+    psm["peptide"] = psm_info.get("peptide")
+    psm["proteins"] = [psm_info.get("protein").split(" ")[0]]
+    psm["label"] = not psm["proteins"][0].startswith(decoy_prefix)
+
     queries = [
         "{*}modification_info",
         "{*}search_score",
         "{*}alternative_protein",
+        "{*}xlink_score",
     ]
     for element in psm_info.iter(*queries):
         if "modification_info" in element.tag:
@@ -307,6 +410,35 @@ def _parse_psm(psm_info, spec_info, decoy_prefix):
 
     psm["proteins"] = "\t".join(psm["proteins"])
     return psm
+
+
+def _parse_csm(csm_info, decoy_prefix):
+    """Parse a crosslinked PSM
+
+    Parameters
+    ----------
+    csm_info : lxml.etree.Element
+        The XML element containing information about the CSM.
+    decoy_prefix : str
+        The prefix used to indicate a decoy protein in the description lines
+        of the FASTA file.
+
+    Returns
+    -------
+    csm : Dict
+        A dictionary containing the parsed data about the CSM.
+    """
+    csm = {}
+    for element in csm_info.iter("{*}linked_peptide", "{*}search_score"):
+        if "linked_peptide" in element.tag:
+            designation = element.get("designation")
+            peptide = _parse_psm(element, decoy_prefix=decoy_prefix)
+            peptide = {f"{designation}_{k}": v for k, v in peptide.items()}
+            csm.update(peptide)
+        else:
+            csm[element.get("name")] = element.get("value")
+
+    return csm
 
 
 def _log_features(col, features):

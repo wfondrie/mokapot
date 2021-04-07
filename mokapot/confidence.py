@@ -25,7 +25,7 @@ from triqler import qvality
 
 from . import qvalues
 from . import utils
-from .picked_protein import picked_protein
+from .picked_protein import picked_protein, crosslink_picked_protein
 from .writers import to_flashlfq, to_txt
 
 LOGGER = logging.getLogger(__name__)
@@ -195,6 +195,7 @@ class Confidence:
         "proteins": "Proteins",
         "csms": "Cross-Linked PSMs",
         "peptide_pairs": "Peptide Pairs",
+        "protein_pairs": "Protein Pairs",
     }
 
     def __init__(self, psms, scores, desc):
@@ -272,6 +273,14 @@ class Confidence:
         )
         self._data = self._data.loc[psm_idx, :]
 
+    def _num_accepted(self, level):
+        """Calculate the number of accepted discoveries"""
+        disc = self.confidence_estimates[level]
+        if disc is not None:
+            return (disc["mokapot q-value"] <= self._eval_fdr).sum()
+        else:
+            return None
+
     def plot_qvalues(self, level="psms", threshold=0.1, ax=None, **kwargs):
         """Plot the cumulative number of discoveries over range of q-values.
 
@@ -310,20 +319,20 @@ class Confidence:
 class LinearConfidence(Confidence):
     """Assign confidence estimates to a set of PSMs
 
-    Estimate q-values and posterior error probabilities (PEPs) for PSMs and
-    peptides when ranked by the provided scores.
+    Estimate q-values and posterior error probabilities (PEPs) for PSMs,
+    peptides and proteins when ranked by the provided scores.
 
     Parameters
     ----------
-    psms : LinearPsmDataset object
+    psms : a LinearPsmDataset object
         A collection of PSMs.
     scores : np.ndarray
         A vector containing the score of each PSM.
     desc : bool
         Are higher scores better?
     eval_fdr : float
-        The FDR threshold at which to report performance. This parameter
-        has no affect on the analysis itself, only logging messages.
+        The FDR threshold at which to report performance. This parameter has no
+        affect on the analysis itself, only logging messages.
 
     Attributes
     ----------
@@ -383,14 +392,6 @@ class LinearConfidence(Confidence):
 
         return base
 
-    def _num_accepted(self, level):
-        """Calculate the number of accepted discoveries"""
-        disc = self.confidence_estimates[level]
-        if disc is not None:
-            return (disc["mokapot q-value"] <= self._eval_fdr).sum()
-        else:
-            return None
-
     def _assign_confidence(self, desc=True):
         """
         Assign confidence to PSMs and peptides.
@@ -426,6 +427,7 @@ class LinearConfidence(Confidence):
             data = data.sort_values(
                 self._score_column, ascending=False
             ).reset_index(drop=True)
+
             scores = data.loc[:, self._score_column].values
             targets = data.loc[:, self._target_column].astype(bool).values
             if all(targets):
@@ -506,7 +508,7 @@ class LinearConfidence(Confidence):
         return to_flashlfq(self, out_file)
 
 
-class CrossLinkedConfidence(Confidence):
+class CrosslinkConfidence(Confidence):
     """
     Assign confidence estimates to a set of cross-linked PSMs
 
@@ -516,70 +518,196 @@ class CrossLinkedConfidence(Confidence):
 
     Parameters
     ----------
-    psms : CrossLinkedPsmDataset object
+    csms : a CrosslinkPsmDataset object
         A collection of cross-linked PSMs.
     scores : np.ndarray
-        A vector containing the score of each PSM.
+        A vector containing the score of each CSM.
     desc : bool
         Are higher scores better?
+    eval_fdr : float
+        The FDR threshold at which to report performance. This parameter has no
+        affect on the analysis itself, only logging messages.
 
     Attributes
     ----------
+    levels : list of str
     csms : pandas.DataFrame
         Confidence estimates for cross-linked PSMs in the dataset.
     peptide_pairs : pandas.DataFrame
         Confidence estimates for peptide pairs in the dataset.
-
-    :meta private:
+    protein_pairs : pandas.DataFrame
+        Confidence estimates for protein pairs in the dataset.
+    confidence_estimates : Dict[str, pandas.DataFrame]
+        A dictionary of confidence estimates at each level.
+    decoy_confidence_estimates : Dict[str, pandas.DataFrame]
+        A dictionary of confidence estimates for the decoys at each level.
     """
 
-    def __init__(self, psms, scores, desc=True):
+    def __init__(self, csms, scores, desc=True, eval_fdr=0.01):
         """Initialize a CrossLinkedConfidence object"""
-        super().__init__(psms, scores, desc)
-        self._data[len(self._data.columns)] = psms.targets
-        self._target_column = self._data.columns[-1]
-        self._psm_columns = psms._spectrum_columns
-        self._peptide_column = psms._peptide_column
+        super().__init__(csms, scores, desc)
+        self._target_columns = csms._target_columns
+        self._num_target_column = _new_column("target", self._data)
+        self._data[self._num_target_column] = csms.targets
+        self._csm_columns = csms._spectrum_columns
+        self._peptide_columns = csms._peptide_columns
+        self._combined_peptides_column = _new_column(
+            "combined_peptides", self._data
+        )
+        self._data[self._combined_peptides_column] = csms.combined_peptides
+        self._eval_fdr = eval_fdr
 
-        self._perform_tdc(self._psm_columns)
+        LOGGER.info("Performing target-decoy competition...")
+        LOGGER.info(
+            "Keeping the best match per %s columns...",
+            "+".join(self._csm_columns),
+        )
+
+        self._perform_tdc(self._csm_columns)
+        LOGGER.info("\t- Found %i CSMs from unique spectra.", len(self._data))
+
         self._assign_confidence(desc=desc)
+
+        self.accepted = {}
+        for level in self.levels:
+            self.accepted[level] = self._num_accepted(level)
+
+    def __repr__(self):
+        """How to print the class"""
+        base = (
+            "A mokapot.confidence.CrosslinkConfidence object:\n"
+            f"\t- CSMs at q<={self._eval_fdr:g}: {self.accepted['csms']}\n"
+            f"\t- Peptide pairs at q<={self._eval_fdr:g}: "
+            f"{self.accepted['peptide_pairs']}\n"
+        )
+
+        if self._has_proteins:
+            base += (
+                f"\t- Protein pairs at q<={self._eval_fdr:g}: "
+                f"{self.accepted['protein_pairs']}\n"
+            )
+
+        return base
+
+    def plot_qvalues(self, level="csms", threshold=0.1, ax=None, **kwargs):
+        """
+        Plot the cumulative number of discoveries over range of q-values.
+
+        The available levels can be found using
+        :py:meth:`~mokapot.confidence.Confidence.levels` attribute.
+
+        Parameters
+        ----------
+        level : str, optional
+            The level of q-values to report.
+        threshold : float, optional
+            Indicates the maximum q-value to plot.
+        ax : matplotlib.pyplot.Axes, optional
+            The matplotlib Axes on which to plot. If `None` the current
+            Axes instance is used.
+        **kwargs : dict, optional
+            Arguments passed to :py:func:`matplotlib.pyplot.plot`.
+
+        Returns
+        -------
+        matplotlib.pyplot.Axes
+            An :py:class:`matplotlib.axes.Axes` with the cumulative
+            number of accepted target PSMs or peptides.
+        """
+        return super().plot_qvalues(level, threshold, ax, **kwargs)
 
     def _assign_confidence(self, desc=True):
         """
-        Assign confidence to PSMs and peptides.
+        Assign confidence to CSMs and peptides.
 
         Parameters
         ----------
         desc : bool
             Are higher scores better?
         """
+        levels = ["csms", "peptide_pairs"]
         peptide_idx = utils.groupby_max(
-            self._data, self._peptide_columns, self._score_column
+            self._data, self._combined_peptides_column, self._score_column
         )
 
         peptides = self._data.loc[peptide_idx]
-        levels = ("csms", "peptide_pairs")
+        LOGGER.info("\t- Found %i unique peptide pairs.", len(peptides))
 
-        for level, data in zip(levels, (self._data, peptides)):
+        level_data = [self._data, peptides]
+
+        if self._has_proteins:
+            proteins = crosslink_picked_protein(
+                peptides,
+                self._target_columns,
+                self._num_target_column,
+                self._peptide_columns,
+                self._score_column,
+                self._proteins,
+            )
+            levels += ["protein_pairs"]
+            level_data += [proteins]
+            LOGGER.info("\t- Found %i unique protein pairs.", len(proteins))
+
+        for level, data in zip(levels, level_data):
+            data = data.sort_values(
+                self._score_column, ascending=False
+            ).reset_index(drop=True)
+
             scores = data.loc[:, self._score_column].values
-            targets = data.loc[:, self._target_column].astype(bool).values
+            targets = data.loc[:, self._num_target_column].values
+
+            if all(targets == 2):
+                LOGGER.warning(
+                    "No decoy CSMs remain for confidence estimation. "
+                    "Confidence estimates may be unreliable."
+                )
+
+            # Estimate q-values and assign to dataframe
+            LOGGER.info("Assigning q-values to %s...", level)
             data["mokapot q-value"] = qvalues.crosslink_tdc(
                 scores, targets, desc
             )
 
-            data = (
-                data.loc[targets, :]
-                .sort_values(self._score_column, ascending=(not desc))
-                .reset_index(drop=True)
-                .drop(self._target_column, axis=1)
-                .rename(columns={self._score_column: "mokapot score"})
+            # Make output tables pretty
+            data = data.drop(self._num_target_column, axis=1).rename(
+                columns={self._score_column: "mokapot score"}
             )
 
-            _, pep = qvality.getQvaluesFromScores(
-                scores[targets == 2], scores[~targets]
+            # Set scores to be the correct sign again:
+            data["mokapot score"] = data["mokapot score"] * (desc * 2 - 1)
+
+            # Logging update on q-values
+            LOGGER.info(
+                "\t- Found %i %s with q<=%g",
+                (data.loc[targets, "mokapot q-value"] <= self._eval_fdr).sum(),
+                level,
+                self._eval_fdr,
             )
+
+            # Calculate PEPs
+            LOGGER.info("Assiging PEPs to %s...", level)
+            try:
+                _, pep = qvality.getQvaluesFromScores(
+                    scores[targets == 2],
+                    scores[~(targets == 2)],
+                    includeDecoys=True,
+                )
+            except SystemExit as msg:
+                if "no decoy hits available for PEP calculation" in str(msg):
+                    pep = 0
+                else:
+                    raise
+
+            level = level.lower()
             data["mokapot PEP"] = pep
-            self._confidence_estimates[level] = data
+
+            targ_idx = targets == 2
+            self.confidence_estimates[level] = data.loc[targ_idx, :]
+            self.decoy_confidence_estimates[level] = data.loc[~targ_idx, :]
+
+        if "protein_pairs" not in self.confidence_estimates.keys():
+            self.confidence_estimates["protein_pairs"] = None
+            self.decoy_confidence_estimates["protein_pairs"] = None
 
 
 # Functions -------------------------------------------------------------------
