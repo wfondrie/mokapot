@@ -39,7 +39,7 @@ def test_brew_folds(psms, svm):
 
 
 def test_brew_test_fdr_error(psms, svm):
-    """Test that a sensible """
+    """Test that that we get a proper error."""
     try:
         results, models = mokapot.brew(psms, svm)
     except RuntimeError as msg:
