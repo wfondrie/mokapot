@@ -63,6 +63,7 @@ def test_cli_options(tmp_path, scope_files):
         "1",
         "--max_iter",
         "1",
+        "--keep_decoys",
     ]
 
     subprocess.run(cmd, check=True)
