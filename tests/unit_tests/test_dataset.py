@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 from mokapot import LinearPsmDataset
 
-from ..fixtures import *
-
 
 def test_linear_init(psm_df_6):
     """Test that a LinearPsm Dataset initializes correctly"""

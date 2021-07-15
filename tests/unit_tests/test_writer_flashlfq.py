@@ -6,8 +6,6 @@ import mokapot
 import numpy as np
 import pandas as pd
 
-from ..fixtures import psm_df_1000, psms, mock_conf, mock_proteins
-
 
 def test_sanity(psms, tmp_path):
     """Run simple sanity checks"""

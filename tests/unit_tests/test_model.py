@@ -1,5 +1,4 @@
 """Test that models work as expected"""
-import pytest
 import mokapot
 import numpy as np
 from sklearn.svm import LinearSVC
@@ -7,8 +6,6 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import GridSearchCV
 from sklearn.exceptions import NotFittedError
-
-from ..fixtures import *
 
 
 def test_model_init():
