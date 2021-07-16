@@ -1,8 +1,18 @@
 # Changelog for mokapot  
 
-## [Unreleased]  
+## [0.7.2] - 2021-07-16  
+### Added  
+- `--keep_decoys` option to the command line interface. Thanks @jspaezp!
+- Notes about setting a random seed to the Python API documentation. (Issue #30)
+- Added more information about peptides that couldn't be mapped to proteins. (Issue #29) 
+
+### Fixed  
+- Loading a saved model with `mokapot.load_model()` would fail because of an
+  update to Pandas that introduced a new exception. We've updated mokapot 
+  accordingly.
+
 ### Changed  
-- Updates to unit tests.
+- Updates to unit tests. Warnings are now treated as errors for system tests.
 
 ## [0.7.1] - 2021-03-22  
 ### Changed  
