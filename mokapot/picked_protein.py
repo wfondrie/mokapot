@@ -88,18 +88,18 @@ def picked_protein(
 
     if shared_unmatched:
         LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
-        if shared_unmatched / len(prots) > 0.10:
-            raise ValueError(
-                "Fewer than 90% of all peptides could be matched to proteins. "
-                "Verify that your digest settings are correct."
-            )
-
         LOGGER.warning(
             "%i out of %i peptides could not be mapped. "
-            "Check your digest settings.",
+            "Please check your digest settings.",
             shared_unmatched,
             len(prots),
         )
+
+        if shared_unmatched / len(prots) > 0.10:
+            raise ValueError(
+                "Fewer than 90% of all peptides could be matched to proteins. "
+                "Please verify that your digest settings are correct."
+            )
 
     # Verify that reasonable number of decoys were matched.
     if proteins.has_decoys:
