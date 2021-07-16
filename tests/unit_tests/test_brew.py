@@ -4,8 +4,6 @@ import numpy as np
 import mokapot
 from mokapot import LinearPsmDataset, PercolatorModel
 
-from ..fixtures import *
-
 np.random.seed(42)
 
 
@@ -39,12 +37,11 @@ def test_brew_folds(psms, svm):
 
 
 def test_brew_test_fdr_error(psms, svm):
-    """Test that that we get a proper error."""
-    try:
+    """Test that we get a sensible error message"""
+    with pytest.raises(RuntimeError) as err:
         results, models = mokapot.brew(psms, svm)
-    except RuntimeError as msg:
-        if not str(msg).startswith("Failed to calibrate"):
-            raise
+
+    assert "Failed to calibrate" in str(err)
 
 
 # @pytest.mark.skip(reason="Not currently working, at least on MacOS.")
