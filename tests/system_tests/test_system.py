@@ -8,10 +8,14 @@ results and Percolator results.
 import os
 import logging
 
+import pytest
 import pandas as pd
 import mokapot
 
 logging.basicConfig(level=logging.INFO)
+
+# Warnings are errors for these tests
+pytestmark = pytest.mark.filterwarnings("error")
 
 
 def test_compare_to_percolator():
