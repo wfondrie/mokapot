@@ -9,6 +9,9 @@ import subprocess
 import pytest
 import pandas as pd
 
+# Warnings are errors for these tests
+pytestmark = pytest.mark.filterwarnings("error")
+
 
 @pytest.fixture
 def scope_files():
@@ -76,6 +79,20 @@ def test_cli_options(tmp_path, scope_files):
     assert Path(tmp_path, f"blah.{file_bases[1]}.mokapot.psms.txt").exists()
     assert Path(
         tmp_path, f"blah.{file_bases[1]}.mokapot.peptides.txt"
+    ).exists()
+
+    # Test keep_decoys:
+    assert Path(
+        tmp_path, f"blah.{file_bases[0]}.mokapot.decoy.psms.txt"
+    ).exists()
+    assert Path(
+        tmp_path, f"blah.{file_bases[0]}.mokapot.decoy.peptides.txt"
+    ).exists()
+    assert Path(
+        tmp_path, f"blah.{file_bases[1]}.mokapot.decoy.psms.txt"
+    ).exists()
+    assert Path(
+        tmp_path, f"blah.{file_bases[1]}.mokapot.decoy.peptides.txt"
     ).exists()
 
 
