@@ -120,7 +120,11 @@ def main():
             if config.file_root is not None:
                 prefix = ".".join([config.file_root, prefix])
 
-            dat.to_txt(dest_dir=config.dest_dir, file_root=prefix)
+            dat.to_txt(
+                dest_dir=config.dest_dir,
+                file_root=prefix,
+                decoys=config.keep_decoys,
+            )
 
     total_time = round(time.time() - start)
     total_time = str(datetime.timedelta(seconds=total_time))

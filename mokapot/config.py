@@ -239,6 +239,13 @@ def _parser():
     )
 
     parser.add_argument(
+        "--keep_decoys",
+        default=False,
+        action="store_true",
+        help=("Keep the decoys in the output .txt files"),
+    )
+
+    parser.add_argument(
         "--folds",
         type=int,
         default=3,
