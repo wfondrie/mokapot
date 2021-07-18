@@ -114,7 +114,11 @@ def main():
     # Determine how to write the results:
     logging.info("Writing results...")
     if config.aggregate or len(config.psm_files) == 1:
-        psms.to_txt(dest_dir=config.dest_dir, file_root=config.file_root)
+        psms.to_txt(
+            dest_dir=config.dest_dir,
+            file_root=config.file_root,
+            decoys=config.keep_decoys,
+        )
     else:
         for dat, prefix in zip(psms, prefixes):
             if config.file_root is not None:
