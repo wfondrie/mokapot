@@ -114,6 +114,14 @@ def test_cli_aggregate(tmp_path, scope_files):
     subprocess.run(cmd, check=True)
     assert Path(tmp_path, "blah.mokapot.psms.txt").exists()
     assert Path(tmp_path, "blah.mokapot.peptides.txt").exists()
+    assert not Path(tmp_path, "blah.mokapot.decoy.psms.txt").exists()
+    assert not Path(tmp_path, "blah.mokapot.decoy.peptides.txt").exists()
+
+    # Test that decoys are also in the output when --keep_decoys is used
+    cmd += ["--keep_decoys"]
+    subprocess.run(cmd, check=True)
+    assert Path(tmp_path, "blah.mokapot.decoy.psms.txt").exists()
+    assert Path(tmp_path, "blah.mokapot.decoy.peptides.txt").exists()
 
 
 def test_cli_fasta(tmp_path, phospho_files):
