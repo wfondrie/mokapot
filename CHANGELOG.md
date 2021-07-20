@@ -1,5 +1,10 @@
 # Changelog for mokapot  
 
+## [0.7.3] - 2021-07-20
+### Fixed
+- Fixed bug where the `--keep_decoys` did not work with `--aggregate`. Also,
+  added tests to cover this. Thanks @jspaezp!
+
 ## [0.7.2] - 2021-07-16  
 ### Added  
 - `--keep_decoys` option to the command line interface. Thanks @jspaezp!
