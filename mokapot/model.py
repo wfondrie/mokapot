@@ -268,15 +268,17 @@ class Model:
         if self.subset_max_train is not None:
             if self.subset_max_train > len(psms):
                 LOGGER.warning(
-                    (
-                        f"The provided subsetting value ({self.subset_max_train}) "
-                        f" is larger than the number of psms in the training split ({len(psms)})"
-                        f". So it will be ignored"
-                    )
+                    "The provided subset value (%i) is larger than the number "
+                    "of psms in the training split (%i), so it will be "
+                    "ignored.",
+                    self.subset_max_train,
+                    len(psms),
                 )
             else:
-                LOGGER.debug(
-                    f"Subsetting psms ({len(psms)}) to ({self.subset_max_train})"
+                LOGGER.info(
+                    "Subsetting PSMs (%i) to (%i).",
+                    len(psms),
+                    self.subset_max_train,
                 )
                 subset_idx = np.random.choice(
                     len(psms), self.subset_max_train, replace=False
