@@ -216,8 +216,10 @@ def _parser():
         type=int,
         default=None,
         help=(
-            "Use only a random subset of PSMs for training. "
-            "This is useful for very large datasets."
+            "Maximum number of PSMs to use during the training "
+            "of each of the cross validation folds in the model. "
+            "This is useful for very large datasets and will be "
+            "ignored if less PSMS are available."
         ),
     )
 
