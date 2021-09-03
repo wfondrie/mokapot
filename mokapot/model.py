@@ -266,12 +266,26 @@ class Model:
             )
 
         if self.subset_max_train is not None:
-            subset_idx = np.random.choice(
-                len(psms), self.subset_max_train, replace=False
-            )
+            if self.subset_max_train > len(psms):
+                LOGGER.warning(
+                    "The provided subset value (%i) is larger than the number "
+                    "of psms in the training split (%i), so it will be "
+                    "ignored.",
+                    self.subset_max_train,
+                    len(psms),
+                )
+            else:
+                LOGGER.info(
+                    "Subsetting PSMs (%i) to (%i).",
+                    len(psms),
+                    self.subset_max_train,
+                )
+                subset_idx = np.random.choice(
+                    len(psms), self.subset_max_train, replace=False
+                )
 
-            psms = copy.copy(psms)
-            psms._data = psms._data.iloc[subset_idx, :]
+                psms = copy.copy(psms)
+                psms._data = psms._data.iloc[subset_idx, :]
 
         # Choose the initial direction
         start_labels, feat_pass = _get_starting_labels(psms, self)

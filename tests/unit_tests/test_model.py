@@ -72,6 +72,18 @@ def test_model_fit(psms):
     assert model.is_trained
 
 
+def test_model_fit_large_subset(psms):
+    model = mokapot.Model(
+        LogisticRegression(),
+        train_fdr=0.05,
+        max_iter=1,
+        subset_max_train=2_000_000_000,
+    )
+    model.fit(psms)
+
+    assert model.is_trained
+
+
 def test_model_predict(psms):
     """Test predictions"""
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
