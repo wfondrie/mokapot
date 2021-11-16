@@ -267,7 +267,7 @@ def _parser():
             "value. The binned mass difference is appended to the end of the "
             "peptide and will be used when grouping peptides for peptide-level"
             " confidence estimation. Using this option for open modification "
-            "search results. We reommend 0.01 as a good starting point."
+            "search results. We recommend 0.01 as a good starting point."
         ),
     )
 
