@@ -66,6 +66,14 @@ def _parser():
     )
 
     parser.add_argument(
+        "-w",
+        "--max_workers",
+        default=1,
+        type=int,
+        help=("The number of processes to use for model training"),
+    )
+
+    parser.add_argument(
         "-r",
         "--file_root",
         type=str,

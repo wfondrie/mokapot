@@ -92,7 +92,11 @@ def main():
 
     # Fit the models:
     psms, models = brew(
-        datasets, model=model, test_fdr=config.test_fdr, folds=config.folds
+        datasets,
+        model=model,
+        test_fdr=config.test_fdr,
+        folds=config.folds,
+        max_workers=config.max_workers,
     )
 
     if config.dest_dir is not None:
