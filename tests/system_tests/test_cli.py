@@ -69,6 +69,8 @@ def test_cli_options(tmp_path, scope_files):
         "--keep_decoys",
         "--subset_max_train",
         "50000",
+        "--max_workers",
+        "3",
     ]
 
     subprocess.run(cmd, check=True)
