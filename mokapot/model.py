@@ -127,17 +127,6 @@ class Model:
         shuffle=True,
     ):
         """Initialize a Model object"""
-        if estimator is None:
-            warnings.warn(
-                "The estimator will need to be specified in future "
-                "versions. Use the PercolatorModel class instead.",
-                DeprecationWarning,
-            )
-            svm_model = LinearSVC(dual=False)
-            estimator = GridSearchCV(
-                svm_model, param_grid=PERC_GRID, refit=False, cv=3
-            )
-
         self.estimator = clone(estimator)
         self.features = None
         self.is_trained = False
@@ -391,6 +380,8 @@ class PercolatorModel(Model):
     shuffle : bool, optional
         Should the order of PSMs be randomized for training? For deterministic
         algorithms, this will have no effect.
+    n_jobs : int, optional
+        The number of jobs used to parallelize the hyperparameter grid search.
 
     Attributes
     ----------
@@ -416,8 +407,9 @@ class PercolatorModel(Model):
         the model still be used?
     subset_max_train : int or None
         The number of PSMs for training.
-    shuffle : bool
-        Is the order of PSMs shuffled for training?
+    n_jobs : int
+        The number of jobs to use for parallizing the hyperparameter
+        grid search.
     """
 
     def __init__(
@@ -428,11 +420,17 @@ class PercolatorModel(Model):
         direction=None,
         override=False,
         subset_max_train=None,
+        n_jobs=-1,
     ):
         """Initialize a PercolatorModel"""
+        self.n_jobs = n_jobs
         svm_model = LinearSVC(dual=False)
         estimator = GridSearchCV(
-            svm_model, param_grid=PERC_GRID, refit=False, cv=3, n_jobs=-1
+            svm_model,
+            param_grid=PERC_GRID,
+            refit=False,
+            cv=3,
+            n_jobs=n_jobs,
         )
 
         super().__init__(

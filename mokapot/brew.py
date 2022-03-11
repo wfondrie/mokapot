@@ -3,10 +3,10 @@ Defines a function to run the Percolator algorithm.
 """
 import logging
 import copy
-from concurrent.futures import ProcessPoolExecutor
 
 import pandas as pd
 import numpy as np
+from joblib import Parallel, delayed
 
 from .model import PercolatorModel
 
@@ -47,7 +47,8 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         The number of processes to use for model training. More workers
         will require more memory, but will typically decrease the total
         run time. An integer exceeding the number of folds will have
-        no additional effect.
+        no additional effect. Note that logging messages will be garbled
+        if more than one worker is enabled.
 
     Returns
     -------
@@ -81,25 +82,14 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     LOGGER.info("Splitting PSMs into %i folds...", folds)
     test_idx = [p._split(folds) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
+    if max_workers != 1:
+        # train_sets can't be a generator for joblib :(
+        train_sets = list(train_sets)
 
-    # Create args for map:
-    map_args = [
-        _fit_model,
-        train_sets,
-        [copy.deepcopy(model) for _ in range(folds)],
-        range(folds),
-    ]
-
-    # Train models optionally in parallel
-    with ProcessPoolExecutor(max_workers=max_workers) as prc:
-        if max_workers == 1:
-            map_fun = map
-        else:
-            map_args[1] = list(map_args[1])
-            map_args[3] = list(map_args[3])
-            map_fun = prc.map
-
-        models = list(map_fun(*map_args))
+    models = Parallel(n_jobs=max_workers, require="sharedmem")(
+        delayed(_fit_model)(d, copy.deepcopy(model), f)
+        for f, d in enumerate(train_sets)
+    )
 
     # Determine if the models need to be reset:
     reset = any([m[1] for m in models])

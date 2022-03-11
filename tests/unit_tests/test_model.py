@@ -1,6 +1,8 @@
 """Test that models work as expected"""
+import pytest
 import mokapot
 import numpy as np
+import pandas as pd
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -37,6 +39,8 @@ def test_model_init():
     model = mokapot.Model(LogisticRegression())
     assert isinstance(model.scaler, StandardScaler)
 
+    print(model)
+
 
 def test_perc_init():
     """Test the initialization of a PercolatorModel"""
@@ -71,6 +75,14 @@ def test_model_fit(psms):
     assert isinstance(model.estimator, LogisticRegression)
     assert model.is_trained
 
+    no_targets = pd.DataFrame({"targets": [False] * 100})
+    with pytest.raises(ValueError):
+        model.fit(no_targets)
+
+    no_decoys = pd.DataFrame({"targets": [True] * 100})
+    with pytest.raises(ValueError):
+        model.fit(no_decoys)
+
 
 def test_model_fit_large_subset(psms):
     model = mokapot.Model(
@@ -101,10 +113,8 @@ def test_model_predict(psms):
     # The case where a model is trained on a dataset with different features:
     psms._data["blah"] = np.random.randn(len(psms))
     psms._feature_columns = ("score", "blah")
-    try:
+    with pytest.raises(ValueError):
         model.predict(psms)
-    except ValueError:
-        pass
 
 
 def test_model_persistance(tmp_path):
@@ -116,3 +126,11 @@ def test_model_persistance(tmp_path):
     loaded = mokapot.load_model(model_file)
 
     assert isinstance(loaded, mokapot.Model)
+
+
+def test_dummy_scaler():
+    """Test the DummyScaler class"""
+    data = np.random.default_rng(42).normal(0, 1, (20, 10))
+    scaler = mokapot.model.DummyScaler()
+    assert (data == scaler.fit_transform(data)).all()
+    assert (data == scaler.transform(data)).all()
