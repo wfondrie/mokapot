@@ -1,6 +1,8 @@
 """Test that models work as expected"""
+import pytest
 import mokapot
 import numpy as np
+import pandas as pd
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
