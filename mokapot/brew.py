@@ -241,7 +241,6 @@ def _fit_model(train_set, model, fold):
     reset : bool
         Whether the models should be reset to their original parameters.
     """
-    print(train_set)
     LOGGER.info("")
     LOGGER.info("=== Analyzing Fold %i ===", fold + 1)
     reset = False
@@ -254,5 +253,4 @@ def _fit_model(train_set, model, fold):
         if model.is_trained:
             reset = True
 
-    print(fold, model, reset)
     return model, reset
