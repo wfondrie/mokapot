@@ -47,7 +47,8 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         The number of processes to use for model training. More workers
         will require more memory, but will typically decrease the total
         run time. An integer exceeding the number of folds will have
-        no additional effect.
+        no additional effect. Note that logging messages will be garbled
+        if more than one worker is enabled.
 
     Returns
     -------

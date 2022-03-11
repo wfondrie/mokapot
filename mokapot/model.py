@@ -391,6 +391,8 @@ class PercolatorModel(Model):
     shuffle : bool, optional
         Should the order of PSMs be randomized for training? For deterministic
         algorithms, this will have no effect.
+    n_jobs : int, optional
+        The number of jobs used to parallelize the hyperparameter grid search.
 
     Attributes
     ----------
@@ -416,8 +418,9 @@ class PercolatorModel(Model):
         the model still be used?
     subset_max_train : int or None
         The number of PSMs for training.
-    shuffle : bool
-        Is the order of PSMs shuffled for training?
+    n_jobs : int
+        The number of jobs to use for parallizing the hyperparameter
+        grid search.
     """
 
     def __init__(
@@ -428,11 +431,13 @@ class PercolatorModel(Model):
         direction=None,
         override=False,
         subset_max_train=None,
+        n_jobs=-1,
     ):
         """Initialize a PercolatorModel"""
+        self.n_jobs = n_jobs
         svm_model = LinearSVC(dual=False)
         estimator = GridSearchCV(
-            svm_model, param_grid=PERC_GRID, refit=False, cv=3, n_jobs=-1
+            svm_model, param_grid=PERC_GRID, refit=False, cv=3, n_jobs=n_jobs,
         )
 
         super().__init__(
