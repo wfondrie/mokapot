@@ -127,17 +127,6 @@ class Model:
         shuffle=True,
     ):
         """Initialize a Model object"""
-        if estimator is None:
-            warnings.warn(
-                "The estimator will need to be specified in future "
-                "versions. Use the PercolatorModel class instead.",
-                DeprecationWarning,
-            )
-            svm_model = LinearSVC(dual=False)
-            estimator = GridSearchCV(
-                svm_model, param_grid=PERC_GRID, refit=False, cv=3
-            )
-
         self.estimator = clone(estimator)
         self.features = None
         self.is_trained = False
