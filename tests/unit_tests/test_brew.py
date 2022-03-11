@@ -47,4 +47,5 @@ def test_brew_test_fdr_error(psms, svm):
 # @pytest.mark.skip(reason="Not currently working, at least on MacOS.")
 def test_brew_multiprocess(psms, svm):
     """Test that multiprocessing doesn't yield an error"""
+    svm.n_jobs = 1
     mokapot.brew(psms, svm, test_fdr=0.05, max_workers=3)
