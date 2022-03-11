@@ -13,7 +13,8 @@ PR #44, which made these things happen!
 
 ### Changes
 - Improved speed by using multiple jobs for grid search by default.
-
+- Parallelization within `mokapot.brew()` now uses `joblib` 
+  instead of `concurrent.futures`.
 
 ## [0.7.4] - 2021-09-03
 ### Changed
