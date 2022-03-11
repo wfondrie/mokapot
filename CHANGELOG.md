@@ -1,6 +1,10 @@
 # Changelog for mokapot  
 
 ## [0.8.0] - 2022-03-11
+
+Thanks to @sambenfredj, @gessulat, @tkschmidt, and @MatthewThe for 
+PR #44, which made these things happen!
+
 ### Added
 - A new command line argument, `--max_workers`. This allows the
   cross-validation folds to be computed in parallel.
