@@ -437,7 +437,11 @@ class PercolatorModel(Model):
         self.n_jobs = n_jobs
         svm_model = LinearSVC(dual=False)
         estimator = GridSearchCV(
-            svm_model, param_grid=PERC_GRID, refit=False, cv=3, n_jobs=n_jobs,
+            svm_model,
+            param_grid=PERC_GRID,
+            refit=False,
+            cv=3,
+            n_jobs=n_jobs,
         )
 
         super().__init__(
