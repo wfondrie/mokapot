@@ -1,5 +1,21 @@
 # Changelog for mokapot  
 
+## [0.8.0] - 2022-03-11
+
+Thanks to @sambenfredj, @gessulat, @tkschmidt, and @MatthewThe for 
+PR #44, which made these things happen!
+
+### Added
+- A new command line argument, `--max_workers`. This allows the
+  cross-validation folds to be computed in parallel.
+- The `PercolatorModel` class now has an `n_jobs` parameter, which 
+  controls parallelization of the grid search.
+
+### Changes
+- Improved speed by using multiple jobs for grid search by default.
+- Parallelization within `mokapot.brew()` now uses `joblib` 
+  instead of `concurrent.futures`.
+
 ## [0.7.4] - 2021-09-03
 ### Changed
 - Improved documentation and added warnings for `--subset_max_train`. Thanks
