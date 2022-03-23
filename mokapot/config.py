@@ -70,7 +70,11 @@ def _parser():
         "--max_workers",
         default=1,
         type=int,
-        help="The number of processes to use for model training.",
+        help=(
+            "The number of processes to use for model training. Note that "
+            "using more than one worker will result in garbled logging "
+            "messages."
+        ),
     )
 
     parser.add_argument(

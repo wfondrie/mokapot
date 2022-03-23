@@ -2,7 +2,7 @@
 import pytest
 import numpy as np
 import mokapot
-from mokapot import LinearPsmDataset, PercolatorModel
+from mokapot import PercolatorModel
 
 np.random.seed(42)
 
@@ -47,4 +47,4 @@ def test_brew_test_fdr_error(psms, svm):
 # @pytest.mark.skip(reason="Not currently working, at least on MacOS.")
 def test_brew_multiprocess(psms, svm):
     """Test that multiprocessing doesn't yield an error"""
-    mokapot.brew(psms, svm, test_fdr=0.05, max_workers=3)
+    mokapot.brew(psms, svm, test_fdr=0.05, max_workers=2)
