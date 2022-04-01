@@ -59,12 +59,12 @@ def read_pin(
     filename_column : str, optional
         The column specifying the MS data file. If :code:`None`, mokapot will
         look for a column called "filename" (case insensitive). This is
-        required for some output formats, such as FastLFQ.
+        required for some output formats, such as FlashLFQ.
     calcmass_column : str, optional
         The column specifying the theoretical monoisotopic mass of the peptide
         including modifications. If :code:`None`, mokapot will look for a
         column called "calcmass" (case insensitive). This is required for some
-        output formats, such as FastLFQ.
+        output formats, such as FlashLFQ.
     expmass_column : str, optional
         The column specifying the measured neutral precursor mass. If
         :code:`None`, mokapot will look for a column call "expmass" (case
@@ -72,12 +72,12 @@ def read_pin(
     rt_column : str, optional
         The column specifying the retention time in seconds. If :code:`None`,
         mokapot will look for a column called "ret_time" (case insensitive).
-        This is required for some output formats, such as FastLFQ.
+        This is required for some output formats, such as FlashLFQ.
     charge_column : str, optional
         The column specifying the charge state of each peptide. If
         :code:`None`, mokapot will look for a column called "charge" (case
         insensitive). This is required for some output formats, such as
-        FastLFQ.
+        FlashLFQ.
     to_df : bool, optional
         Return a :py:class:`pandas.DataFrame` instead of a
         :py:class:`~mokapot.dataset.LinearPsmDataset`.
