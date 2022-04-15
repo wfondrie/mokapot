@@ -259,47 +259,6 @@ def make_decoys(
     return out_file
 
 
-def parse_fasta(
-    fasta_files,
-    enzyme_regex="[KR]",
-    missed_cleavages=0,
-    clip_nterm_methionine=False,
-    min_length=6,
-    max_length=50,
-    semi=False,
-    decoy_prefix="decoy_",
-):
-    """
-    Parse a FASTA file into two dictionaries.
-
-    Parameters
-    ----------
-    fasta_files : str
-        The FASTA file to parse.
-    enzyme_regex : str or compiled regex, optional
-        A regular expression defining the enzyme specificity.
-    missed_cleavages : int, optional
-        The maximum number of allowed missed cleavages.
-    clip_nterm_methionine : bool, optional
-        Remove methionine residues that occur at the protein N-terminus.
-    min_length : int, optional
-        The minimum peptide length.
-    max_length : int, optional
-        The maximum peptide length.
-    semi : bool
-        Allow semi-enzymatic cleavage.
-    decoy_prefix : str
-        The prefix used to indicate decoy sequences.
-
-    Returns
-    -------
-    unique_peptides : dict
-        A dictionary matching unique peptides to proteins.
-    decoy_map : dict
-        A dictionary decoy proteins to their corresponding target proteins.
-    """
-
-
 def digest(
     sequence,
     enzyme_regex="[KR]",
@@ -533,7 +492,8 @@ def _cleave(
             peptides.add(peptide)
 
             if clip_nterm_met and not start_idx and peptide.startswith("M"):
-                peptides.add(peptide[1:])
+                if len(peptide[1:]) >= min_length:
+                    peptides.add(peptide[1:])
 
             # Handle semi:
             if semi:
