@@ -1,5 +1,11 @@
 # Changelog for mokapot  
 
+## [Unreleased]
+
+### Fixed
+- Using `clip_nterm_methionine=True` could result in peptides of length
+  `min_length-1`.
+
 ## [0.8.0] - 2022-03-11
 
 Thanks to @sambenfredj, @gessulat, @tkschmidt, and @MatthewThe for 
