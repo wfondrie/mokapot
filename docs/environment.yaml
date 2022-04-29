@@ -1,0 +1,22 @@
+name: mokapot-docs
+channels:
+  - bioconda
+  - conda-forge
+dependecies:
+  - python=3.8
+  - numpy
+  - pandas
+  - scikit-learn
+  - numba
+  - matplotlib-base
+  - lxml
+  - triqler
+  - joblib
+  - setuptools_scm
+  - numpydoc >=1.0.0
+  - sphinx-argparse >=0.2.5
+  - nbsphinx >=0.7.1
+  - ipykernel >=5.3.0
+  - recommonmark >=0.5.0
+  - pip:
+      - .

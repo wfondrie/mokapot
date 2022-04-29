@@ -118,7 +118,7 @@ spectrometry toolkit <http://crux.ms>`_).
 If you need an example file to get started with, a selection of PSMs from
 Hogrebe et al. [1]_ is available to download from the mokapot repository,
 `phospho_rep1.pin
-<https://github.com/wfondrie/mokapot/raw/master/tests/data/phoshpo_rep1.pin>`_.
+<https://github.com/wfondrie/mokapot/raw/master/data/phoshpo_rep1.pin>`_.
 This is the file we'll use in the examples below.
 
 
