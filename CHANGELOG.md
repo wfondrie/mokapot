@@ -5,6 +5,7 @@
 ### Fixed
 - Using `clip_nterm_methionine=True` could result in peptides of length
   `min_length-1`.
+- Links to example datasets in the documentation.
 
 ## [0.8.0] - 2022-03-11
 
