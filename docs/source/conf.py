@@ -24,7 +24,7 @@ except ModuleNotFoundError:
 
 # -- Project information -----------------------------------------------------
 project = "mokapot"
-copyright = "2020, William E. Fondrie"
+copyright = "2022, William E. Fondrie"
 author = "William E. Fondrie"
 
 import mokapot
@@ -52,7 +52,7 @@ extensions = [
     "recommonmark",
 ]
 
-nbsphinx_execute = "never"
+nbsphinx_execute = "auto"
 
 autosummary_generate = True
 autodoc_default_options = {
