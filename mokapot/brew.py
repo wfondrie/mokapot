@@ -86,10 +86,13 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         # train_sets can't be a generator for joblib :(
         train_sets = list(train_sets)
 
-    models = Parallel(n_jobs=max_workers, require="sharedmem")(
-        delayed(_fit_model)(d, copy.deepcopy(model), f)
-        for f, d in enumerate(train_sets)
-    )
+    if type(model) is list:
+        models = [[m, False] for m in model]
+    else:
+        models = Parallel(n_jobs=max_workers, require="sharedmem")(
+            delayed(_fit_model)(d, copy.deepcopy(model), f)
+            for f, d in enumerate(train_sets)
+        )
 
     # sort models to have deterministic results with multithreading.
     # Only way I found to sort is using intercept values
@@ -114,7 +117,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
 
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
-    if not model.override:
+    if type(model) is not list and not model.override:
         best_feats = [p._find_best_feature(test_fdr) for p in psms]
         feat_total = sum([best_feat[1] for best_feat in best_feats])
     else:

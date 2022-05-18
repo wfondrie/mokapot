@@ -253,6 +253,12 @@ def _parser():
     )
 
     parser.add_argument(
+        "--init_weights",
+        type=str,
+        help=("Use saved models and skip training."),
+    )
+
+    parser.add_argument(
         "--keep_decoys",
         default=False,
         action="store_true",
