@@ -50,9 +50,10 @@ class Model:
 
     Parameters
     ----------
-    estimator : classifier object, optional
+    estimator : classifier object
         A classifier that is assumed to implement the scikit-learn
-        estimator interface.
+        estimator interface. To emulate the Percolator estimator (an
+        SVM model) use :py:class:`PercolatorModel`.
     scaler : scaler object or "as-is", optional
         Defines how features are normalized before model fitting and
         prediction. The default, :code:`None`, subtracts the mean and scales
