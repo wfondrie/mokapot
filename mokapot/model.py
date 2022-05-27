@@ -276,6 +276,14 @@ class Model:
                 psms = copy.copy(psms)
                 psms._data = psms._data.iloc[subset_idx, :]
 
+        # PUT SUPERVISED LEARNING STEP HERE
+
+        norm_feat = self.scaler.fit_transform(psms.features.values)
+        # print(psms.targets)
+        self.estimator.fit(norm_feat, psms.targets)
+        # self.is_trained = True
+
+
         # Choose the initial direction
         start_labels, feat_pass = _get_starting_labels(psms, self)
 
