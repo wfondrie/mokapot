@@ -117,7 +117,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
 
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
-    if type(model) is not list and not model.override:
+    if not all([m.override for m in models]) or not model.override:
         best_feats = [p._find_best_feature(test_fdr) for p in psms]
         feat_total = sum([best_feat[1] for best_feat in best_feats])
     else:
