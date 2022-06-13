@@ -48,3 +48,18 @@ def test_brew_test_fdr_error(psms, svm):
 def test_brew_multiprocess(psms, svm):
     """Test that multiprocessing doesn't yield an error"""
     mokapot.brew(psms, svm, test_fdr=0.05, max_workers=2)
+
+
+def test_brew_trained_models(psms, svm):
+    """Test that using trained models reproduces same results"""
+    # fix a seed to have the same random split for each run
+    np.random.seed(3)
+    results_with_training, models_with_training = mokapot.brew(
+        psms, svm, test_fdr=0.05
+    )
+    np.random.seed(3)
+    results_without_training, models_without_training = mokapot.brew(
+        psms, models_with_training, test_fdr=0.05
+    )
+    assert models_with_training == models_without_training
+    assert results_with_training.accepted == results_without_training.accepted
