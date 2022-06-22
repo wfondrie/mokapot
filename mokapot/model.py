@@ -50,9 +50,10 @@ class Model:
 
     Parameters
     ----------
-    estimator : classifier object, optional
+    estimator : classifier object
         A classifier that is assumed to implement the scikit-learn
-        estimator interface.
+        estimator interface. To emulate Percolator (an SVM model) use
+        :py:class:`PercolatorModel` instead.
     scaler : scaler object or "as-is", optional
         Defines how features are normalized before model fitting and
         prediction. The default, :code:`None`, subtracts the mean and scales
@@ -98,7 +99,7 @@ class Model:
         model has yet to be trained.
     is_trained : bool
         Indicates if the model has been trained.
-        train_fdr : float
+    train_fdr : float
         The maximum false discovery rate at which to consider a target PSM as a
         positive example.
     max_iter : int
