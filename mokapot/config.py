@@ -253,6 +253,13 @@ def _parser():
     )
 
     parser.add_argument(
+        "--saved_models",
+        type=str,
+        nargs="+",
+        help=("Use saved models and skip training."),
+    )
+
+    parser.add_argument(
         "--keep_decoys",
         default=False,
         action="store_true",

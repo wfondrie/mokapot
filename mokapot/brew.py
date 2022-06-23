@@ -86,10 +86,29 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         # train_sets can't be a generator for joblib :(
         train_sets = list(train_sets)
 
-    models = Parallel(n_jobs=max_workers, require="sharedmem")(
-        delayed(_fit_model)(d, copy.deepcopy(model), f)
-        for f, d in enumerate(train_sets)
-    )
+    try:
+        models = [[m, False] for m in model if m.is_trained]
+        assert len(models) == len(model)  # Test that all models are fitted.
+        assert (
+            len(model) == folds
+        )  # Test that number of models matches the number of folds.
+    except AssertionError as err:
+        if len(model) != folds:
+            raise ValueError(
+                f"The number of trained models ({len(model)}) must match the number of folds ({folds})"
+            ) from err
+        raise RuntimeError(
+            "One or more of the provided models was not previously trained"
+        ) from err
+    except TypeError:
+        models = Parallel(n_jobs=max_workers, require="sharedmem")(
+            delayed(_fit_model)(d, copy.deepcopy(model), f)
+            for f, d in enumerate(train_sets)
+        )
+
+    # sort models to have deterministic results with multithreading.
+    # Only way I found to sort is using intercept values
+    models.sort(key=lambda x: x[0].estimator.intercept_)
 
     # Determine if the models need to be reset:
     reset = any([m[1] for m in models])
@@ -110,7 +129,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
 
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
-    if not model.override:
+    if not all([m.override for m in models]) or not model.override:
         best_feats = [p._find_best_feature(test_fdr) for p in psms]
         feat_total = sum([best_feat[1] for best_feat in best_feats])
     else:

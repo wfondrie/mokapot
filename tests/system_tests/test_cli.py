@@ -34,6 +34,12 @@ def pepxml_file():
     return pepxml
 
 
+@pytest.fixture
+def models_path():
+    """Get the saved models"""
+    return sorted(list(Path("data", "models").glob("*")))
+
+
 def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
     cmd = ["mokapot", scope_files[0], "--dest_dir", tmp_path]
@@ -175,3 +181,23 @@ def test_cli_pepxml(tmp_path, pepxml_file):
     unbinned = pd.read_csv(unbinned_file, sep="\t")
     binned = pd.read_csv(binned_file, sep="\t")
     assert len(binned) > len(unbinned)
+
+
+def test_cli_saved_models(tmp_path, phospho_files, models_path):
+    """Test that saved_models works"""
+    cmd = [
+        "mokapot",
+        phospho_files[0],
+        "--dest_dir",
+        tmp_path,
+        "--test_fdr",
+        "0.01",
+        "--saved_models",
+        models_path[0],
+        models_path[1],
+        models_path[2],
+    ]
+
+    subprocess.run(cmd, check=True)
+    assert Path(tmp_path, "mokapot.psms.txt").exists()
+    assert Path(tmp_path, "mokapot.peptides.txt").exists()
