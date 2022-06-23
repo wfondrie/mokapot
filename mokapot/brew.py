@@ -86,9 +86,21 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         # train_sets can't be a generator for joblib :(
         train_sets = list(train_sets)
 
-    if type(model) is list:
-        models = [[m, False] for m in model]
-    else:
+    try:
+        models = [[m, False] for m in model if m.is_trained]
+        assert len(models) == len(model)  # Test that all models are fitted.
+        assert (
+            len(model) == folds
+        )  # Test that number of models matches the number of folds.
+    except AssertionError as err:
+        if len(model) != folds:
+            raise ValueError(
+                f"The number of trained models ({len(model)}) must match the number of folds ({folds})"
+            ) from err
+        raise RuntimeError(
+            "One or more of the provided models was not previously trained"
+        ) from err
+    except TypeError:
         models = Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(_fit_model)(d, copy.deepcopy(model), f)
             for f, d in enumerate(train_sets)
