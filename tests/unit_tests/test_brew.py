@@ -63,3 +63,24 @@ def test_brew_trained_models(psms, svm):
     )
     assert models_with_training == models_without_training
     assert results_with_training.accepted == results_without_training.accepted
+
+
+def test_brew_using_few_models_error(psms, svm):
+    """Test that if the number of trained models less than the number of folds we get the expected error message"""
+    with pytest.raises(ValueError) as err:
+        mokapot.brew(psms, [svm, svm], test_fdr=0.05)
+    assert (
+        "The number of trained models (2) must match the number of folds (3)"
+        in str(err)
+    )
+
+
+def test_brew_using_non_trained_models_error(psms, svm):
+    """Test that using non trained models gives the expected error message"""
+    svm.is_trained = False
+    with pytest.raises(RuntimeError) as err:
+        mokapot.brew(psms, [svm, svm, svm], test_fdr=0.05)
+    assert (
+        "One or more of the provided models was not previously trained"
+        in str(err)
+    )
