@@ -36,8 +36,8 @@ def pepxml_file():
 
 @pytest.fixture
 def models_path():
-    """Get the saved models folder path"""
-    return Path("data", "models")
+    """Get the saved models"""
+    return sorted(list(Path("data", "models").glob("*")))
 
 
 def test_basic_cli(tmp_path, scope_files):
@@ -183,8 +183,8 @@ def test_cli_pepxml(tmp_path, pepxml_file):
     assert len(binned) > len(unbinned)
 
 
-def test_cli_init_weights(tmp_path, phospho_files, models_path):
-    """Test that init_weights works"""
+def test_cli_saved_models(tmp_path, phospho_files, models_path):
+    """Test that saved_models works"""
     cmd = [
         "mokapot",
         phospho_files[0],
@@ -192,8 +192,10 @@ def test_cli_init_weights(tmp_path, phospho_files, models_path):
         tmp_path,
         "--test_fdr",
         "0.01",
-        "--init_weights",
-        models_path,
+        "--saved_models",
+        models_path[0],
+        models_path[1],
+        models_path[2],
     ]
 
     subprocess.run(cmd, check=True)

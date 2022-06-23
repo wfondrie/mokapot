@@ -253,8 +253,9 @@ def _parser():
     )
 
     parser.add_argument(
-        "--init_weights",
+        "--saved_models",
         type=str,
+        nargs="+",
         help=("Use saved models and skip training."),
     )
 

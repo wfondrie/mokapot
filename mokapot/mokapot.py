@@ -1,7 +1,6 @@
 """
 This is the command line interface for mokapot
 """
-import os
 import sys
 import time
 import logging
@@ -83,16 +82,8 @@ def main():
                 dataset.add_proteins(proteins)
 
     # Define a model:
-    if config.init_weights:
-        model_files = os.listdir(str(config.init_weights))
-        if len(model_files) != config.folds:
-            raise RuntimeError(
-                "Number of loaded models should be equal to the number of folds."
-            )
-        model = [
-            load_model(os.path.join(str(config.init_weights), model_file))
-            for model_file in model_files
-        ]
+    if config.saved_models:
+        model = [load_model(model_file) for model_file in config.saved_models]
     else:
         model = PercolatorModel(
             train_fdr=config.train_fdr,
