@@ -293,13 +293,15 @@ class Model:
             shuffled_norm_feat = norm_feat[my_shuffled_idx, :]
             shuffled_targets = psms.targets[my_shuffled_idx]
             # Find best feature
-            best_feat,_,_,_= psms._find_best_feature(self.train_fdr)
+            best_feat, _, _, _ = psms._find_best_feature(self.train_fdr)
             scores = psms.features.loc[:, best_feat]
             qvals = qvalues.tdc(scores, psms.targets)
             # Find hyperparameters based on best feature's q-values
-            model = _find_hyperparameters(self, shuffled_norm_feat, shuffled_targets*2-1, qvals)
+            model = _find_hyperparameters(
+                self, shuffled_norm_feat, shuffled_targets * 2 - 1, qvals
+            )
             # Fit the model
-            model.fit(norm_feat, psms.targets, sample_weight=(1-qvals))
+            model.fit(norm_feat, psms.targets, sample_weight=(1 - qvals))
             self.estimator = model
             self.is_trained = True
 
@@ -657,7 +659,7 @@ def _find_hyperparameters(model, features, labels, qvals=None):
         if qvals is None:
             model.estimator.fit(cv_samples, cv_targ)
         else:
-            fit_params = {"sample_weight": (1-qvals)}
+            fit_params = {"sample_weight": (1 - qvals)}
             model.estimator.fit(cv_samples, cv_targ, **fit_params)
 
         # Extract the best params.
@@ -671,6 +673,7 @@ def _find_hyperparameters(model, features, labels, qvals=None):
         new_est = model.estimator
 
     return new_est
+
 
 def _get_weights(model, features):
     """
