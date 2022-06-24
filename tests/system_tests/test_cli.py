@@ -192,7 +192,7 @@ def test_cli_saved_models(tmp_path, phospho_files, models_path):
         tmp_path,
         "--test_fdr",
         "0.01",
-        "--saved_models",
+        "--load_models",
         models_path[0],
         models_path[1],
         models_path[2],

@@ -82,8 +82,8 @@ def main():
                 dataset.add_proteins(proteins)
 
     # Define a model:
-    if config.saved_models:
-        model = [load_model(model_file) for model_file in config.saved_models]
+    if config.load_models:
+        model = [load_model(model_file) for model_file in config.load_models]
     else:
         model = PercolatorModel(
             train_fdr=config.train_fdr,

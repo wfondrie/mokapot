@@ -1,6 +1,10 @@
 # Changelog for mokapot  
 
-## [Unreleased]
+## [0.8.1] - 2022-06-24
+
+### Added
+- Support for previously trained models in the `brew()` function and the CLI 
+  using the `--load_models` argument. Thanks @sambenfredj!
 
 ### Fixed
 - Using `clip_nterm_methionine=True` could result in peptides of length

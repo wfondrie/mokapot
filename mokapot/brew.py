@@ -26,6 +26,13 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     are aggregated for model training, but the confidence estimates are
     calculated separately for each collection.
 
+    A list of previously trained models can be provided to the ``model``
+    argument to rescore the PSMs in each fold. Note that the number of
+    models must match ``folds``. Furthermore, it is valid to use the
+    learned models on the same dataset from which they were trained,
+    but they must be provided in the same order, such that the
+    relationship of the cross-validation folds is maintained.
+
     Parameters
     ----------
     psms : PsmDataset object or list of PsmDataset objects
@@ -33,10 +40,13 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         PSMs are aggregated across all of the collections for model
         training, but the confidence estimates are calculated and
         returned separately.
-    model: Model object, optional
+    model: Model object or list of Model objects, optional
         The :py:class:`mokapot.Model` object to be fit. The default is
         :code:`None`, which attempts to mimic the same support vector
-        machine models used by Percolator.
+        machine models used by Percolator. If a list of
+        :py:class:`mokapot.Model` objects is provided, they are assumed
+        to be previously trained models and will and one will be
+        used to rescore each fold in the order they are provided.
     test_fdr : float, optional
         The false-discovery rate threshold at which to evaluate
         the learned models.
@@ -86,20 +96,23 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         # train_sets can't be a generator for joblib :(
         train_sets = list(train_sets)
 
+    # If trained models are provided, use the them as-is.
     try:
         models = [[m, False] for m in model if m.is_trained]
         assert len(models) == len(model)  # Test that all models are fitted.
-        assert (
-            len(model) == folds
-        )  # Test that number of models matches the number of folds.
-    except AssertionError as err:
+        assert len(model) == folds
+    except AssertionError as orig_err:
         if len(model) != folds:
-            raise ValueError(
-                f"The number of trained models ({len(model)}) must match the number of folds ({folds})"
-            ) from err
-        raise RuntimeError(
-            "One or more of the provided models was not previously trained"
-        ) from err
+            err = ValueError(
+                f"The number of trained models ({len(model)}) "
+                f"must match the number of folds ({folds})."
+            )
+        else:
+            err = RuntimeError(
+                "One or more of the provided models was not previously trained"
+            )
+
+        raise err from orig_err
     except TypeError:
         models = Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(_fit_model)(d, copy.deepcopy(model), f)
