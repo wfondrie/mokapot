@@ -70,7 +70,7 @@ def test_brew_using_few_models_error(psms, svm):
     with pytest.raises(ValueError) as err:
         mokapot.brew(psms, [svm, svm], test_fdr=0.05)
     assert (
-        "The number of trained models (2) must match the number of folds (3)"
+        "The number of trained models (2) must match the number of folds (3)."
         in str(err)
     )
 
