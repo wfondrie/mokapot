@@ -17,6 +17,8 @@ import copy
 import logging
 import pickle
 import warnings
+import math
+from . import qvalues
 
 import numpy as np
 import pandas as pd
@@ -125,6 +127,7 @@ class Model:
         override=False,
         subset_max_train=None,
         shuffle=True,
+        supervised_step=False,
     ):
         """Initialize a Model object"""
         self.estimator = clone(estimator)
@@ -144,6 +147,7 @@ class Model:
         self.direction = direction
         self.override = override
         self.shuffle = shuffle
+        self.supervised_step = supervised_step
 
         # Sort out whether we need to optimize hyperparameters:
         if hasattr(self.estimator, "estimator"):
@@ -276,18 +280,31 @@ class Model:
                 psms = copy.copy(psms)
                 psms._data = psms._data.iloc[subset_idx, :]
 
-        # PUT SUPERVISED LEARNING STEP HERE
+        # Normalize Features
         norm_feat = self.scaler.fit_transform(psms.features.values)
-        self.estimator.fit(norm_feat, psms.targets)
-        self.is_trained = True
+        self.features = psms.features.columns.tolist()
 
+        # Supervised step
+        if self.supervised_step:
+            # Shuffle input order
+            size = psms.__len__()
+            my_shuffled_idx = np.random.permutation(np.arange(size))
+            my_original_idx = np.argsort(my_shuffled_idx)
+            shuffled_norm_feat = norm_feat[my_shuffled_idx, :]
+            shuffled_targets = psms.targets[my_shuffled_idx]
+            # Find best feature
+            best_feat,_,_,_= psms._find_best_feature(self.train_fdr)
+            scores = psms.features.loc[:, best_feat]
+            qvals = qvalues.tdc(scores, psms.targets)
+            # Find hyperparameters based on best feature's q-values
+            model = _find_hyperparameters(self, shuffled_norm_feat, shuffled_targets*2-1, qvals)
+            # Fit the model
+            model.fit(norm_feat, psms.targets, sample_weight=(1-qvals))
+            self.estimator = model
+            self.is_trained = True
 
         # Choose the initial direction
         start_labels, feat_pass = _get_starting_labels(psms, self)
-
-        # Normalize Features
-        self.features = psms.features.columns.tolist()
-        norm_feat = self.scaler.fit_transform(psms.features.values)
 
         # Shuffle order
         shuffled_idx = np.random.permutation(np.arange(len(start_labels)))
@@ -296,8 +313,8 @@ class Model:
             norm_feat = norm_feat[shuffled_idx, :]
             start_labels = start_labels[shuffled_idx]
 
-        # Prepare the model:
-        model = _find_hyperparameters(self, norm_feat, start_labels)
+        if not self.supervised_step:
+            model = _find_hyperparameters(self, norm_feat, start_labels)
 
         # Begin training loop
         target = start_labels
@@ -427,6 +444,7 @@ class PercolatorModel(Model):
         override=False,
         subset_max_train=None,
         n_jobs=-1,
+        supervised_step=False,
     ):
         """Initialize a PercolatorModel"""
         self.n_jobs = n_jobs
@@ -434,7 +452,7 @@ class PercolatorModel(Model):
         estimator = GridSearchCV(
             svm_model,
             param_grid=PERC_GRID,
-            refit=False,
+            refit=True,
             cv=3,
             n_jobs=n_jobs,
         )
@@ -447,6 +465,7 @@ class PercolatorModel(Model):
             direction=direction,
             override=override,
             subset_max_train=subset_max_train,
+            supervised_step=supervised_step,
         )
 
 
@@ -570,14 +589,15 @@ def _get_starting_labels(psms, model):
 
     elif model.is_trained:
         try:
-            scores = model.estimator.decision_function(psms.features)
+            scores = model.decision_function(psms)
         except AttributeError:
             scores = model.estimator.predict_proba(psms.features).flatten()
 
         start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
+        feat_pass = (start_labels == 1).sum()
         LOGGER.info(
             "\t- The pretrained model found %i PSMs at q<=%g.",
-            (start_labels == 1).sum(),
+            feat_pass,
             model.train_fdr,
         )
 
@@ -611,7 +631,7 @@ def _get_starting_labels(psms, model):
     return start_labels, feat_pass
 
 
-def _find_hyperparameters(model, features, labels):
+def _find_hyperparameters(model, features, labels, qvals=None):
     """
     Find the hyperparameters for the model.
 
@@ -634,7 +654,11 @@ def _find_hyperparameters(model, features, labels):
         cv_targ = (labels[labels.astype(bool)] + 1) / 2
 
         # Fit the model
-        model.estimator.fit(cv_samples, cv_targ)
+        if qvals is None:
+            model.estimator.fit(cv_samples, cv_targ)
+        else:
+            fit_params = {"sample_weight": (1-qvals)}
+            model.estimator.fit(cv_samples, cv_targ, **fit_params)
 
         # Extract the best params.
         best_params = model.estimator.best_params_
@@ -647,7 +671,6 @@ def _find_hyperparameters(model, features, labels):
         new_est = model.estimator
 
     return new_est
-
 
 def _get_weights(model, features):
     """

@@ -14,7 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
-def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
+def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, supervised_step=False):
     """
     Re-score one or more collection of PSMs.
 
@@ -63,7 +63,10 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         for each fold.
     """
     if model is None:
-        model = PercolatorModel()
+        if not supervised_step:
+            model = PercolatorModel()
+        else:
+            model = PercolatorModel(supervised_step=True)
 
     try:
         iter(psms)
