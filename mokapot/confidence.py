@@ -175,8 +175,8 @@ class GroupedConfidence:
         """Make groups accessible easily"""
         try:
             return self.group_confidence_estimates[attr]
-        except KeyError:
-            raise AttributeError
+        except KeyError as err:
+            raise AttributeError from err
 
     def __len__(self):
         """Report the number of groups"""
@@ -217,8 +217,8 @@ class Confidence:
     def __getattr__(self, attr):
         try:
             return self.confidence_estimates[attr]
-        except KeyError:
-            raise AttributeError
+        except KeyError as err:
+            raise AttributeError from err
 
     @property
     def levels(self):
