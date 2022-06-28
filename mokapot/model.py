@@ -88,6 +88,8 @@ class Model:
     shuffle : bool, optional
         Should the order of PSMs be randomized for training? For deterministic
         algorithms, this will have no effect.
+    supervised_init : bool, optional
+        Should the pre-training of the model include the fully supervised step?
 
     Attributes
     ----------
@@ -127,7 +129,7 @@ class Model:
         override=False,
         subset_max_train=None,
         shuffle=True,
-        supervised_step=False,
+        supervised_init=False,
     ):
         """Initialize a Model object"""
         self.estimator = clone(estimator)
@@ -147,7 +149,7 @@ class Model:
         self.direction = direction
         self.override = override
         self.shuffle = shuffle
-        self.supervised_step = supervised_step
+        self.supervised_init = supervised_init
 
         # Sort out whether we need to optimize hyperparameters:
         if hasattr(self.estimator, "estimator"):
@@ -285,20 +287,13 @@ class Model:
         self.features = psms.features.columns.tolist()
 
         # Supervised step
-        if self.supervised_step:
-            # Shuffle input order
-            size = psms.__len__()
-            my_shuffled_idx = np.random.permutation(np.arange(size))
-            my_original_idx = np.argsort(my_shuffled_idx)
-            shuffled_norm_feat = norm_feat[my_shuffled_idx, :]
-            shuffled_targets = psms.targets[my_shuffled_idx]
-            # Find best feature
+        if self.supervised_init:
             best_feat, _, _, _ = psms._find_best_feature(self.train_fdr)
             scores = psms.features.loc[:, best_feat]
             qvals = qvalues.tdc(scores, psms.targets)
             # Find hyperparameters based on best feature's q-values
             model = _find_hyperparameters(
-                self, shuffled_norm_feat, shuffled_targets * 2 - 1, qvals
+                self, norm_feat, psms.targets * 2 - 1, qvals
             )
             # Fit the model
             model.fit(norm_feat, psms.targets, sample_weight=(1 - qvals))
@@ -315,8 +310,7 @@ class Model:
             norm_feat = norm_feat[shuffled_idx, :]
             start_labels = start_labels[shuffled_idx]
 
-        if not self.supervised_step:
-            model = _find_hyperparameters(self, norm_feat, start_labels)
+        model = _find_hyperparameters(self, norm_feat, start_labels)
 
         # Begin training loop
         target = start_labels
@@ -446,7 +440,6 @@ class PercolatorModel(Model):
         override=False,
         subset_max_train=None,
         n_jobs=-1,
-        supervised_step=False,
     ):
         """Initialize a PercolatorModel"""
         self.n_jobs = n_jobs
@@ -454,7 +447,7 @@ class PercolatorModel(Model):
         estimator = GridSearchCV(
             svm_model,
             param_grid=PERC_GRID,
-            refit=True,
+            refit=False,
             cv=3,
             n_jobs=n_jobs,
         )
@@ -467,7 +460,6 @@ class PercolatorModel(Model):
             direction=direction,
             override=override,
             subset_max_train=subset_max_train,
-            supervised_step=supervised_step,
         )
 
 
@@ -595,13 +587,28 @@ def _get_starting_labels(psms, model):
         except AttributeError:
             scores = model.estimator.predict_proba(psms.features).flatten()
 
+        # Get starting_labels and feat_pass from pre-trained model
         start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
         feat_pass = (start_labels == 1).sum()
-        LOGGER.info(
-            "\t- The pretrained model found %i PSMs at q<=%g.",
-            feat_pass,
-            model.train_fdr,
-        )
+
+        # Get starting_labels and feat_pass from best feature
+        feat_res = psms._find_best_feature(model.train_fdr)
+        _, feat_pass_best_feat, start_labels_best_feat, _ = feat_res
+
+        if feat_pass > feat_pass_best_feat:
+            LOGGER.info(
+                "\t- The pretrained model found %i PSMs at q<=%g.",
+                feat_pass,
+                model.train_fdr,
+            )
+        else:
+            logging.warning(
+                "Learned model did not improve upon the pretrained "
+                "input model. Now re-scoring each collection of PSMs "
+                "using the best feature."
+            )
+            start_labels = start_labels_best_feat
+            feat_pass = feat_pass_best_feat
 
     else:
         feat = psms.features[model.direction].values
@@ -645,6 +652,8 @@ def _find_hyperparameters(model, features, labels, qvals=None):
         The features to fit the model with.
     labels : array-like
         The labels for each PSM (1, 0, or -1).
+    qvals: array-like, optional
+        The q-values derived from the best feature
 
     Returns
     -------
@@ -656,11 +665,8 @@ def _find_hyperparameters(model, features, labels, qvals=None):
         cv_targ = (labels[labels.astype(bool)] + 1) / 2
 
         # Fit the model
-        if qvals is None:
-            model.estimator.fit(cv_samples, cv_targ)
-        else:
-            fit_params = {"sample_weight": (1 - qvals)}
-            model.estimator.fit(cv_samples, cv_targ, **fit_params)
+        weights = None if qvals is None else (1 - qvals)
+        model.estimator.fit(cv_samples, cv_targ, sample_weight=weights)
 
         # Extract the best params.
         best_params = model.estimator.best_params_
