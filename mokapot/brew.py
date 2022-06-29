@@ -33,7 +33,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         PSMs are aggregated across all of the collections for model
         training, but the confidence estimates are calculated and
         returned separately.
-    model: Model object, optional
+    model : Model object, optional
         The :py:class:`mokapot.Model` object to be fit. The default is
         :code:`None`, which attempts to mimic the same support vector
         machine models used by Percolator.
@@ -198,6 +198,11 @@ def _predict(dset, test_idx, models, test_fdr):
         The models for each dataset and whether it
         was reset or not.
     test_fdr : the fdr to calibrate at.
+
+    Returns
+    -------
+    numpy.ndarray
+        A :py:class:`numpy.ndarray` containing the new scores.
     """
     test_set = copy.copy(dset)
     scores = []
