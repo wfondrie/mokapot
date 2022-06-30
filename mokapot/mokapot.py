@@ -16,7 +16,7 @@ from .parsers.pin import read_pin
 from .parsers.pepxml import read_pepxml
 from .parsers.fasta import read_fasta
 from .brew import brew
-from .model import PercolatorModel
+from .model import PercolatorModel, load_model
 
 
 def main():
@@ -82,13 +82,16 @@ def main():
                 dataset.add_proteins(proteins)
 
     # Define a model:
-    model = PercolatorModel(
-        train_fdr=config.train_fdr,
-        max_iter=config.max_iter,
-        direction=config.direction,
-        override=config.override,
-        subset_max_train=config.subset_max_train,
-    )
+    if config.load_models:
+        model = [load_model(model_file) for model_file in config.load_models]
+    else:
+        model = PercolatorModel(
+            train_fdr=config.train_fdr,
+            max_iter=config.max_iter,
+            direction=config.direction,
+            override=config.override,
+            subset_max_train=config.subset_max_train,
+        )
 
     # Fit the models:
     psms, models = brew(

@@ -253,6 +253,21 @@ def _parser():
     )
 
     parser.add_argument(
+        "--load_models",
+        type=str,
+        nargs="+",
+        help=(
+            "Load previously saved models and skip model training."
+            "Note that the number of models must match the value of --folds."
+            "If the models are being applied to the same dataset that they "
+            "were trained on originally, the models must be provided in the "
+            "same order as the folds to maintain cross-vaildation fold "
+            "relationships. Failure to do so will result in invalid FDR "
+            "estimates."
+        ),
+    )
+
+    parser.add_argument(
         "--keep_decoys",
         default=False,
         action="store_true",
