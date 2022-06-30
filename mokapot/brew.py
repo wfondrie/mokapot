@@ -230,6 +230,11 @@ def _predict(dset, test_idx, models, test_fdr):
         The models for each dataset and whether it
         was reset or not.
     test_fdr : the fdr to calibrate at.
+
+    Returns
+    -------
+    numpy.ndarray
+        A :py:class:`numpy.ndarray` containing the new scores.
     """
     test_set = copy.copy(dset)
     scores = []
