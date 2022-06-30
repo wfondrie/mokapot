@@ -14,13 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
-def brew(
-    psms,
-    model=None,
-    test_fdr=0.01,
-    folds=3,
-    max_workers=1,
-):
+def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     """
     Re-score one or more collection of PSMs.
 

@@ -17,7 +17,6 @@ import copy
 import logging
 import pickle
 import warnings
-import math
 from . import qvalues
 
 import numpy as np
