@@ -337,7 +337,7 @@ def _log_features(col, features):
 
     # Detect columns written in scientific notation and log them:
     # This is specifically needed to preserve precision.
-    if col.str.contains("e").any() and (col.astype(float) >= 0).all():
+    if col.str.contains("e").any() and (col.astype(float) > 0).all():
         split = col.str.split("e", expand=True)
         root = split.loc[:, 0]
         root = root.astype(float)
