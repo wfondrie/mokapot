@@ -370,6 +370,5 @@ def _log_features(col, features):
                 col[~zero_idx] = np.log10(col[~zero_idx])
                 col[zero_idx] = col[~zero_idx].min() - 1
                 LOGGER.info("  - log-transformed the '%s' feature.", col.name)
-                return np.log10(col)
 
     return col
