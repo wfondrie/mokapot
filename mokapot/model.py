@@ -114,6 +114,8 @@ class Model:
         The number of PSMs for training.
     shuffle : bool
         Is the order of PSMs shuffled for training?
+    fold : int or None
+        The CV fold on which this model was fit, if any.
     """
 
     def __init__(
@@ -145,6 +147,11 @@ class Model:
         self.direction = direction
         self.override = override
         self.shuffle = shuffle
+
+        # To keep track of the fold that this was trained on.
+        # Needed to ensure reproducibility in brew() with
+        # multiprocessing.
+        self.fold = None
 
         # Sort out whether we need to optimize hyperparameters:
         if hasattr(self.estimator, "estimator"):

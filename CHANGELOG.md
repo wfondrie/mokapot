@@ -1,5 +1,14 @@
 # Changelog for mokapot  
 
+## Unreleased
+### Added
+- `mokapot.Model()` objects now recored the CV fold that they were fit on.
+  This means that they can be provided to `mokapot.brew()` in any order 
+  and still maintain proper cross-validation bins.
+
+### Fixed
+- Resolved issue where models were required to have an intercept term.
+
 ## [0.8.1] - 2022-06-24
 
 ### Added
