@@ -119,7 +119,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
             for f, d in enumerate(train_sets)
         )
 
-    # sort models to have deterministic results with multithreading.
+    # Sort models to have deterministic results with multithreading.
     fitted.sort(key=lambda x: x[0].fold)
     models, resets = list(zip(*fitted))
 
