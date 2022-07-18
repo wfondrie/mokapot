@@ -1,6 +1,6 @@
 # Changelog for mokapot  
 
-## Unreleased
+## [0.8.2] - 2022-07-18
 ### Added
 - `mokapot.Model()` objects now recored the CV fold that they were fit on.
   This means that they can be provided to `mokapot.brew()` in any order 
@@ -8,6 +8,7 @@
 
 ### Fixed
 - Resolved issue where models were required to have an intercept term.
+- The PepXML parser would sometimes try and log transform features with `0`'s, resulting in missing values.
 
 ## [0.8.1] - 2022-06-24
 
