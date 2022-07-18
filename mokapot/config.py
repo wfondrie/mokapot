@@ -17,7 +17,7 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
 
 class Config:
     """
-    The xenith configuration options.
+    The mokapot configuration options.
 
     Options can be specified as command-line arguments.
     """
@@ -259,11 +259,6 @@ def _parser():
         help=(
             "Load previously saved models and skip model training."
             "Note that the number of models must match the value of --folds."
-            "If the models are being applied to the same dataset that they "
-            "were trained on originally, the models must be provided in the "
-            "same order as the folds to maintain cross-vaildation fold "
-            "relationships. Failure to do so will result in invalid FDR "
-            "estimates."
         ),
     )
 

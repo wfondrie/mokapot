@@ -2,7 +2,8 @@
 import pytest
 import numpy as np
 import mokapot
-from mokapot import PercolatorModel
+from mokapot import PercolatorModel, Model
+from sklearn.ensemble import RandomForestClassifier
 
 np.random.seed(42)
 
@@ -19,6 +20,18 @@ def test_brew_simple(psms, svm):
     assert isinstance(results, mokapot.confidence.LinearConfidence)
     assert len(models) == 3
     assert isinstance(models[0], PercolatorModel)
+
+
+def test_brew_random_forest(psms):
+    """Verify there are no dependencies on the SVM."""
+    rfm = Model(
+        RandomForestClassifier(),
+        train_fdr=0.1,
+    )
+    results, models = mokapot.brew(psms, model=rfm, test_fdr=0.1)
+    assert isinstance(results, mokapot.confidence.LinearConfidence)
+    assert len(models) == 3
+    assert isinstance(models[0], Model)
 
 
 def test_brew_joint(psms, svm):
@@ -58,8 +71,10 @@ def test_brew_trained_models(psms, svm):
         psms, svm, test_fdr=0.05
     )
     np.random.seed(3)
+    models = list(models_with_training)
+    models.reverse()  # Change the model order
     results_without_training, models_without_training = mokapot.brew(
-        psms, models_with_training, test_fdr=0.05
+        psms, models, test_fdr=0.05
     )
     assert models_with_training == models_without_training
     assert results_with_training.accepted == results_without_training.accepted

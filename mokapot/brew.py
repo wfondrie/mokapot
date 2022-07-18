@@ -46,7 +46,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         machine models used by Percolator. If a list of
         :py:class:`mokapot.Model` objects is provided, they are assumed
         to be previously trained models and will and one will be
-        used to rescore each fold in the order they are provided.
+        used to rescore each fold.
     test_fdr : float, optional
         The false-discovery rate threshold at which to evaluate
         the learned models.
@@ -98,8 +98,8 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
 
     # If trained models are provided, use the them as-is.
     try:
-        models = [[m, False] for m in model if m.is_trained]
-        assert len(models) == len(model)  # Test that all models are fitted.
+        fitted = [[m, False] for m in model if m.is_trained]
+        assert len(fitted) == len(model)  # Test that all models are fitted.
         assert len(model) == folds
     except AssertionError as orig_err:
         if len(model) != folds:
@@ -114,35 +114,37 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
 
         raise err from orig_err
     except TypeError:
-        models = Parallel(n_jobs=max_workers, require="sharedmem")(
+        fitted = Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(_fit_model)(d, copy.deepcopy(model), f)
             for f, d in enumerate(train_sets)
         )
 
-    # sort models to have deterministic results with multithreading.
-    # Only way I found to sort is using intercept values
-    models.sort(key=lambda x: x[0].estimator.intercept_)
+    # Sort models to have deterministic results with multithreading.
+    fitted.sort(key=lambda x: x[0].fold)
+    models, resets = list(zip(*fitted))
 
     # Determine if the models need to be reset:
-    reset = any([m[1] for m in models])
+    reset = any(resets)
+
+    # If we reset, just use the original model on all the folds:
     if reset:
-        # If we reset, just use the original model on all the folds:
         scores = [
             p._calibrate_scores(model.predict(p), test_fdr) for p in psms
         ]
-    elif all([m[0].is_trained for m in models]):
-        # If we don't reset, assign scores to each fold:
-        models = [m for m, _ in models]
+
+    # If we don't reset, assign scores to each fold:
+    elif all([m.is_trained for m in models]):
         scores = [
             _predict(p, i, models, test_fdr) for p, i in zip(psms, test_idx)
         ]
+
+    # If model training has failed
     else:
-        # If model training has failed
         scores = [np.zeros(len(p.data)) for p in psms]
 
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
-    if not all([m.override for m in models]) or not model.override:
+    if not all([m.override for m in models]):
         best_feats = [p._find_best_feature(test_fdr) for p in psms]
         feat_total = sum([best_feat[1] for best_feat in best_feats])
     else:
@@ -280,6 +282,7 @@ def _fit_model(train_set, model, fold):
     """
     LOGGER.info("")
     LOGGER.info("=== Analyzing Fold %i ===", fold + 1)
+    model.fold = fold + 1
     reset = False
     try:
         model.fit(train_set)
