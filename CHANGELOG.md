@@ -1,5 +1,9 @@
 # Changelog for mokapot  
 
+## Unreleased
+### Fixed
+- The PepXML parser would sometimes try and log transform features with `0`'s, resulting in missing values.
+
 ## [0.8.1] - 2022-06-24
 
 ### Added
