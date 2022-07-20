@@ -63,9 +63,10 @@ class GroupedConfidence:
         group_psms = copy.copy(psms)
         self.group_column = group_psms._group_column
         group_psms._group_column = None
-        scores = scores * (desc * 2 - 1)
 
-        # Do TDC
+        # Do TDC to eliminate multiples PSMs for a spectrum that may occur
+        # in different groups.
+        keep = "last" if desc else "first"
         scores = (
             pd.Series(scores, index=psms._data.index)
             .sample(frac=1)
@@ -74,7 +75,7 @@ class GroupedConfidence:
 
         idx = (
             psms.data.loc[scores.index, :]
-            .drop_duplicates(psms._spectrum_columns, keep="last")
+            .drop_duplicates(psms._spectrum_columns, keep=keep)
             .index
         )
 
@@ -84,9 +85,9 @@ class GroupedConfidence:
             group_psms._data = None
             tdc_winners = group_df.index.intersection(idx)
             group_psms._data = group_df.loc[tdc_winners, :]
-            group_scores = scores.loc[group_psms._data.index].values + 1
+            group_scores = scores.loc[group_psms._data.index].values
             res = group_psms.assign_confidence(
-                group_scores * (2 * desc - 1), desc=desc, eval_fdr=eval_fdr
+                group_scores, desc=desc, eval_fdr=eval_fdr
             )
             self._group_confidence_estimates[group] = res
 
