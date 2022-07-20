@@ -1,5 +1,9 @@
 # Changelog for mokapot  
 
+## [0.8.3] - 2022-07-20
+### Fixed
+- Fixed the reported mokapot score when group FDR is used.
+
 ## [0.8.2] - 2022-07-18
 ### Added
 - `mokapot.Model()` objects now recored the CV fold that they were fit on.
