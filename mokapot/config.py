@@ -263,6 +263,15 @@ def _parser():
     )
 
     parser.add_argument(
+        "--plugin_model",
+        type=str,
+        default=None,
+        help=(
+            "The name of a custom model imported via the plugin architecture."
+        ),
+    )
+
+    parser.add_argument(
         "--keep_decoys",
         default=False,
         action="store_true",

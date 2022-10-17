@@ -17,6 +17,7 @@ from .parsers.pepxml import read_pepxml
 from .parsers.fasta import read_fasta
 from .brew import brew
 from .model import PercolatorModel, load_model
+from .plugins import load_plugin
 
 
 def main():
@@ -84,6 +85,15 @@ def main():
     # Define a model:
     if config.load_models:
         model = [load_model(model_file) for model_file in config.load_models]
+    elif config.plugin_model:
+        model_builder = load_plugin(config.plugin_model).PluginModel
+        model = model_builder(
+            train_fdr=config.train_fdr,
+            max_iter=config.max_iter,
+            direction=config.direction,
+            override=config.override,
+            subset_max_train=config.subset_max_train,
+        )
     else:
         model = PercolatorModel(
             train_fdr=config.train_fdr,
