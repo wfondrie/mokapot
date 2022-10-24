@@ -4,10 +4,11 @@ These tests verify that the CLI works as expected.
 At least for now, they do not check the correctness of the
 output, just that the expect outputs are created.
 """
-from pathlib import Path
 import subprocess
-import pytest
+from pathlib import Path
+
 import pandas as pd
+import pytest
 
 # Warnings are errors for these tests
 pytestmark = pytest.mark.filterwarnings("error")
@@ -212,7 +213,7 @@ def test_cli_plugins(tmp_path, phospho_files):
     res = subprocess.run(cmd, check=True, capture_output=True)
     assert "Yelling at the user" not in res.stdout.decode()
 
-    cmd += [ "--plugin", "mokapot_ctree", "--yell"]
+    cmd += ["--plugin", "mokapot_ctree", "--yell"]
     res = subprocess.run(cmd, check=True, capture_output=True)
     breakpoint()
     assert "Yelling at the user" in res.stdout.decode()

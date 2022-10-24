@@ -4,6 +4,7 @@ from the command line.
 """
 import argparse
 import textwrap
+
 from mokapot import __version__
 
 
@@ -32,7 +33,7 @@ class Config:
 
     def __getattr__(self, option):
         return self._namespace[option]
-    
+
     @staticmethod
     def _parser():
         """The parser"""
@@ -252,7 +253,9 @@ class Config:
             "--save_models",
             default=False,
             action="store_true",
-            help=("Save the models learned by mokapot as pickled Python objects."),
+            help=(
+                "Save the models learned by mokapot as pickled Python objects."
+            ),
         )
 
         parser.add_argument(
@@ -268,10 +271,8 @@ class Config:
         parser.add_argument(
             "--plugin",
             type=str,
-            action='append',
-            help=(
-                "The names of the plugins to use."
-            ),
+            action="append",
+            help=("The names of the plugins to use."),
         )
 
         parser.add_argument(

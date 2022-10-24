@@ -1,22 +1,22 @@
 """
 This is the command line interface for mokapot
 """
+import datetime
+import logging
 import sys
 import time
-import logging
-import datetime
 from functools import partial
 from pathlib import Path
 
 import numpy as np
 
 from . import __version__
-from .config import Config
-from .parsers.pin import read_pin
-from .parsers.pepxml import read_pepxml
-from .parsers.fasta import read_fasta
 from .brew import brew
+from .config import Config
 from .model import PercolatorModel, load_model
+from .parsers.fasta import read_fasta
+from .parsers.pepxml import read_pepxml
+from .parsers.pin import read_pin
 from .plugins import get_plugins
 
 
@@ -63,7 +63,7 @@ def main():
 
     # Parse Datasets
     parse = get_parser(config)
-    enabled_plugins = { p:plugins[p]() for p in config.plugin }
+    enabled_plugins = {p: plugins[p]() for p in config.plugin}
 
     if config.aggregate or len(config.psm_files) == 1:
         datasets = parse(config.psm_files)
@@ -118,7 +118,7 @@ def main():
                 msg += f" Using the first one. ({first_mod_name})"
                 logging.warning(msg)
             model = list(plugin_models.values())[0]
-    
+
     if model is None:
         model = PercolatorModel(
             train_fdr=config.train_fdr,
