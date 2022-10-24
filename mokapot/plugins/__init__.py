@@ -9,7 +9,9 @@ else:
     from importlib_metadata import entry_points
 
 from typing import Any
-import importlib
+from mokapot.config import Config
+from mokapot.model import Model
+from argparse import _ArgumentGroup
 
 def get_plugins() -> dict[str, Any]:
     """Return a dict of all installed Plugins as {name: EntryPoint}."""
@@ -27,3 +29,12 @@ def get_plugins() -> dict[str, Any]:
     return pluginmap
 
 
+class BasePlugin():
+    def add_arguments(parser: _ArgumentGroup) -> None:
+        pass
+
+    def process_data(self, data, config: Config) -> Model:
+        return data
+
+    def get_model(self, config: Config) -> Model:
+        pass

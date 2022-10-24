@@ -23,9 +23,15 @@ from .plugins import get_plugins
 def main():
     """The CLI entry point"""
     start = time.time()
+    plugins = get_plugins()
 
     # Get command line arguments
-    config = Config()
+    parser = Config._parser()
+    for plugin_name, plugin in plugins.items():
+        parsergroup = parser.add_argument_group(plugin_name)
+        plugin.add_arguments(parsergroup)
+
+    config = Config(parser)
 
     # Setup logging
     verbosity_dict = {
@@ -51,15 +57,22 @@ def main():
     logging.info("")
     logging.info("Starting Analysis")
     logging.info("=================")
+    logging.debug(f"Loaded plugins: {plugins.keys()}")
 
     np.random.seed(config.seed)
 
     # Parse Datasets
     parse = get_parser(config)
+    enabled_plugins = { p:plugins[p]() for p in config.plugin }
+
     if config.aggregate or len(config.psm_files) == 1:
         datasets = parse(config.psm_files)
+        for plugin in enabled_plugins.values():
+            datasets = plugin.process_data(datasets, config)
     else:
         datasets = [parse(f) for f in config.psm_files]
+        for plugin in enabled_plugins.values():
+            datasets = [plugin.process_data(ds, config) for ds in datasets]
         prefixes = [Path(f).stem for f in config.psm_files]
 
     # Parse FASTA, if required:
@@ -83,18 +96,30 @@ def main():
                 dataset.add_proteins(proteins)
 
     # Define a model:
+    model = None
     if config.load_models:
         model = [load_model(model_file) for model_file in config.load_models]
-    elif config.plugin_model:
-        model_builder = get_plugins()[config.plugin_model]
-        model = model_builder(
-            train_fdr=config.train_fdr,
-            max_iter=config.max_iter,
-            direction=config.direction,
-            override=config.override,
-            subset_max_train=config.subset_max_train,
-        )
-    else:
+    elif enabled_plugins:
+        plugin_models = {}
+        for plugin_name, plugin in enabled_plugins.items():
+            model = plugin.get_model(config)
+            if model is not None:
+                logging.debug(f"Loaded model for {plugin_name}")
+                plugin_models[plugin_name] = model
+
+        if len(plugin_models) == 0:
+            msg = "No models were defined by plugins. Using default model."
+            logging.debug(msg)
+            model = None
+        else:
+            first_mod_name = list(plugin_models.keys())[0]
+            if len(plugin_models) > 1:
+                msg = "More than one model was defined by plugins."
+                msg += f" Using the first one. ({first_mod_name})"
+                logging.warning(msg)
+            model = list(plugin_models.values())[0]
+    
+    if model is None:
         model = PercolatorModel(
             train_fdr=config.train_fdr,
             max_iter=config.max_iter,

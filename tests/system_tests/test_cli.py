@@ -194,3 +194,25 @@ def test_cli_saved_models(tmp_path, phospho_files):
     subprocess.run(cmd, check=True)
     assert Path(tmp_path, "mokapot.psms.txt").exists()
     assert Path(tmp_path, "mokapot.peptides.txt").exists()
+
+
+def test_cli_plugins(tmp_path, phospho_files):
+    cmd = [
+        "mokapot",
+        phospho_files[0],
+        "--dest_dir",
+        tmp_path,
+        "--test_fdr",
+        "0.01",
+    ]
+
+    res = subprocess.run(cmd + ["--help"], check=True, capture_output=True)
+    assert "--yell" in res.stdout.decode()
+
+    res = subprocess.run(cmd, check=True, capture_output=True)
+    assert "Yelling at the user" not in res.stdout.decode()
+
+    cmd += [ "--plugin", "mokapot_ctree", "--yell"]
+    res = subprocess.run(cmd, check=True, capture_output=True)
+    breakpoint()
+    assert "Yelling at the user" in res.stdout.decode()

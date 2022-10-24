@@ -11,7 +11,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.plugins."mokapot.plugins"]
-"mokapot_ctree" = "mokapot_ctree:PluginModel"
+"mokapot_ctree" = "mokapot_ctree:Plugin"
 # Equivalent to:
 # entry_points={
 #     'mkdocs.plugins': [
