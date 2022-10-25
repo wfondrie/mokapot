@@ -1,8 +1,11 @@
 # Changelog for mokapot  
 
-## [Unreleased]
+## [0.8.4] - 2022-10-25
 ### Fixed
 - Confidence objects are now picklable.
+
+### Added
+- Added a custom Docker image with optional dependencies.
 
 ### Changes
 - Updated GitHub Actions.
