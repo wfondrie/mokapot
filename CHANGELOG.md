@@ -4,6 +4,9 @@
 ### Fixed
 - Confidence objects are now picklable.
 
+### Changes
+- Updated GitHub Actions
+
 ## [0.8.3] - 2022-07-20
 ### Fixed
 - Fixed the reported mokapot score when group FDR is used.
