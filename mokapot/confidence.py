@@ -184,7 +184,7 @@ class GroupedConfidence:
         return len(self.group_confidence_estimates)
 
 
-class Confidence:
+class Confidence(object):
     """Estimate and store the statistical confidence for a collection of PSMs.
 
     :meta private:
@@ -216,6 +216,9 @@ class Confidence:
         self.decoy_confidence_estimates = {}
 
     def __getattr__(self, attr):
+        if attr.startswith("__"):
+            return super().__getattr__(attr)
+
         try:
             return self.confidence_estimates[attr]
         except KeyError:
