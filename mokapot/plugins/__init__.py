@@ -38,7 +38,7 @@ def get_plugins() -> dict[str, Any]:
 class BasePlugin:
     def add_arguments(parser: _ArgumentGroup) -> None:
         """Add arguments to the parser for this plugin.
-        
+
         Parameters
         ----------
 
@@ -49,13 +49,15 @@ class BasePlugin:
         """
         pass
 
-    def process_data(self, data: LinearPsmDataset | pd.DataFrame , config: Config) -> Model:
+    def process_data(
+        self, data: LinearPsmDataset | pd.DataFrame, config: Config
+    ) -> Model:
         """Process the data before using it to train a model."""
         return data
 
     def get_model(self, config: Config) -> Model:
         """Return a model to be trained.
-        
+
         The model returned should be an instance of mokapot.model.Model.
         Please check that class for the requirements of the model.
         """
