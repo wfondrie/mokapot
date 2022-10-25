@@ -1,11 +1,12 @@
 # Changelog for mokapot  
 
-## [Unreleased] - 2022-10-25
+## [Unreleased]
 ### Fixed
 - Confidence objects are now picklable.
 
 ### Changes
-- Updated GitHub Actions
+- Updated GitHub Actions.
+- Migrated to a full pyproject.toml setuptools build. Thanks @jspaezp!
 
 ## [0.8.3] - 2022-07-20
 ### Fixed
