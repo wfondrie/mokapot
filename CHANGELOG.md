@@ -1,5 +1,9 @@
 # Changelog for mokapot  
 
+## [Unreleased] - 2022-10-25
+### Fixed
+- Confidence objects are now picklable.
+
 ## [0.8.3] - 2022-07-20
 ### Fixed
 - Fixed the reported mokapot score when group FDR is used.
