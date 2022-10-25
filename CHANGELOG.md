@@ -1,5 +1,13 @@
 # Changelog for mokapot  
 
+## [Unreleased]
+### Fixed
+- Confidence objects are now picklable.
+
+### Changes
+- Updated GitHub Actions.
+- Migrated to a full pyproject.toml setuptools build. Thanks @jspaezp!
+
 ## [0.8.3] - 2022-07-20
 ### Fixed
 - Fixed the reported mokapot score when group FDR is used.

@@ -1,16 +1,20 @@
 name: Lint
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Setup Python 3.8
-        uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - name: Setup Python 3
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.8"
+          python-version: "3.x"
 
       - name: Run black
         uses: psf/black@stable
