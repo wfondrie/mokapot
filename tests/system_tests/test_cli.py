@@ -218,9 +218,11 @@ def test_cli_plugins(tmp_path, phospho_files):
     res = subprocess.run(cmd + ["--help"], check=True, capture_output=True)
     assert "--yell" in res.stdout.decode()
 
+    # Make sure it does not yell when the plugin is not loaded explicitly
     res = subprocess.run(cmd, check=True, capture_output=True)
-    assert "Yelling at the user" not in res.stdout.decode()
+    assert "Yelling at the user" not in res.stderr.decode()
 
+    # Check that it does yell when the plugin is loaded and arg is requested
     cmd += ["--plugin", "mokapot_ctree", "--yell"]
     res = subprocess.run(cmd, check=True, capture_output=True)
-    assert "Yelling at the user" in res.stdout.decode()
+    assert "Yelling at the user" in res.stderr.decode()
