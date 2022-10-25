@@ -57,7 +57,7 @@ def main():
     logging.info("")
     logging.info("Starting Analysis")
     logging.info("=================")
-    logging.debug(f"Loaded plugins: {plugins.keys()}")
+    logging.debug("Loaded plugins: %s", plugins.keys())
 
     np.random.seed(config.seed)
 
@@ -107,7 +107,7 @@ def main():
                 logging.debug(f"Loaded model for {plugin_name}")
                 plugin_models[plugin_name] = model
 
-        if len(plugin_models) == 0:
+        if plugin_models:
             msg = "No models were defined by plugins. Using default model."
             logging.debug(msg)
             model = None
