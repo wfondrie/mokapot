@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "mokapot_ctree"
+version = "0.0.1"
+description = ""
+authors = ["J. Sebastian Paez <jspaezp@users.noreply.github.com>"]
+packages = [{include = "mokapot_ctree"}]
+license = "Apache 2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.plugins."mokapot.plugins"]
+"mokapot_ctree" = "mokapot_ctree:Plugin"

@@ -1,20 +1,14 @@
-[tool.poetry]
+[project]
 name = "mokapot_ctree"
 version = "0.0.1"
-description = ""
-authors = ["J. Sebastian Paez <jspaezp@users.noreply.github.com>"]
-packages = [{include = "mokapot_ctree"}]
-license = "Apache 2.0"
+dependencies = [
+    "requests",
+    'importlib-metadata; python_version<"3.8"',
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
-[tool.poetry.plugins."mokapot.plugins"]
-"mokapot_ctree" = "mokapot_ctree:Plugin"
-# Equivalent to:
-# entry_points={
-#     'mkdocs.plugins': [
-#         'pluginname = path.to.some_plugin:SomePluginClass',
-#     ]
-# }
+[project.entry-points."mokapot.plugins"]
+mokapot_ctree = "mokapot_ctree:Plugin"

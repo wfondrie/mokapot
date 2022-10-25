@@ -198,6 +198,14 @@ def test_cli_saved_models(tmp_path, phospho_files):
 
 
 def test_cli_plugins(tmp_path, phospho_files):
+    try:
+        import mokapot_ctree
+    except ImportError:
+        mokapot_ctree = None
+
+    if mokapot_ctree is None:
+        pytest.skip("Testing plugins is not installed")
+
     cmd = [
         "mokapot",
         phospho_files[0],
@@ -215,5 +223,4 @@ def test_cli_plugins(tmp_path, phospho_files):
 
     cmd += ["--plugin", "mokapot_ctree", "--yell"]
     res = subprocess.run(cmd, check=True, capture_output=True)
-    breakpoint()
     assert "Yelling at the user" in res.stdout.decode()

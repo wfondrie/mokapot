@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import logging
 
 if sys.version_info >= (3, 10):
     from importlib.metadata import entry_points
@@ -13,6 +14,8 @@ from typing import Any
 from mokapot.config import Config
 from mokapot.model import Model
 
+LOGGER = logging.getLogger(__name__)
+
 
 def get_plugins() -> dict[str, Any]:
     """Return a dict of all installed Plugins as {name: EntryPoint}."""
@@ -24,7 +27,7 @@ def get_plugins() -> dict[str, Any]:
         pluginmap[plugin.name] = plugin
 
     for k, v in pluginmap.items():
-        # print(f"loading {k}")
+        LOGGER.debug(f"loading {k}")
         pluginmap[k] = v.load()
     return pluginmap
 

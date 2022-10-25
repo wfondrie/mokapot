@@ -272,6 +272,7 @@ class Config:
             "--plugin",
             type=str,
             action="append",
+            default=[],
             help=("The names of the plugins to use."),
         )
 
