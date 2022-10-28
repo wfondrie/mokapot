@@ -108,15 +108,18 @@ def main():
                 plugin_models[plugin_name] = model
 
         if plugin_models:
-            msg = "No models were defined by plugins. Using default model."
-            logging.debug(msg)
+            logging.debug(
+                "No models were defined by plugins. Using default model."
+            )
             model = None
         else:
             first_mod_name = list(plugin_models.keys())[0]
             if len(plugin_models) > 1:
-                msg = "More than one model was defined by plugins."
-                msg += f" Using the first one. ({first_mod_name})"
-                logging.warning(msg)
+                logging.warning(
+                    "More than one model was defined by plugins."
+                    " Using the first one. (%s)",
+                    first_mod_name,
+                )
             model = list(plugin_models.values())[0]
 
     if model is None:
