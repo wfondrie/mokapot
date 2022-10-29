@@ -107,8 +107,8 @@ def main():
                 logging.debug(f"Loaded model for {plugin_name}")
                 plugin_models[plugin_name] = model
 
-        if plugin_models:
-            logging.debug(
+        if not plugin_models:
+            logging.info(
                 "No models were defined by plugins. Using default model."
             )
             model = None
@@ -123,6 +123,7 @@ def main():
             model = list(plugin_models.values())[0]
 
     if model is None:
+        logging.debug(f"Loading Percolator model.")
         model = PercolatorModel(
             train_fdr=config.train_fdr,
             max_iter=config.max_iter,
