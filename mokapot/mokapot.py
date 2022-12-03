@@ -26,7 +26,7 @@ def main():
     plugins = get_plugins()
 
     # Get command line arguments
-    parser = Config._parser()
+    parser = Config().parser
     for plugin_name, plugin in plugins.items():
         parsergroup = parser.add_argument_group(plugin_name)
         plugin.add_arguments(parsergroup)

@@ -25,14 +25,22 @@ class Config:
 
     def __init__(self, parser=None) -> None:
         """Initialize configuration values."""
+        self._namespace = None
         if parser is None:
-            self.parser = Config._parser()
+            self.parser = _parser()
         else:
             self.parser = parser
-        self._namespace = vars(self.parser.parse_args())
+
+    @property
+    def args(self):
+        """Collect args lazily."""
+        if self._namespace is None:
+            self._namespace = vars(self.parser.parse_args())
+
+        return self._namespace
 
     def __getattr__(self, option):
-        return self._namespace[option]
+        return self.args[option]
 
 
 def _parser():
