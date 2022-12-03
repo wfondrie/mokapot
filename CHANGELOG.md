@@ -5,12 +5,10 @@
 ## [0.9.0] - 2022-12-02
 ### Added
 - Support for plugins, allowing mokapot to use new models.
+- Added a custom Docker image with optional dependencies.
 
 ### Fixed
 - Confidence objects are now picklable.
-
-### Added
-- Added a custom Docker image with optional dependencies.
 
 ### Changes
 - Updated GitHub Actions.
