@@ -1,0 +1,14 @@
+[project]
+name = "mokapot_ctree"
+version = "0.0.1"
+dependencies = [
+    "requests",
+    'importlib-metadata; python_version<"3.8"',
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project.entry-points."mokapot.plugins"]
+mokapot_ctree = "mokapot_ctree:Plugin"

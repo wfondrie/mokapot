@@ -4,10 +4,11 @@ These tests verify that the CLI works as expected.
 At least for now, they do not check the correctness of the
 output, just that the expect outputs are created.
 """
-from pathlib import Path
 import subprocess
-import pytest
+from pathlib import Path
+
 import pandas as pd
+import pytest
 
 # Warnings are errors for these tests
 pytestmark = pytest.mark.filterwarnings("error")
@@ -194,3 +195,34 @@ def test_cli_saved_models(tmp_path, phospho_files):
     subprocess.run(cmd, check=True)
     assert Path(tmp_path, "mokapot.psms.txt").exists()
     assert Path(tmp_path, "mokapot.peptides.txt").exists()
+
+
+def test_cli_plugins(tmp_path, phospho_files):
+    try:
+        import mokapot_ctree
+    except ImportError:
+        mokapot_ctree = None
+
+    if mokapot_ctree is None:
+        pytest.skip("Testing plugins is not installed")
+
+    cmd = [
+        "mokapot",
+        phospho_files[0],
+        "--dest_dir",
+        tmp_path,
+        "--test_fdr",
+        "0.01",
+    ]
+
+    res = subprocess.run(cmd + ["--help"], check=True, capture_output=True)
+    assert "--yell" in res.stdout.decode()
+
+    # Make sure it does not yell when the plugin is not loaded explicitly
+    res = subprocess.run(cmd, check=True, capture_output=True)
+    assert "Yelling at the user" not in res.stderr.decode()
+
+    # Check that it does yell when the plugin is loaded and arg is requested
+    cmd += ["--plugin", "mokapot_ctree", "--yell"]
+    res = subprocess.run(cmd, check=True, capture_output=True)
+    assert "Yelling at the user" in res.stderr.decode()

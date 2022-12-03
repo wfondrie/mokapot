@@ -1,5 +1,11 @@
 # Changelog for mokapot  
 
+## [Unreleased]
+
+## [0.9.0]
+### Added
+- Support for plugins, allowing mokapot to use new models.
+
 ## [0.8.4] - 2022-10-25
 ### Fixed
 - Confidence objects are now picklable.

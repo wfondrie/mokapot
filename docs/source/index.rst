@@ -187,6 +187,7 @@ question, someone else has a similar one.
    vignettes/index.rst
    api/index.rst
    cli.rst
+   Plugins <plugins.rst>
    FAQ <faq.rst>
    Contributing <contributing.rst>
    Code of Conduct <CODE_OF_CONDUCT.md>

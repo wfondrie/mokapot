@@ -4,6 +4,7 @@ from the command line.
 """
 import argparse
 import textwrap
+
 from mokapot import __version__
 
 
@@ -22,13 +23,24 @@ class Config:
     Options can be specified as command-line arguments.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, parser=None) -> None:
         """Initialize configuration values."""
-        self.parser = _parser()
-        self._namespace = vars(self.parser.parse_args())
+        self._namespace = None
+        if parser is None:
+            self.parser = _parser()
+        else:
+            self.parser = parser
+
+    @property
+    def args(self):
+        """Collect args lazily."""
+        if self._namespace is None:
+            self._namespace = vars(self.parser.parse_args())
+
+        return self._namespace
 
     def __getattr__(self, option):
-        return self._namespace[option]
+        return self.args[option]
 
 
 def _parser():
@@ -260,6 +272,14 @@ def _parser():
             "Load previously saved models and skip model training."
             "Note that the number of models must match the value of --folds."
         ),
+    )
+
+    parser.add_argument(
+        "--plugin",
+        type=str,
+        action="append",
+        default=[],
+        help=("The names of the plugins to use."),
     )
 
     parser.add_argument(
