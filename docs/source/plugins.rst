@@ -1,23 +1,19 @@
 
-Writting plugins for **mokapot**
+Writing plugins for **mokapot**
 ================================
 
-This is a tutorial on how to write plugins for mokapot. 
+This is a tutorial on how to write plugins for mokapot.
+The plugin architecture allows you to write Python packages that extend mokapot without requiring any changes to mokapot itself.
+Currently, it allows you to modify the data before it gets used by the models or implement a new model.
 
-The plugin architecture allows you to extend mokapot without
-requiring any changes to the core of mokapot.
+Plugins are python packages that export a ``BasePlugin`` object to an entry point called ``mokapot.plugins``.
+It requires setting an entry point up in your package configuration, which we will walk you though together.
+This entails adding a specification in your package configuration that lets your build system know that one of your classes should be "installed" inside mokapot; once installed, mokapot will be able to find your plugin and use it.
 
-Right now it allows you to modify the data before
-it gets used by the models or implement a new model.
+Configuration for you plugin
+----------------------------
 
-Plugins are python packages that export a `BasePlugin` object
-to an entry point called `mokapot.plugins`. It requires setting an
-entry point up in your package configuration (We will walk you though it together).
-This entails adding a specification in your package configuration that lets your build
-system know that one of your classes should be "installed" inside mokapot, once installed
-there, mokapot will be able to find it and use it.
-
-If using `setuptools <https://setuptools.pypa.io/en/latest/userguide/entry_point.html>`_ with `setup.py` you can do that like this:
+If using `setuptools <https://setuptools.pypa.io/en/latest/userguide/entry_point.html>`_ with ``setup.py`` you can do that like this:::
 
     setup(
         ...
@@ -28,25 +24,24 @@ If using `setuptools <https://setuptools.pypa.io/en/latest/userguide/entry_point
         },
     )
 
-If using `pyproject.toml` you can do that like this:
+If using setuptools with ``pyproject.toml`` you can do that like this:::
 
     [project.entry-points."mokapot.plugins"]
     myplugin = "my_package:MyPluginClass"
 
-If using `poetry <https://python-poetry.org/docs/pyproject/#plugins>`_ you will need these lines in your `pyproject.toml`:
+If using `poetry <https://python-poetry.org/docs/pyproject/#plugins>`_ you will need these lines in your ``pyproject.toml``:::
 
     [tool.poetry.plugins."mokapot.plugins"]
     "myplugin" = "my_package:MyPluginClass"
 
-In these examples "myplugin" is the name you wish to give to your plugin and
-"my_package:MyPluginClass" is the name of the class you wish to export.
+In these examples ``myplugin`` is the name you wish to give to your plugin and ``my_package:MyPluginClass`` is the name of the class you wish to export.
 
-An example plugin can be found in the tests for mokapot in
-`tests/system_tests/sample_plugin`
+Writing your plugin
+-------------------
 
-The plugin needs to implement the `BasePlugin` class.
-You do not need to implement all the methods, but you can if you want to.
-
+An example plugin can be found in the `tests for mokapot <https://github.com/wfondrie/mokapot/tree/master/tests/system_tests/sample_plugin>`_.
+Each plugin must implement the ``BasePlugin`` class.
+You do not need to implement all of the methods, but you can if you want to.::
 
     class Plugin(BasePlugin):
         def add_arguments(parser: _ArgumentGroup) -> None:
@@ -73,23 +68,23 @@ You do not need to implement all the methods, but you can if you want to.
             LOGGER.info("Processing data within the plugin")
             return data
 
+These methods control the following:
+- The ``add_arguments()`` method defines new command line arguments that will be used by your plugin.
+- The ``get_model()`` method creates a new mokapot model that will be used.
+- The ``process_data()`` method adds data processing steps that are executed before model training.
+
 Using your plugin
 -----------------
 
-Once mokapot and your plugin are installed in the same
-python environeent you can use your plugin by requesting it
-on the command line:
+Once mokapot and your plugin are installed in the same Python environment you can use your plugin by requesting it on the command line:::
 
-    mokapot .... --plugin myplugin ...
+    mokapot ... --plugin myplugin ...
 
-In the case of the example plugin, called `mokapot_ctree` you
-can use it like this:
+In the case of the example plugin, called `mokapot_ctree` you can use it like this:::
 
-    mokapot .... --plugin mokapot_ctree ...
+    mokapot ... --plugin mokapot_ctree ...
 
-Note that when calling mokapot with the `--help` option, the
-arguments for the plugin will show up in the bottom as a new
-section.
+Note that when calling mokapot with the `--help` option, the arguments for the plugin will show up in the bottom as a new section:::
 
     mokapot --help
     ...
