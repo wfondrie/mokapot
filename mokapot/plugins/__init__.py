@@ -5,10 +5,7 @@ import logging
 
 import pandas as pd
 
-try:
-    from importlib.metadata import entry_points
-except ImportError:
-    from importlib_metadata import entry_points
+from importlib_metadata import entry_points
 
 from argparse import _ArgumentGroup
 from typing import Any
