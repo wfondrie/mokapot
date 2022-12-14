@@ -155,9 +155,7 @@ class Model:
         self.fold = None
 
         # Sort out whether we need to optimize hyperparameters:
-        if hasattr(self.estimator, "estimator") and isinstance(
-            self.estimator, BaseSearchCV
-        ):
+        if isinstance(self.estimator, BaseSearchCV):
             self._needs_cv = True
         else:
             self._needs_cv = False

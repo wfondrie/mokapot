@@ -16,10 +16,6 @@ jobs:
         python-version: ['3.8', '3.9', '3.10',]
         os: [ubuntu-latest, windows-latest, macos-latest]
         experimental: [false,]
-        include:
-          - python-version: '3.11'
-            os: ubuntu-latest
-            experimental: true
 
     steps:
     - uses: actions/checkout@v3

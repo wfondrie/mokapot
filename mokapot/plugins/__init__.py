@@ -5,6 +5,8 @@ import logging
 
 import pandas as pd
 
+# Once the min supported version reaches 3.10, the standard library should
+# be used like so -> from importlib.metadata import entry_points
 from importlib_metadata import entry_points
 
 from argparse import _ArgumentGroup
