@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2022-12-14
+### Changed
+- Cross-validation classes are now detected by looking for inheritance from the `sklearn.model_selection._search.BaseSearchCV` class.
+
+### Fixed
+- Fixed backward compatibility issue for Python <3.10.
+
 ## [0.9.0] - 2022-12-02
 ### Added
 - Support for plugins, allowing mokapot to use new models.
