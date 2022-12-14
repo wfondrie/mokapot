@@ -23,6 +23,7 @@ import pandas as pd
 from sklearn.base import clone
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection._search import BaseSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.exceptions import NotFittedError
 
@@ -154,7 +155,7 @@ class Model:
         self.fold = None
 
         # Sort out whether we need to optimize hyperparameters:
-        if hasattr(self.estimator, "estimator"):
+        if isinstance(self.estimator, BaseSearchCV):
             self._needs_cv = True
         else:
             self._needs_cv = False
