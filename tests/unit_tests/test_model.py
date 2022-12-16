@@ -42,6 +42,20 @@ def test_model_init():
     print(model)
 
 
+def test_model_supervised_init(psms):
+    """Test that fully supervised pre-training works"""
+    model = mokapot.Model(
+        LogisticRegression(),
+        train_fdr=0.01,
+        max_iter=1,
+        supervised_init=True,
+    )
+    assert model.supervised_init == True
+    model.fit(psms)
+
+    assert model.is_trained
+
+
 def test_perc_init():
     """Test the initialization of a PercolatorModel"""
     model = mokapot.PercolatorModel(

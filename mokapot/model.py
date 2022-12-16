@@ -17,6 +17,7 @@ import copy
 import logging
 import pickle
 import warnings
+from . import qvalues
 
 import numpy as np
 import pandas as pd
@@ -88,6 +89,8 @@ class Model:
     shuffle : bool, optional
         Should the order of PSMs be randomized for training? For deterministic
         algorithms, this will have no effect.
+    supervised_init : bool, optional
+        Should the pre-training of the model include the fully supervised step?
 
     Attributes
     ----------
@@ -129,6 +132,7 @@ class Model:
         override=False,
         subset_max_train=None,
         shuffle=True,
+        supervised_init=False,
     ):
         """Initialize a Model object"""
         self.estimator = clone(estimator)
@@ -148,6 +152,7 @@ class Model:
         self.direction = direction
         self.override = override
         self.shuffle = shuffle
+        self.supervised_init = supervised_init
 
         # To keep track of the fold that this was trained on.
         # Needed to ensure reproducibility in brew() with
@@ -285,12 +290,26 @@ class Model:
                 psms = copy.copy(psms)
                 psms._data = psms._data.iloc[subset_idx, :]
 
+        # Normalize Features
+        norm_feat = self.scaler.fit_transform(psms.features.values)
+        self.features = psms.features.columns.tolist()
+
+        # Supervised step
+        if self.supervised_init:
+            best_feat, _, _, _ = psms._find_best_feature(self.train_fdr)
+            scores = psms.features.loc[:, best_feat]
+            qvals = qvalues.tdc(scores, psms.targets)
+            # Find hyperparameters based on best feature's q-values
+            model = _find_hyperparameters(
+                self, norm_feat, psms.targets * 2 - 1, qvals
+            )
+            # Fit the model
+            model.fit(norm_feat, psms.targets, sample_weight=(1 - qvals))
+            self.estimator = model
+            self.is_trained = True
+
         # Choose the initial direction
         start_labels, feat_pass = _get_starting_labels(psms, self)
-
-        # Normalize Features
-        self.features = psms.features.columns.tolist()
-        norm_feat = self.scaler.fit_transform(psms.features.values)
 
         # Shuffle order
         shuffled_idx = np.random.permutation(np.arange(len(start_labels)))
@@ -299,7 +318,6 @@ class Model:
             norm_feat = norm_feat[shuffled_idx, :]
             start_labels = start_labels[shuffled_idx]
 
-        # Prepare the model:
         model = _find_hyperparameters(self, norm_feat, start_labels)
 
         # Begin training loop
@@ -573,16 +591,32 @@ def _get_starting_labels(psms, model):
 
     elif model.is_trained:
         try:
-            scores = model.estimator.decision_function(psms.features)
+            scores = model.decision_function(psms)
         except AttributeError:
             scores = model.estimator.predict_proba(psms.features).flatten()
 
+        # Get starting_labels and feat_pass from pre-trained model
         start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
-        LOGGER.info(
-            "\t- The pretrained model found %i PSMs at q<=%g.",
-            (start_labels == 1).sum(),
-            model.train_fdr,
-        )
+        feat_pass = (start_labels == 1).sum()
+
+        # Get starting_labels and feat_pass from best feature
+        feat_res = psms._find_best_feature(model.train_fdr)
+        _, feat_pass_best_feat, start_labels_best_feat, _ = feat_res
+
+        if feat_pass > feat_pass_best_feat:
+            LOGGER.info(
+                "\t- The pretrained model found %i PSMs at q<=%g.",
+                feat_pass,
+                model.train_fdr,
+            )
+        else:
+            logging.warning(
+                "Learned model did not improve upon the pretrained "
+                "input model. Now re-scoring each collection of PSMs "
+                "using the best feature."
+            )
+            start_labels = start_labels_best_feat
+            feat_pass = feat_pass_best_feat
 
     else:
         feat = psms.features[model.direction].values
@@ -614,7 +648,7 @@ def _get_starting_labels(psms, model):
     return start_labels, feat_pass
 
 
-def _find_hyperparameters(model, features, labels):
+def _find_hyperparameters(model, features, labels, qvals=None):
     """
     Find the hyperparameters for the model.
 
@@ -626,6 +660,8 @@ def _find_hyperparameters(model, features, labels):
         The features to fit the model with.
     labels : array-like
         The labels for each PSM (1, 0, or -1).
+    qvals: array-like, optional
+        The q-values derived from the best feature
 
     Returns
     -------
@@ -637,7 +673,8 @@ def _find_hyperparameters(model, features, labels):
         cv_targ = (labels[labels.astype(bool)] + 1) / 2
 
         # Fit the model
-        model.estimator.fit(cv_samples, cv_targ)
+        weights = None if qvals is None else (1 - qvals)
+        model.estimator.fit(cv_samples, cv_targ, sample_weight=weights)
 
         # Extract the best params.
         best_params = model.estimator.best_params_
