@@ -316,7 +316,7 @@ class PsmDataset(ABC):
 
         return (scores - target_score) / (target_score - decoy_score)
 
-    def _split(self, folds):
+    def _split(self, folds, seed=None):
         """
         Get the indices for random, even splits of the dataset.
 
@@ -329,6 +329,9 @@ class PsmDataset(ABC):
         ----------
         folds: int
             The number of splits to generate.
+        seed: int, optional
+            A seed for the random state used to generate splits, or None to
+            use numpy's default random seed.
 
         Returns
         -------
@@ -338,7 +341,9 @@ class PsmDataset(ABC):
         """
         cols = list(self._spectrum_columns)
         scans = list(self.data.groupby(cols, sort=False).indices.values())
-        np.random.shuffle(scans)
+
+        rand = np.random.RandomState(seed=seed)
+        rand.shuffle(scans)
         scans = list(scans)
 
         # Split the data evenly

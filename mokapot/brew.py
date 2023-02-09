@@ -14,7 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
-def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
+def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, seed=None):
     """
     Re-score one or more collection of PSMs.
 
@@ -59,6 +59,9 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         run time. An integer exceeding the number of folds will have
         no additional effect. Note that logging messages will be garbled
         if more than one worker is enabled.
+    seed: int, optional
+        A seed for the random state used to generate splits, or None to
+        use numpy's default random seed.
 
     Returns
     -------
@@ -90,7 +93,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         LOGGER.info("Found %i total PSMs.", sum([len(p.data) for p in psms]))
 
     LOGGER.info("Splitting PSMs into %i folds...", folds)
-    test_idx = [p._split(folds) for p in psms]
+    test_idx = [p._split(folds, seed=seed) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
     if max_workers != 1:
         # train_sets can't be a generator for joblib :(
