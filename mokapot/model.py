@@ -229,7 +229,7 @@ class Model:
         """Alias for :py:meth:`decision_function`."""
         return self.decision_function(psms)
 
-    def fit(self, psms):
+    def fit(self, psms, seed=None):
         """
         Fit the model using the Percolator algorithm.
 
@@ -245,6 +245,9 @@ class Model:
         psms : PsmDataset object
             :doc:`A collection of PSMs <dataset>` from which to train
             the model.
+        seed: int, optional
+            A seed for the random state used to subset/permute the data,
+            or None to use numpy's default random seed.
 
         Returns
         -------
@@ -263,6 +266,8 @@ class Model:
                 len(psms.data),
             )
 
+        random = np.random.RandomState(seed=seed)
+
         if self.subset_max_train is not None:
             if self.subset_max_train > len(psms):
                 LOGGER.warning(
@@ -278,7 +283,7 @@ class Model:
                     len(psms),
                     self.subset_max_train,
                 )
-                subset_idx = np.random.choice(
+                subset_idx = random.choice(
                     len(psms), self.subset_max_train, replace=False
                 )
 
@@ -293,7 +298,7 @@ class Model:
         norm_feat = self.scaler.fit_transform(psms.features.values)
 
         # Shuffle order
-        shuffled_idx = np.random.permutation(np.arange(len(start_labels)))
+        shuffled_idx = random.permutation(np.arange(len(start_labels)))
         original_idx = np.argsort(shuffled_idx)
         if self.shuffle:
             norm_feat = norm_feat[shuffled_idx, :]

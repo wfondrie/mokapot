@@ -118,7 +118,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, seed=None):
         raise err from orig_err
     except TypeError:
         fitted = Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(_fit_model)(d, copy.deepcopy(model), f)
+            delayed(_fit_model)(d, copy.deepcopy(model), f, seed=seed)
             for f, d in enumerate(train_sets)
         )
 
@@ -265,7 +265,7 @@ def _predict(dset, test_idx, models, test_fdr):
     return np.concatenate(scores)[rev_idx]
 
 
-def _fit_model(train_set, model, fold):
+def _fit_model(train_set, model, fold, seed):
     """
     Fit the estimator using the training data.
 
@@ -288,7 +288,7 @@ def _fit_model(train_set, model, fold):
     model.fold = fold + 1
     reset = False
     try:
-        model.fit(train_set)
+        model.fit(train_set, seed=seed)
     except RuntimeError as msg:
         if str(msg) != "Model performs worse after training.":
             raise
