@@ -55,13 +55,13 @@ def test_brew_seed(psms, svm):
     seed = 0
 
     results_a, models_a = mokapot.brew(
-        psms, svm, test_fdr=0.05, folds=folds, seed=seed
+        psms, svm, test_fdr=0.05, folds=folds, rng=seed
     )
     assert isinstance(results_a, mokapot.confidence.LinearConfidence)
     assert len(models_a) == folds
 
     results_b, models_b = mokapot.brew(
-        psms, svm, test_fdr=0.05, folds=folds, seed=seed
+        psms, svm, test_fdr=0.05, folds=folds, rng=seed
     )
     assert isinstance(results_b, mokapot.confidence.LinearConfidence)
     assert len(models_b) == folds
@@ -71,7 +71,7 @@ def test_brew_seed(psms, svm):
     ), "Results differed with same seed"
 
     results_c, models_c = mokapot.brew(
-        psms, svm, test_fdr=0.05, folds=folds, seed=seed + 1
+        psms, svm, test_fdr=0.05, folds=folds, rng=seed + 1
     )
     assert isinstance(results_c, mokapot.confidence.LinearConfidence)
     assert len(models_c) == folds
