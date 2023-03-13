@@ -345,7 +345,7 @@ class PsmDataset(ABC):
         cols = list(self._spectrum_columns)
         scans = list(self.data.groupby(cols, sort=False).indices.values())
 
-        rand = np.random.default_rng(rng=rng)
+        rand = np.random.default_rng(rng)
         rand.shuffle(scans)
         scans = list(scans)
 

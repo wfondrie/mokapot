@@ -119,7 +119,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
         raise err from orig_err
     except TypeError:
         fitted = Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(_fit_model)(d, copy.deepcopy(model), f, seed=seed)
+            delayed(_fit_model)(d, copy.deepcopy(model), f, rng=rng)
             for f, d in enumerate(train_sets)
         )
 

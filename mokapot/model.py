@@ -266,7 +266,7 @@ class Model:
                 len(psms.data),
             )
 
-        rng = np.random.default_rng(rng=rng)
+        rng = np.random.default_rng(rng)
         if self.subset_max_train is not None:
             if self.subset_max_train > len(psms):
                 LOGGER.warning(
@@ -297,7 +297,7 @@ class Model:
         norm_feat = self.scaler.fit_transform(psms.features.values)
 
         # Shuffle order
-        shuffled_idx = random.permutation(np.arange(len(start_labels)))
+        shuffled_idx = rng.permutation(np.arange(len(start_labels)))
         original_idx = np.argsort(shuffled_idx)
         if self.shuffle:
             norm_feat = norm_feat[shuffled_idx, :]

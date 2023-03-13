@@ -19,6 +19,7 @@ import copy
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
@@ -61,7 +62,7 @@ class GroupedConfidence:
     group_confidence_estimates: Dict
     """
 
-    def __init__(self, psms, scores, desc=True, eval_fdr=0.01, rng=rng):
+    def __init__(self, psms, scores, desc=True, eval_fdr=0.01, rng=None):
         """Initialize a GroupedConfidence object"""
         group_psms = copy.copy(psms)
         self.group_column = group_psms._group_column
@@ -283,7 +284,7 @@ class Confidence(object):
             self._data,
             psm_columns,
             self._score_column,
-            self.rng,
+            self._rng,
         )
         self._data = self._data.loc[psm_idx, :]
 
