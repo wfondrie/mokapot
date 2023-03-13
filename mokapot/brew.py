@@ -77,12 +77,22 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
     """
     rng = np.random.default_rng(rng)
     if model is None:
-        model = PercolatorModel()
+        model = PercolatorModel
 
     try:
         iter(psms)
     except TypeError:
         psms = [psms]
+
+    # Set random seeds:
+    for dset in psms:
+        dset.rng = rng
+
+    try:
+        model.estimator
+        model.rng = rng
+    except AttributeError:
+        pass
 
     # Check that all of the datasets have the same features:
     feat_set = set(psms[0].features.columns)
@@ -94,7 +104,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
         LOGGER.info("Found %i total PSMs.", sum([len(p.data) for p in psms]))
 
     LOGGER.info("Splitting PSMs into %i folds...", folds)
-    test_idx = [p._split(folds, rng=rng) for p in psms]
+    test_idx = [p._split(folds) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
     if max_workers != 1:
         # train_sets can't be a generator for joblib :(
@@ -119,7 +129,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
         raise err from orig_err
     except TypeError:
         fitted = Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(_fit_model)(d, copy.deepcopy(model), f, rng=rng)
+            delayed(_fit_model)(d, copy.deepcopy(model), f)
             for f, d in enumerate(train_sets)
         )
 
@@ -266,7 +276,7 @@ def _predict(dset, test_idx, models, test_fdr):
     return np.concatenate(scores)[rev_idx]
 
 
-def _fit_model(train_set, model, fold, rng):
+def _fit_model(train_set, model, fold):
     """
     Fit the estimator using the training data.
 
@@ -278,9 +288,6 @@ def _fit_model(train_set, model, fold, rng):
         A Classifier to train.
     fold : int
         The fold number. Only used for logging.
-    rng : int, np.random.Generator, optional
-        A seed or generator used to generate splits, or None to
-        use the default random number generator state.
 
     Returns
     -------
@@ -294,7 +301,7 @@ def _fit_model(train_set, model, fold, rng):
     model.fold = fold + 1
     reset = False
     try:
-        model.fit(train_set, rng=rng)
+        model.fit(train_set)
     except RuntimeError as msg:
         if str(msg) != "Model performs worse after training.":
             raise

@@ -62,12 +62,11 @@ class GroupedConfidence:
     group_confidence_estimates: Dict
     """
 
-    def __init__(self, psms, scores, desc=True, eval_fdr=0.01, rng=None):
+    def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
         """Initialize a GroupedConfidence object"""
         group_psms = copy.copy(psms)
         self.group_column = group_psms._group_column
         group_psms._group_column = None
-        rng = np.default_rng(rng)
 
         # Do TDC to eliminate multiples PSMs for a spectrum that may occur
         # in different groups.
@@ -95,7 +94,6 @@ class GroupedConfidence:
                 group_scores,
                 desc=desc,
                 eval_fdr=eval_fdr,
-                rng=rng,
             )
             self._group_confidence_estimates[group] = res
 
@@ -206,12 +204,12 @@ class Confidence(object):
         "peptide_pairs": "Peptide Pairs",
     }
 
-    def __init__(self, psms, scores, desc, rng):
+    def __init__(self, psms, scores, desc):
         """Initialize a PsmConfidence object."""
         self._data = psms.metadata
         self._score_column = _new_column("score", self._data)
         self._has_proteins = psms.has_proteins
-        self._rng = np.random.default_rng(rng)
+        self._rng = psms.rng
         if psms.has_proteins:
             self._proteins = psms._proteins
         else:
@@ -340,9 +338,6 @@ class LinearConfidence(Confidence):
     eval_fdr : float
         The FDR threshold at which to report performance. This parameter
         has no affect on the analysis itself, only logging messages.
-    rng : int, np.random.Generator, optional
-        A seed or generator used to break ties, or None to use the
-        default random number generator state.
 
     Attributes
     ----------
@@ -359,9 +354,9 @@ class LinearConfidence(Confidence):
         A dictionary of confidence estimates for the decoys at each level.
     """
 
-    def __init__(self, psms, scores, desc=True, eval_fdr=0.01, rng=None):
+    def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
         """Initialize a a LinearPsmConfidence object"""
-        super().__init__(psms, scores, desc, rng)
+        super().__init__(psms, scores, desc)
         self._target_column = _new_column("target", self._data)
         self._data[self._target_column] = psms.targets
         self._psm_columns = psms._spectrum_columns
@@ -439,6 +434,7 @@ class LinearConfidence(Confidence):
                 self._peptide_column,
                 self._score_column,
                 self._proteins,
+                self._rng,
             )
             levels += ["proteins"]
             level_data += [proteins]

@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from sklearn.base import clone
 from sklearn.svm import LinearSVC
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.exceptions import NotFittedError
@@ -88,6 +88,8 @@ class Model:
     shuffle : bool, optional
         Should the order of PSMs be randomized for training? For deterministic
         algorithms, this will have no effect.
+    rng : int or numpy.random.Generator, optional
+        The seed or generator used for model training.
 
     Attributes
     ----------
@@ -117,6 +119,8 @@ class Model:
         Is the order of PSMs shuffled for training?
     fold : int or None
         The CV fold on which this model was fit, if any.
+    rng : numpy.random.Generator
+        The random number generator.
     """
 
     def __init__(
@@ -129,6 +133,7 @@ class Model:
         override=False,
         subset_max_train=None,
         shuffle=True,
+        rng=None,
     ):
         """Initialize a Model object"""
         self.estimator = clone(estimator)
@@ -148,6 +153,7 @@ class Model:
         self.direction = direction
         self.override = override
         self.shuffle = shuffle
+        self.rng = rng
 
         # To keep track of the fold that this was trained on.
         # Needed to ensure reproducibility in brew() with
@@ -169,6 +175,16 @@ class Model:
             f"\tscaler: {self.scaler}\n"
             f"\tfeatures: {self.features}"
         )
+
+    @property
+    def rng(self):
+        """The random number generator for model training."""
+        return self._rng
+
+    @rng.setter
+    def rng(self, rng):
+        """Set the random number generator"""
+        self._rng = np.random.default_rng(rng)
 
     def save(self, out_file):
         """
@@ -229,7 +245,7 @@ class Model:
         """Alias for :py:meth:`decision_function`."""
         return self.decision_function(psms)
 
-    def fit(self, psms, rng=None):
+    def fit(self, psms):
         """
         Fit the model using the Percolator algorithm.
 
@@ -245,9 +261,6 @@ class Model:
         psms : PsmDataset object
             :doc:`A collection of PSMs <dataset>` from which to train
             the model.
-        rng : int, np.random.Generator, optional
-            A seed or generator used to generate splits, or None to
-            use the default random number generator state.
 
         Returns
         -------
@@ -266,7 +279,6 @@ class Model:
                 len(psms.data),
             )
 
-        rng = np.random.default_rng(rng)
         if self.subset_max_train is not None:
             if self.subset_max_train > len(psms):
                 LOGGER.warning(
@@ -282,7 +294,7 @@ class Model:
                     len(psms),
                     self.subset_max_train,
                 )
-                subset_idx = rng.choice(
+                subset_idx = self.rng.choice(
                     len(psms), self.subset_max_train, replace=False
                 )
 
@@ -297,7 +309,7 @@ class Model:
         norm_feat = self.scaler.fit_transform(psms.features.values)
 
         # Shuffle order
-        shuffled_idx = rng.permutation(np.arange(len(start_labels)))
+        shuffled_idx = self.rng.permutation(np.arange(len(start_labels)))
         original_idx = np.argsort(shuffled_idx)
         if self.shuffle:
             norm_feat = norm_feat[shuffled_idx, :]
@@ -390,11 +402,10 @@ class PercolatorModel(Model):
         for very large datasets or models that scale poorly with the
         number of PSMs. The default, :code:`None` will use all of the
         PSMs.
-    shuffle : bool, optional
-        Should the order of PSMs be randomized for training? For deterministic
-        algorithms, this will have no effect.
     n_jobs : int, optional
         The number of jobs used to parallelize the hyperparameter grid search.
+    rng : int or numpy.random.Generator, optional
+        The seed or generator used for model training.
 
     Attributes
     ----------
@@ -423,6 +434,8 @@ class PercolatorModel(Model):
     n_jobs : int
         The number of jobs to use for parallizing the hyperparameter
         grid search.
+    rng : numpy.random.Generator
+        The random number generator.
     """
 
     def __init__(
@@ -434,15 +447,17 @@ class PercolatorModel(Model):
         override=False,
         subset_max_train=None,
         n_jobs=-1,
+        rng=None,
     ):
         """Initialize a PercolatorModel"""
         self.n_jobs = n_jobs
+        rng = np.random.default_rng(rng)
         svm_model = LinearSVC(dual=False, random_state=7)
         estimator = GridSearchCV(
             svm_model,
             param_grid=PERC_GRID,
             refit=False,
-            cv=3,
+            cv=KFold(3, shuffle=True, random_state=rng.integers(1, 1e6)),
             n_jobs=n_jobs,
         )
 
@@ -454,6 +469,7 @@ class PercolatorModel(Model):
             direction=direction,
             override=override,
             subset_max_train=subset_max_train,
+            rng=rng,
         )
 
 

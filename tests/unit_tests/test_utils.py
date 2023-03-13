@@ -21,21 +21,20 @@ def df():
 
 def test_groupby_max(df):
     """Test that the groupby_max() function works"""
-    np.random.seed(42)
     in_df, val1_max = df
 
     # Verify that the basic idea works:
-    idx = utils.groupby_max(in_df, "group", "val1")
+    idx = utils.groupby_max(in_df, "group", "val1", 42)
     out_df = in_df.loc[idx, :].sort_values("group").reset_index(drop=True)
     pd.testing.assert_frame_equal(val1_max, out_df)
 
-    idx = utils.groupby_max(in_df, ["group"], "val1")
+    idx = utils.groupby_max(in_df, ["group"], "val1", 42)
     out_df = in_df.loc[idx, :].sort_values("group").reset_index(drop=True)
     pd.testing.assert_frame_equal(val1_max, out_df)
 
     # Verify that the shuffling bit works:
-    idx1 = set(utils.groupby_max(in_df, "group", "val2"))
-    idx2 = set(utils.groupby_max(in_df, "group", "val2"))
+    idx1 = set(utils.groupby_max(in_df, "group", "val2", 2))
+    idx2 = set(utils.groupby_max(in_df, "group", "val2", 1))
     assert idx1 != idx2
 
 

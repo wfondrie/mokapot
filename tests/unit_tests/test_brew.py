@@ -71,7 +71,7 @@ def test_brew_seed(psms, svm):
     ), "Results differed with same seed"
 
     results_c, models_c = mokapot.brew(
-        psms, svm, test_fdr=0.05, folds=folds, rng=seed + 1
+        psms, svm, test_fdr=0.05, folds=folds, rng=seed + 2
     )
     assert isinstance(results_c, mokapot.confidence.LinearConfidence)
     assert len(models_c) == folds
@@ -99,12 +99,12 @@ def test_brew_trained_models(psms, svm):
     """Test that using trained models reproduces same results"""
     # fix a seed to have the same random split for each run
     results_with_training, models_with_training = mokapot.brew(
-        psms, svm, test_fdr=0.05, seed=3
+        psms, svm, test_fdr=0.05, rng=3
     )
     models = list(models_with_training)
     models.reverse()  # Change the model order
     results_without_training, models_without_training = mokapot.brew(
-        psms, models, test_fdr=0.05, seed=3
+        psms, models, test_fdr=0.05, rng=3
     )
     assert models_with_training == models_without_training
     assert results_with_training.accepted == results_without_training.accepted

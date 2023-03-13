@@ -13,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def picked_protein(
-    peptides, target_column, peptide_column, score_column, proteins
+    peptides, target_column, peptide_column, score_column, proteins, rng
 ):
     """Perform the picked-protein approach
 
@@ -27,6 +27,8 @@ def picked_protein(
         The column in `peptides` containing the peptide sequence.
     proteins : Proteins object
         A Proteins object.
+    rng : int or numpy.random.Generator
+        The random number generator.
 
     Returns
     -------
@@ -118,7 +120,7 @@ def picked_protein(
         .map(lambda x: proteins.protein_map.get(x, x))
     )
 
-    prot_idx = utils.groupby_max(prots, ["decoy"], score_column)
+    prot_idx = utils.groupby_max(prots, ["decoy"], score_column, rng)
     final_cols = [
         "mokapot protein group",
         "best peptide",
