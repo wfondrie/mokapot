@@ -77,7 +77,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
     """
     rng = np.random.default_rng(rng)
     if model is None:
-        model = PercolatorModel
+        model = PercolatorModel()
 
     try:
         iter(psms)
