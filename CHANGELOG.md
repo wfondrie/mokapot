@@ -3,7 +3,7 @@
 ## [Unreleased]
 ### Breaking changes
 - Mokapot now uses `numpy.random.Generator` instead of the deprecated `numpy.random.RandomState` API. 
-  New `rng` arguments have been added to functions that rely on randomness in lieu of setting a global random seed with `np.random.seed()`. Thanks @sjust-seerbio!
+  New `rng` arguments have been added to functions and classes that rely on randomness in lieu of setting a global random seed with `np.random.seed()`. Thanks @sjust-seerbio!
 
 ## [0.9.1] - 2022-12-14
 ### Changed
