@@ -23,20 +23,6 @@ Alternatively, PSMs that are already represented in a
 Finally, custom machine learning models can be created using the
 :py:class:`mokapot.model.Model` class.
 
-.. note::
-
-   Set your NumPy random seed to ensure reproducibility:
-
-   .. code-block::
-
-      import numpy as np
-      np.random.seed(42)
-
-   In a future release, we will update mokapot to use the `new NumPy random
-   sampling API
-   <https://numpy.org/doc/stable/reference/random/index.html?highlight=random%20sampling%20numpy%20random#module-numpy.random>`_.
-
-
 .. toctree::
    :maxdepth: 1
    :hidden:
