@@ -229,7 +229,7 @@ class Model:
         """Alias for :py:meth:`decision_function`."""
         return self.decision_function(psms)
 
-    def fit(self, psms, seed=None):
+    def fit(self, psms, rng=None):
         """
         Fit the model using the Percolator algorithm.
 
@@ -245,9 +245,9 @@ class Model:
         psms : PsmDataset object
             :doc:`A collection of PSMs <dataset>` from which to train
             the model.
-        seed: int, optional
-            A seed for the random state used to subset/permute the data,
-            or None to use numpy's default random seed.
+        rng : int, np.random.Generator, optional
+            A seed or generator used to generate splits, or None to
+            use the default random number generator state.
 
         Returns
         -------
@@ -266,8 +266,7 @@ class Model:
                 len(psms.data),
             )
 
-        random = np.random.RandomState(seed=seed)
-
+        rng = np.random.default_rng(rng=rng)
         if self.subset_max_train is not None:
             if self.subset_max_train > len(psms):
                 LOGGER.warning(
@@ -283,7 +282,7 @@ class Model:
                     len(psms),
                     self.subset_max_train,
                 )
-                subset_idx = random.choice(
+                subset_idx = rng.choice(
                     len(psms), self.subset_max_train, replace=False
                 )
 

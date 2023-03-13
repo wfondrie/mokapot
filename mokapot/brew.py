@@ -14,9 +14,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
-def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, seed=None):
-    """
-    Re-score one or more collection of PSMs.
+def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
+    """Re-score one or more collection of PSMs.
 
     The provided PSMs analyzed using the semi-supervised learning
     algorithm that was introduced by
@@ -59,9 +58,9 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, seed=None):
         run time. An integer exceeding the number of folds will have
         no additional effect. Note that logging messages will be garbled
         if more than one worker is enabled.
-    seed: int, optional
-        A seed for the random state used to generate splits, or None to
-        use numpy's default random seed.
+    rng : int, np.random.Generator, optional
+        A seed or generator used to generate splits, or None to use the
+        default random number generator state.
 
     Returns
     -------
@@ -74,7 +73,9 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, seed=None):
     list of Model objects
         The learned :py:class:`~mokapot.model.Model` objects, one
         for each fold.
+
     """
+    rng = np.random.default_rng(rng)
     if model is None:
         model = PercolatorModel()
 
@@ -93,7 +94,7 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, seed=None):
         LOGGER.info("Found %i total PSMs.", sum([len(p.data) for p in psms]))
 
     LOGGER.info("Splitting PSMs into %i folds...", folds)
-    test_idx = [p._split(folds, seed=seed) for p in psms]
+    test_idx = [p._split(folds, rng=rng) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
     if max_workers != 1:
         # train_sets can't be a generator for joblib :(
@@ -265,7 +266,7 @@ def _predict(dset, test_idx, models, test_fdr):
     return np.concatenate(scores)[rev_idx]
 
 
-def _fit_model(train_set, model, fold, seed):
+def _fit_model(train_set, model, fold, rng):
     """
     Fit the estimator using the training data.
 
@@ -275,6 +276,11 @@ def _fit_model(train_set, model, fold, seed):
         A PsmDataset that specifies the training data
     model : tuple of Model
         A Classifier to train.
+    fold : int
+        The fold number. Only used for logging.
+    rng : int, np.random.Generator, optional
+        A seed or generator used to generate splits, or None to
+        use the default random number generator state.
 
     Returns
     -------
@@ -288,7 +294,7 @@ def _fit_model(train_set, model, fold, seed):
     model.fold = fold + 1
     reset = False
     try:
-        model.fit(train_set, seed=seed)
+        model.fit(train_set, rng=rng)
     except RuntimeError as msg:
         if str(msg) != "Model performs worse after training.":
             raise

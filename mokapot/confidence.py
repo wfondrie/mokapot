@@ -51,6 +51,9 @@ class GroupedConfidence:
     eval_fdr : float
         The FDR threshold at which to report performance. This parameter
         has no affect on the analysis itself, only logging messages.
+    rng : int, np.random.Generator, optional
+        A seed or generator used to break ties, or None to use the
+        default random number generator state.
 
     Attributes
     ----------
@@ -58,11 +61,12 @@ class GroupedConfidence:
     group_confidence_estimates: Dict
     """
 
-    def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
+    def __init__(self, psms, scores, desc=True, eval_fdr=0.01, rng=rng):
         """Initialize a GroupedConfidence object"""
         group_psms = copy.copy(psms)
         self.group_column = group_psms._group_column
         group_psms._group_column = None
+        rng = np.default_rng(rng)
 
         # Do TDC to eliminate multiples PSMs for a spectrum that may occur
         # in different groups.
@@ -87,7 +91,10 @@ class GroupedConfidence:
             group_psms._data = group_df.loc[tdc_winners, :]
             group_scores = scores.loc[group_psms._data.index].values
             res = group_psms.assign_confidence(
-                group_scores, desc=desc, eval_fdr=eval_fdr
+                group_scores,
+                desc=desc,
+                eval_fdr=eval_fdr,
+                rng=rng,
             )
             self._group_confidence_estimates[group] = res
 
@@ -198,11 +205,12 @@ class Confidence(object):
         "peptide_pairs": "Peptide Pairs",
     }
 
-    def __init__(self, psms, scores, desc):
+    def __init__(self, psms, scores, desc, rng):
         """Initialize a PsmConfidence object."""
         self._data = psms.metadata
         self._score_column = _new_column("score", self._data)
         self._has_proteins = psms.has_proteins
+        self._rng = np.random.default_rng(rng)
         if psms.has_proteins:
             self._proteins = psms._proteins
         else:
@@ -272,7 +280,10 @@ class Confidence(object):
             The columns that define a PSM.
         """
         psm_idx = utils.groupby_max(
-            self._data, psm_columns, self._score_column
+            self._data,
+            psm_columns,
+            self._score_column,
+            self.rng,
         )
         self._data = self._data.loc[psm_idx, :]
 
@@ -328,6 +339,9 @@ class LinearConfidence(Confidence):
     eval_fdr : float
         The FDR threshold at which to report performance. This parameter
         has no affect on the analysis itself, only logging messages.
+    rng : int, np.random.Generator, optional
+        A seed or generator used to break ties, or None to use the
+        default random number generator state.
 
     Attributes
     ----------
@@ -344,9 +358,9 @@ class LinearConfidence(Confidence):
         A dictionary of confidence estimates for the decoys at each level.
     """
 
-    def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
+    def __init__(self, psms, scores, desc=True, eval_fdr=0.01, rng=None):
         """Initialize a a LinearPsmConfidence object"""
-        super().__init__(psms, scores, desc)
+        super().__init__(psms, scores, desc, rng)
         self._target_column = _new_column("target", self._data)
         self._data[self._target_column] = psms.targets
         self._psm_columns = psms._spectrum_columns
@@ -406,7 +420,10 @@ class LinearConfidence(Confidence):
         """
         levels = ["PSMs", "peptides"]
         peptide_idx = utils.groupby_max(
-            self._data, self._peptide_column, self._score_column
+            self._data,
+            self._peptide_column,
+            self._score_column,
+            self._rng,
         )
 
         peptides = self._data.loc[peptide_idx]
@@ -558,7 +575,10 @@ class CrossLinkedConfidence(Confidence):
             Are higher scores better?
         """
         peptide_idx = utils.groupby_max(
-            self._data, self._peptide_columns, self._score_column
+            self._data,
+            self._peptide_columns,
+            self._score_column,
+            self._rng,
         )
 
         peptides = self._data.loc[peptide_idx]

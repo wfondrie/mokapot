@@ -50,7 +50,7 @@ class PsmDataset(ABC):
         return
 
     @abstractmethod
-    def assign_confidence(self, scores, desc):
+    def assign_confidence(self, scores, desc, rng):
         """
         Return how to assign confidence.
 
@@ -60,6 +60,9 @@ class PsmDataset(ABC):
             An array of scores.
         desc : bool
             Are higher scores better?
+        rng : int, np.random.Generator, optional
+            A seed or generator used to break ties, or None to use the
+            default random number generator state.
         """
         return
 
@@ -316,7 +319,7 @@ class PsmDataset(ABC):
 
         return (scores - target_score) / (target_score - decoy_score)
 
-    def _split(self, folds, seed=None):
+    def _split(self, folds, rng=None):
         """
         Get the indices for random, even splits of the dataset.
 
@@ -329,9 +332,9 @@ class PsmDataset(ABC):
         ----------
         folds: int
             The number of splits to generate.
-        seed: int, optional
-            A seed for the random state used to generate splits, or None to
-            use numpy's default random seed.
+        rng: int, np.random.Generator, optional
+            A seed or generator used to generate splits, or None to
+            use the default random number generator state.
 
         Returns
         -------
@@ -342,7 +345,7 @@ class PsmDataset(ABC):
         cols = list(self._spectrum_columns)
         scans = list(self.data.groupby(cols, sort=False).indices.values())
 
-        rand = np.random.RandomState(seed=seed)
+        rand = np.random.default_rng(rng=rng)
         rand.shuffle(scans)
         scans = list(scans)
 
@@ -552,7 +555,9 @@ class LinearPsmDataset(PsmDataset):
         new_labels[unlabeled] = 0
         return new_labels
 
-    def assign_confidence(self, scores=None, desc=True, eval_fdr=0.01):
+    def assign_confidence(
+        self, scores=None, desc=True, eval_fdr=0.01, rng=None
+    ):
         """Assign confidence to PSMs peptides, and optionally, proteins.
 
         Two forms of confidence estimates are calculated: q-values---the
@@ -574,6 +579,9 @@ class LinearPsmDataset(PsmDataset):
             `scores` is not :code:`None`, this parameter has no affect on the
             analysis itself, but does affect logging messages and the FDR
             threshold applied for some output formats, such as FlashLFQ.
+        rng : int, np.random.Generator, optional
+            A seed or generator used to break ties, or None to use the
+            default random number generator state.
 
         Returns
         -------
@@ -588,11 +596,21 @@ class LinearPsmDataset(PsmDataset):
 
         if self._group_column is None:
             LOGGER.info("Assigning confidence...")
-            return LinearConfidence(self, scores, eval_fdr=eval_fdr, desc=desc)
+            return LinearConfidence(
+                self,
+                scores,
+                eval_fdr=eval_fdr,
+                desc=desc,
+                rng=rng,
+            )
         else:
             LOGGER.info("Assigning confidence within groups...")
             return GroupedConfidence(
-                self, scores, eval_fdr=eval_fdr, desc=desc
+                self,
+                scores,
+                eval_fdr=eval_fdr,
+                desc=desc,
+                rng=rng,
             )
 
 
