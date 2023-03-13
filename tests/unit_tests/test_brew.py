@@ -49,6 +49,38 @@ def test_brew_folds(psms, svm):
     assert len(models) == 4
 
 
+def test_brew_seed(psms, svm):
+    """Test that (not) changing the split selection seed works"""
+    folds = 3
+    seed = 0
+
+    results_a, models_a = mokapot.brew(
+        psms, svm, test_fdr=0.05, folds=folds, rng=seed
+    )
+    assert isinstance(results_a, mokapot.confidence.LinearConfidence)
+    assert len(models_a) == folds
+
+    results_b, models_b = mokapot.brew(
+        psms, svm, test_fdr=0.05, folds=folds, rng=seed
+    )
+    assert isinstance(results_b, mokapot.confidence.LinearConfidence)
+    assert len(models_b) == folds
+
+    assert (
+        results_a.accepted == results_b.accepted
+    ), "Results differed with same seed"
+
+    results_c, models_c = mokapot.brew(
+        psms, svm, test_fdr=0.05, folds=folds, rng=seed + 2
+    )
+    assert isinstance(results_c, mokapot.confidence.LinearConfidence)
+    assert len(models_c) == folds
+
+    assert (
+        results_a.accepted != results_c.accepted
+    ), "Results were identical with different seed!"
+
+
 def test_brew_test_fdr_error(psms, svm):
     """Test that we get a sensible error message"""
     with pytest.raises(RuntimeError) as err:
@@ -66,15 +98,13 @@ def test_brew_multiprocess(psms, svm):
 def test_brew_trained_models(psms, svm):
     """Test that using trained models reproduces same results"""
     # fix a seed to have the same random split for each run
-    np.random.seed(3)
     results_with_training, models_with_training = mokapot.brew(
-        psms, svm, test_fdr=0.05
+        psms, svm, test_fdr=0.05, rng=3
     )
-    np.random.seed(3)
     models = list(models_with_training)
     models.reverse()  # Change the model order
     results_without_training, models_without_training = mokapot.brew(
-        psms, models, test_fdr=0.05
+        psms, models, test_fdr=0.05, rng=3
     )
     assert models_with_training == models_without_training
     assert results_with_training.accepted == results_without_training.accepted

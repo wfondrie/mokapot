@@ -19,6 +19,7 @@ import copy
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
@@ -51,6 +52,9 @@ class GroupedConfidence:
     eval_fdr : float
         The FDR threshold at which to report performance. This parameter
         has no affect on the analysis itself, only logging messages.
+    rng : int, np.random.Generator, optional
+        A seed or generator used to break ties, or None to use the
+        default random number generator state.
 
     Attributes
     ----------
@@ -87,7 +91,9 @@ class GroupedConfidence:
             group_psms._data = group_df.loc[tdc_winners, :]
             group_scores = scores.loc[group_psms._data.index].values
             res = group_psms.assign_confidence(
-                group_scores, desc=desc, eval_fdr=eval_fdr
+                group_scores,
+                desc=desc,
+                eval_fdr=eval_fdr,
             )
             self._group_confidence_estimates[group] = res
 
@@ -203,6 +209,7 @@ class Confidence(object):
         self._data = psms.metadata
         self._score_column = _new_column("score", self._data)
         self._has_proteins = psms.has_proteins
+        self._rng = psms.rng
         if psms.has_proteins:
             self._proteins = psms._proteins
         else:
@@ -272,7 +279,10 @@ class Confidence(object):
             The columns that define a PSM.
         """
         psm_idx = utils.groupby_max(
-            self._data, psm_columns, self._score_column
+            self._data,
+            psm_columns,
+            self._score_column,
+            self._rng,
         )
         self._data = self._data.loc[psm_idx, :]
 
@@ -406,7 +416,10 @@ class LinearConfidence(Confidence):
         """
         levels = ["PSMs", "peptides"]
         peptide_idx = utils.groupby_max(
-            self._data, self._peptide_column, self._score_column
+            self._data,
+            self._peptide_column,
+            self._score_column,
+            self._rng,
         )
 
         peptides = self._data.loc[peptide_idx]
@@ -421,6 +434,7 @@ class LinearConfidence(Confidence):
                 self._peptide_column,
                 self._score_column,
                 self._proteins,
+                self._rng,
             )
             levels += ["proteins"]
             level_data += [proteins]
@@ -558,7 +572,10 @@ class CrossLinkedConfidence(Confidence):
             Are higher scores better?
         """
         peptide_idx = utils.groupby_max(
-            self._data, self._peptide_columns, self._score_column
+            self._data,
+            self._peptide_columns,
+            self._score_column,
+            self._rng,
         )
 
         peptides = self._data.loc[peptide_idx]

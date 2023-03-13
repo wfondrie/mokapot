@@ -14,9 +14,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
-def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
-    """
-    Re-score one or more collection of PSMs.
+def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
+    """Re-score one or more collection of PSMs.
 
     The provided PSMs analyzed using the semi-supervised learning
     algorithm that was introduced by
@@ -59,6 +58,9 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         run time. An integer exceeding the number of folds will have
         no additional effect. Note that logging messages will be garbled
         if more than one worker is enabled.
+    rng : int, np.random.Generator, optional
+        A seed or generator used to generate splits, or None to use the
+        default random number generator state.
 
     Returns
     -------
@@ -71,7 +73,9 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
     list of Model objects
         The learned :py:class:`~mokapot.model.Model` objects, one
         for each fold.
+
     """
+    rng = np.random.default_rng(rng)
     if model is None:
         model = PercolatorModel()
 
@@ -79,6 +83,16 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1):
         iter(psms)
     except TypeError:
         psms = [psms]
+
+    # Set random seeds:
+    for dset in psms:
+        dset.rng = rng
+
+    try:
+        model.estimator
+        model.rng = rng
+    except AttributeError:
+        pass
 
     # Check that all of the datasets have the same features:
     feat_set = set(psms[0].features.columns)
@@ -272,6 +286,8 @@ def _fit_model(train_set, model, fold):
         A PsmDataset that specifies the training data
     model : tuple of Model
         A Classifier to train.
+    fold : int
+        The fold number. Only used for logging.
 
     Returns
     -------

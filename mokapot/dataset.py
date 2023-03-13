@@ -99,10 +99,12 @@ class PsmDataset(ABC):
         group_column,
         other_columns,
         copy_data,
+        rng,
     ):
         """Initialize an object"""
         self._data = psms.copy(deep=copy_data).reset_index(drop=True)
         self._proteins = None
+        self.rng = rng
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
@@ -210,6 +212,16 @@ class PsmDataset(ABC):
     def has_proteins(self):
         """Has a FASTA file been added?"""
         return self._proteins is not None
+
+    @property
+    def rng(self):
+        """The random number generator for model training."""
+        return self._rng
+
+    @rng.setter
+    def rng(self, rng):
+        """Set the random number generator"""
+        self._rng = np.random.default_rng(rng)
 
     def add_proteins(self, proteins, **kwargs):
         """Add protein information to the dataset.
@@ -338,7 +350,8 @@ class PsmDataset(ABC):
         """
         cols = list(self._spectrum_columns)
         scans = list(self.data.groupby(cols, sort=False).indices.values())
-        np.random.shuffle(scans)
+
+        self.rng.shuffle(scans)
         scans = list(scans)
 
         # Split the data evenly
@@ -412,6 +425,10 @@ class LinearPsmDataset(PsmDataset):
         original collection of PSMs is not propagated to this object. This uses
         more memory, but is safer since it prevents accidental modification of
         the underlying data.
+    rng : int or np.random.Generator, optional
+        A seed or generator used for cross-validation split creation and to
+        break ties, or ``None`` to use the default random number generator
+        state.
 
     Attributes
     ----------
@@ -424,6 +441,8 @@ class LinearPsmDataset(PsmDataset):
     targets : numpy.ndarray
     columns : list of str
     has_proteins : bool
+    rng : numpy.random.Generator
+       The random number generator.
     """
 
     def __init__(
@@ -442,6 +461,7 @@ class LinearPsmDataset(PsmDataset):
         rt_column=None,
         charge_column=None,
         copy_data=True,
+        rng=None,
     ):
         """Initialize a PsmDataset object."""
         self._target_column = target_column
@@ -473,6 +493,7 @@ class LinearPsmDataset(PsmDataset):
             group_column=group_column,
             other_columns=other_columns,
             copy_data=copy_data,
+            rng=rng,
         )
 
         self._data[target_column] = self._data[target_column].astype(bool)
@@ -583,11 +604,19 @@ class LinearPsmDataset(PsmDataset):
 
         if self._group_column is None:
             LOGGER.info("Assigning confidence...")
-            return LinearConfidence(self, scores, eval_fdr=eval_fdr, desc=desc)
+            return LinearConfidence(
+                self,
+                scores,
+                eval_fdr=eval_fdr,
+                desc=desc,
+            )
         else:
             LOGGER.info("Assigning confidence within groups...")
             return GroupedConfidence(
-                self, scores, eval_fdr=eval_fdr, desc=desc
+                self,
+                scores,
+                eval_fdr=eval_fdr,
+                desc=desc,
             )
 
 
