@@ -1,31 +1,27 @@
 """
 This module contains the parsers for reading in PSMs
 """
-import gzip
 import logging
 
-import numpy as np
 import pandas as pd
+import polars as pl
 
-from .. import utils
 from ..dataset import LinearPsmDataset
-
 
 LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
 def read_pin(
-    pin_files,
-    group_column=None,
-    filename_column=None,
-    calcmass_column=None,
-    expmass_column=None,
-    rt_column=None,
-    charge_column=None,
-    to_df=False,
-    copy_data=False,
-):
+    pin_file: str | pl.DataFrame | pd.DataFrame,
+    group_column: str = None,
+    filename_column: str = None,
+    calcmass_column: str = None,
+    expmass_column: str = None,
+    rt_column: str = None,
+    charge_column: str = None,
+    to_df: bool = False,
+) -> LinearPsmDataset | pl.LazyFrame:
     """Read Percolator input (PIN) tab-delimited files.
 
     Read PSMs from one or more Percolator input (PIN) tab-delmited files,
@@ -36,7 +32,7 @@ def read_pin(
     wiki/Interface#tab-delimited-file-format>`_.
 
     Specifically, mokapot requires specific columns in the tab-delmited files:
-    `specid`, `scannr`, `peptide`, `proteins`, and `label`. Note that these
+    `specid`, `scannr`, `peptide`, and `label`. Note that these
     column names are case insensitive. In addition to these special columns
     defined for the PIN format, mokapot also looks for additional columns that
     specify the MS data file names, theoretical monoisotopic peptide masses,
@@ -44,7 +40,8 @@ def read_pin(
     to create specific output formats for downstream tools, such as FlashLFQ.
 
     In addition to PIN tab-delimited files, the `pin_files` argument can be a
-    :py:class:`pandas.DataFrame` containing the above columns.
+    :py:class:`pl.DataFrame` :py:class:`pandas.DataFrame` containing the above
+    columns.
 
     Finally, mokapot does not currently support specifying a default direction
     or feature weights in the PIN file itself. If these are present, they
@@ -52,8 +49,9 @@ def read_pin(
 
     Parameters
     ----------
-    pin_files : str, tuple of str, or pandas.DataFrame
-        One or more PIN files to read or a :py:class:`pandas.DataFrame`.
+    pin_file : str, polars.DataFrame or pandas.DataFrame
+        One or more PIN files or data frames to be read. Multiple files can be
+        specified using globs, such as ``"psms_*.pin"``.
     group_column : str, optional
         A factor to by which to group PSMs for grouped confidence
         estimation.
@@ -82,34 +80,31 @@ def read_pin(
     to_df : bool, optional
         Return a :py:class:`pandas.DataFrame` instead of a
         :py:class:`~mokapot.dataset.LinearPsmDataset`.
-    copy_data : bool, optional
-        If true, a deep copy of the data is created. This uses more memory, but
-        is safer because it prevents accidental modification of the underlying
-        data. This argument only has an effect when `pin_files` is a
-        :py:class:`pandas.DataFrame`
 
     Returns
     -------
     LinearPsmDataset
         A :py:class:`~mokapot.dataset.LinearPsmDataset` object containing the
         PSMs from all of the PIN files.
+
     """
     logging.info("Parsing PSMs...")
 
-    if isinstance(pin_files, pd.DataFrame):
-        pin_df = pin_files.copy(deep=copy_data)
+    # Figure out the type of the input...
+    if isinstance(pin_file, pd.DataFrame):
+        pin_df = pl.from_pandas(pin_file)
+    elif isinstance(pin_file, pl.DataFrame):
+        pin_df = pin_file.lazy()
+    elif isinstance(pin_file, pl.LazyFrame):
+        pin_df = pin_file
     else:
-        pin_df = pd.concat(
-            [read_percolator(f) for f in utils.tuplize(pin_files)]
-        )
+        pin_df = pl.scan_csv(pin_file, sep="\t")
 
     # Find all of the necessary columns, case-insensitive:
     specid = [c for c in pin_df.columns if c.lower() == "specid"]
-    peptides = [c for c in pin_df.columns if c.lower() == "peptide"]
-    proteins = [c for c in pin_df.columns if c.lower() == "proteins"]
-    labels = [c for c in pin_df.columns if c.lower() == "label"]
+    peptides = [c for c in pin_df.columns if c.lower() == "peptide"][0]
+    labels = [c for c in pin_df.columns if c.lower() == "label"][0]
     scan = [c for c in pin_df.columns if c.lower() == "scannr"][0]
-    nonfeat = sum([specid, [scan], peptides, proteins, labels], [])
 
     # Optional columns
     filename = _check_column(filename_column, pin_df, "filename")
@@ -118,6 +113,13 @@ def read_pin(
     ret_time = _check_column(rt_column, pin_df, "ret_time")
     charge = _check_column(charge_column, pin_df, "charge_column")
     spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
+
+    try:
+        proteins = [c for c in pin_df.columns if c.lower() == "proteins"][0]
+    except IndexError:
+        proteins = None
+
+    nonfeat = [*specid, scan, peptides, proteins, labels]
 
     # Only add charge to features if there aren't other charge columns:
     alt_charge = [c for c in pin_df.columns if c.lower().startswith("charge")]
@@ -137,31 +139,29 @@ def read_pin(
     features = [c for c in pin_df.columns if c not in nonfeat]
 
     # Check for errors:
-    col_names = ["Label", "Peptide", "Proteins"]
-    for col, name in zip([labels, peptides, proteins], col_names):
-        if len(col) > 1:
-            raise ValueError(f"More than one '{name}' column found.")
-
-    if not all([specid, peptides, proteins, labels, spectra]):
+    if not all([specid, peptides, labels, spectra]):
         raise ValueError(
             "This PIN format is incompatible with mokapot. Please"
             " verify that the required columns are present."
         )
 
     # Convert labels to the correct format.
-    pin_df[labels[0]] = pin_df[labels[0]].astype(int)
-    if any(pin_df[labels[0]] == -1):
-        pin_df[labels[0]] = ((pin_df[labels[0]] + 1) / 2).astype(bool)
+    pin_df = pin_df.with_columns(
+        pl.when(pl.col("Label") == 1)
+        .then(True)
+        .otherwise(False)
+        .alias("Label")
+    ).collect(streaming=True)
 
     if to_df:
         return pin_df
 
     return LinearPsmDataset(
         psms=pin_df,
-        target_column=labels[0],
+        target_column=labels,
         spectrum_columns=spectra,
-        peptide_column=peptides[0],
-        protein_column=proteins[0],
+        peptide_column=peptides,
+        protein_column=proteins,
         group_column=group_column,
         feature_columns=features,
         filename_column=filename,
@@ -172,71 +172,6 @@ def read_pin(
         charge_column=charge,
         copy_data=False,
     )
-
-
-# Utility Functions -----------------------------------------------------------
-def read_percolator(perc_file):
-    """
-    Read a Percolator tab-delimited file.
-
-    Percolator input format (PIN) files and the Percolator result files
-    are tab-delimited, but also have a tab-delimited protein list as the
-    final column. This function parses the file and returns a DataFrame.
-
-    Parameters
-    ----------
-    perc_file : str
-        The file to parse.
-
-    Returns
-    -------
-    pandas.DataFrame
-        A DataFrame of the parsed data.
-    """
-    LOGGER.info("Reading %s...", perc_file)
-    if str(perc_file).endswith(".gz"):
-        fopen = gzip.open
-    else:
-        fopen = open
-
-    with fopen(perc_file) as perc:
-        cols = perc.readline().rstrip().split("\t")
-        dir_line = perc.readline().rstrip().split("\t")[0]
-        if dir_line.lower() != "defaultdirection":
-            perc.seek(0)
-            _ = perc.readline()
-
-        psms = pd.concat((c for c in _parse_in_chunks(perc, cols)), copy=False)
-
-    return psms
-
-
-def _parse_in_chunks(file_obj, columns, chunk_size=int(1e8)):
-    """
-    Parse a file in chunks
-
-    Parameters
-    ----------
-    file_obj : file object
-        The file to read lines from.
-    columns : list of str
-        The columns for each DataFrame.
-    chunk_size : int
-        The chunk size in bytes.
-
-    Returns
-    -------
-    pandas.DataFrame
-        The chunk of PSMs
-    """
-    while True:
-        psms = file_obj.readlines(chunk_size)
-        if not psms:
-            break
-
-        psms = [l.rstrip().split("\t", len(columns) - 1) for l in psms]
-        psms = pd.DataFrame.from_records(psms, columns=columns)
-        yield psms.apply(pd.to_numeric, errors="ignore")
 
 
 def _check_column(col, df, default):
