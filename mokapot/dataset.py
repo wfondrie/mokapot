@@ -1,4 +1,4 @@
-"""The :py:class:`LinearPsmDataset` classe is used to define a collection
+"""The :py:class:`LinearPsmDataset` class is used to define a collection
 peptide-spectrum matches. The :py:class:`LinearPsmDataset` class is suitable for
 most types of data-dependent acquisition proteomics experiments.
 
