@@ -11,7 +11,7 @@ typo in the documentation is immensely helpful.
 Contributing to the documentation
 ---------------------------------
 
-We use `sphinx <https://www.sphinx-doc.org/en/master/>`_ generate our
+We use `sphinx <https://www.sphinx-doc.org/en/master/>`_ to generate our
 documentation and deploy it to this site. Most of the pages on the site are
 created from simple text files written in the reStructuredText markup language.
 There are two exceptions to this:
