@@ -1,7 +1,8 @@
 """Test the utility functions"""
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
+
 from mokapot import utils
 
 
@@ -85,3 +86,18 @@ def test_tuplize():
     tuple_in = ("blah", 1, "x")
     tuple_out = ("blah", 1, "x")
     assert utils.tuplize(tuple_in) == tuple_out
+
+
+def test_listify():
+    """Test that we can turn things into lists"""
+    list_in = [1, 2, 3]
+    list_out = [1, 2, 3]
+    assert utils.listify(list_in) == list_out
+
+    str_in = "blah"
+    str_out = ["blah"]
+    assert utils.listify(str_in) == str_out
+
+    tuple_in = ("blah", 1, "x")
+    tuple_out = ["blah", 1, "x"]
+    assert utils.listify(tuple_in) == tuple_out

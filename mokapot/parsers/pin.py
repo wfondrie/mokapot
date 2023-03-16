@@ -6,14 +6,14 @@ import logging
 import pandas as pd
 import polars as pl
 
+from .. import utils
 from ..dataset import LinearPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
 
-# Functions -------------------------------------------------------------------
 def read_pin(
-    pin_file: str | pl.DataFrame | pd.DataFrame,
+    pin_files: str | tuple[str] | pl.DataFrame | pd.DataFrame,
     group_column: str = None,
     filename_column: str = None,
     calcmass_column: str = None,
@@ -49,9 +49,9 @@ def read_pin(
 
     Parameters
     ----------
-    pin_file : str, polars.DataFrame or pandas.DataFrame
+    pin_files : str, tuple of str, polars.DataFrame, or pandas.DataFrame
         One or more PIN files or data frames to be read. Multiple files can be
-        specified using globs, such as ``"psms_*.pin"``.
+        specified using globs, such as ``"psms_*.pin"`` or separately.
     group_column : str, optional
         A factor to by which to group PSMs for grouped confidence
         estimation.
@@ -83,7 +83,7 @@ def read_pin(
 
     Returns
     -------
-    LinearPsmDataset
+    LinearPsmDataset or polars.LazyFrame
         A :py:class:`~mokapot.dataset.LinearPsmDataset` object containing the
         PSMs from all of the PIN files.
 
@@ -91,14 +91,15 @@ def read_pin(
     logging.info("Parsing PSMs...")
 
     # Figure out the type of the input...
-    if isinstance(pin_file, pd.DataFrame):
-        pin_df = pl.from_pandas(pin_file)
-    elif isinstance(pin_file, pl.DataFrame):
-        pin_df = pin_file.lazy()
-    elif isinstance(pin_file, pl.LazyFrame):
-        pin_df = pin_file
+    if isinstance(pin_files, pd.DataFrame):
+        pin_df = pl.from_pandas(pin_files).lazy()
+    elif isinstance(pin_files, pl.DataFrame):
+        pin_df = pin_files.lazy()
+    elif isinstance(pin_files, pl.LazyFrame):
+        pin_df = pin_files
     else:
-        pin_df = pl.scan_csv(pin_file, sep="\t")
+        [pl.scan_csv(f, sep="\t") for f in utils.tuplize(pin_files)]
+        pin_df = pl.concat(pin_files, how="diagonal")
 
     # Find all of the necessary columns, case-insensitive:
     specid = [c for c in pin_df.columns if c.lower() == "specid"]
@@ -151,7 +152,7 @@ def read_pin(
         .then(True)
         .otherwise(False)
         .alias("Label")
-    ).collect(streaming=True)
+    )
 
     if to_df:
         return pin_df

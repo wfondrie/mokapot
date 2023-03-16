@@ -18,39 +18,33 @@ One of more instance of this class are required to use the
 """
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+import polars as pl
 
-from . import qvalues
-from . import utils
+from . import qvalues, utils
+from .confidence import Confidence, GroupedConfidence, LinearConfidence
 from .parsers.fasta import read_fasta
 from .proteins import Proteins
-from .confidence import (
-    LinearConfidence,
-    CrossLinkedConfidence,
-    GroupedConfidence,
-)
 
 LOGGER = logging.getLogger(__name__)
 
 
-# Classes ---------------------------------------------------------------------
-class PsmDataset(ABC):
+class _BaseDataset(ABC):
     """
     Store a collection of PSMs and their features.
 
     :meta private:
     """
 
-    @property
     @abstractmethod
-    def targets(self):
-        """An array indicating whether each PSM is a target."""
-        return
-
-    @abstractmethod
-    def assign_confidence(self, scores, desc):
+    def assign_confidence(
+        self,
+        scores: np.ndarray,
+        desc: bool,
+    ) -> Confidence:
         """
         Return how to assign confidence.
 
@@ -63,50 +57,28 @@ class PsmDataset(ABC):
         """
         return
 
-    @abstractmethod
-    def _update_labels(self, scores, eval_fdr, desc):
-        """
-        Return the label for each PSM, given it's score.
-
-        This method is used during model training to define positive
-        examples. These are traditionally the target PSMs that fall
-        within a specified FDR threshold.
-
-        Parameters
-        ----------
-        scores : numpy.ndarray
-            The score used to rank the PSMs.
-        eval_fdr : float
-            The false discovery rate threshold to use.
-        desc : bool
-            Are higher scores better?
-
-        Returns
-        -------
-        numpy.ndarray
-            The label of each PSM, where 1 indicates a positive example,
-            -1 indicates a negative example, and 0 removes the PSM from
-            training. Typically, 0 is reserved for targets, below a
-            specified FDR threshold.
-        """
-        return
-
     def __init__(
         self,
-        psms,
-        spectrum_columns,
-        feature_columns,
-        group_column,
-        other_columns,
-        copy_data,
-        rng,
+        psms: pl.DataFrame | pl.LazyFrame | pd.DataFrame,
+        target_column: str,
+        spectrum_columns: str | tuple[str, ...],
+        feature_columns: str | tuple[str, ...] | None,
+        group_column: str | tuple[str, ...] | None,
+        other_columns: str | tuple[str, ...] | None,
+        rng: int | np.random.Generator,
     ):
         """Initialize an object"""
-        self._data = psms.copy(deep=copy_data).reset_index(drop=True)
+        if isinstance(psms, pd.DataFrame):
+            psms = pl.from_pandas(psms).lazy()
+        if isinstance(psms.pl.DataFrame):
+            psms = psms.lazy()
+
+        self._data = psms
         self._proteins = None
         self.rng = rng
 
         # Set columns
+        self._target_column = target_column
         self._spectrum_columns = utils.tuplize(spectrum_columns)
         self._group_column = group_column
 
@@ -141,19 +113,21 @@ class PsmDataset(ABC):
             self._feature_columns = utils.tuplize(feature_columns)
 
         # Check that features don't have missing values:
-        na_mask = self.features.isna().any(axis=0)
-        if na_mask.any():
-            na_idx = np.where(na_mask)[0]
-            keep_idx = np.where(~na_mask)[0]
+        has_na = self.features.select(~pl.all().is_null().all()).collect(
+            streaming=True
+        )
+
+        drop_feat = set(c.name for c in has_na if has_na.all())
+        if drop_feat:
             LOGGER.warning(
                 "Missing values detected in the following features:"
             )
-            for col in [self._feature_columns[i] for i in na_idx]:
+            for col in drop_feat:
                 LOGGER.warning("  - %s", col)
 
             LOGGER.warning("Dropping features with missing values...")
             self._feature_columns = tuple(
-                [self._feature_columns[i] for i in keep_idx]
+                c for c in self._feature_columns if c not in drop_feat
             )
 
         LOGGER.info("Using %i features:", len(self._feature_columns))
@@ -163,67 +137,79 @@ class PsmDataset(ABC):
         LOGGER.info("Found %i PSMs.", len(self._data))
 
     @property
-    def data(self):
-        """The full collection of PSMs as a :py:class:`pandas.DataFrame`."""
-        return self._data
-
-    def __len__(self):
-        """Return the number of PSMs"""
-        return len(self._data.index)
+    def targets(self) -> np.ndarray:
+        """A :py:class:`numpy.ndarray` indicating whether each PSM is a target
+        sequence.
+        """
+        return (
+            self.data.select(self._target_column)
+            .cast(pl.Boolean)
+            .collect(streaming=True)
+            .to_numpy()
+        )
 
     @property
-    def _metadata_columns(self):
-        """A list of the metadata columns"""
+    def data(self) -> pl.LazyFrame:
+        """The full collection of PSMs as a :py:class:`pl.LazyFrame`."""
+        return self._data
+
+    def __len__(self) -> int:
+        """Return the number of PSMs"""
+        return self.data.select([pl.count()]).collect(streaming=True)[0, 0]
+
+    @property
+    def _metadata_columns(self) -> tuple[str]:
+        """A tuple of the metadata columns"""
         return tuple(
             c for c in self.data.columns if c not in self._feature_columns
         )
 
     @property
-    def metadata(self):
-        """A :py:class:`pandas.DataFrame` of the metadata."""
-        return self.data.loc[:, self._metadata_columns]
+    def metadata(self) -> pl.LazyFrame:
+        """A :py:class:`polars.LazyFrame` of the metadata."""
+        return self.data.select(self._metadata_columns)
 
     @property
-    def features(self):
-        """A :py:class:`pandas.DataFrame` of the features."""
-        return self.data.loc[:, self._feature_columns]
+    def features(self) -> pl.LazyFrame:
+        """A :py:class:`polars.LazyFrame` of the features."""
+        return self.data.select(self._feature_columns)
 
     @property
-    def spectra(self):
+    def spectra(self) -> pl.LazyFrame:
         """
-        A :py:class:`pandas.DataFrame` of the columns that uniquely
+        A :py:class:`polars.LazyFrame` of the columns that uniquely
         identify a mass spectrum.
         """
-        return self.data.loc[:, self._spectrum_columns]
+        return self.data.select(self._spectrum_columns)
 
     @property
-    def groups(self):
+    def groups(self) -> pl.LazyFrame:
         """
-        A :py:class:`pandas.Series` of the groups for confidence estimation.
+        A :py:class:`polars.LazyFrame` of the groups for confidence estimation.
         """
-        return self.data.loc[:, self._group_column]
+        return self.data.select(self._group_column)
 
     @property
-    def columns(self):
+    def columns(self) -> list[str]:
         """The columns of the dataset."""
-        return self.data.columns.tolist()
+        return self.data.columns
 
     @property
-    def has_proteins(self):
+    def has_proteins(self) -> bool:
         """Has a FASTA file been added?"""
         return self._proteins is not None
 
     @property
-    def rng(self):
+    def rng(self) -> np.random.Generator:
         """The random number generator for model training."""
         return self._rng
 
     @rng.setter
-    def rng(self, rng):
+    def rng(self, rng: int | np.random.Generator):
         """Set the random number generator"""
         self._rng = np.random.default_rng(rng)
 
-    def add_proteins(self, proteins, **kwargs):
+    def add_proteins(self, proteins: Proteins | str, **kwargs):
         """Add protein information to the dataset.
 
         Protein sequence information is required to compute protein-level
@@ -246,7 +232,42 @@ class PsmDataset(ABC):
 
         self._proteins = proteins
 
-    def _find_best_feature(self, eval_fdr):
+    def _update_labels(
+        self,
+        scores: np.ndarray,
+        eval_fdr: float = 0.01,
+        desc: bool = True,
+    ):
+        """Return the label for each example, given it's score.
+
+        This method is used during model training to define positive examples,
+        which are traditionally the target examples that fall within a specified
+        FDR threshold.
+
+        Parameters
+        ----------
+        scores : numpy.ndarray
+            The score used to rank the examples.
+        eval_fdr : float
+            The false discovery rate threshold to use.
+        desc : bool
+            Are higher scores better?
+
+        Returns
+        -------
+        np.ndarray
+            The label of each example, where 1 indicates a positive example, -1
+            indicates a negative example, and 0 removes the example from
+            training.
+        """
+        qvals = qvalues.tdc(scores, target=self.targets, desc=desc)
+        unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
+        new_labels = np.ones(len(qvals))
+        new_labels[~self.targets] = -1
+        new_labels[unlabeled] = 0
+        return new_labels
+
+    def _find_best_feature(self, eval_fdr: float):
         """
         Find the best feature to separate targets from decoys at the
         specified false-discovery rate threshold.
@@ -259,41 +280,53 @@ class PsmDataset(ABC):
 
         Returns
         -------
-        A tuple of an str, int, and numpy.ndarray
-        best_feature : str
-            The name of the best feature.
-        num_passing : int
-            The number of accepted PSMs using the best feature.
-        labels : numpy.ndarray
-            The new labels defining positive and negative examples when
-            the best feature is used.
-        desc : bool
-            Are high scores better for the best feature?
+        BestFeature
+            Information about the best feature.
         """
-        best_feat = None
         best_positives = 0
-        new_labels = None
+        out = None
         for desc in (True, False):
-            labs = self.features.apply(
-                self._update_labels, eval_fdr=eval_fdr, desc=desc
+            labs = self.features.select(
+                pl.all().map(
+                    lambda f: self._update_labels(
+                        scores=f,
+                        eval_fdr=f.to_numpy(),
+                        desc=desc,
+                    )
+                )
+            ).collect(streaming=True)
+
+            num_passing = labs.select((pl.all() == 1).sum())
+
+            best_feat = (
+                num_passing.lazy()
+                .melt()
+                .filter(pl.col("value") == pl.col("value").max())
+                .collect()[0, "variable"]
             )
 
-            num_passing = (labs == 1).sum()
-            feat_idx = num_passing.idxmax()
-            num_passing = num_passing[feat_idx]
+            num_passing = num_passing[0, best_feat]
 
             if num_passing > best_positives:
                 best_positives = num_passing
-                best_feat = feat_idx
-                new_labels = labs.loc[:, feat_idx].values
-                best_desc = desc
+                out = BestFeature(
+                    feature=best_feat,
+                    num_passing=num_passing,
+                    labels=labs[best_feat].to_numpy(),
+                    desc=desc,
+                )
 
-        if best_feat is None:
+        if out is None:
             raise RuntimeError("No PSMs found below the 'eval_fdr'.")
 
-        return best_feat, best_positives, new_labels, best_desc
+        return out
 
-    def _calibrate_scores(self, scores, eval_fdr, desc=True):
+    def _calibrate_scores(
+        self,
+        scores: np.ndarray,
+        eval_fdr: float,
+        desc: bool = True,
+    ):
         """
         Calibrate scores as described in Granholm et al. [1]_
 
@@ -328,6 +361,7 @@ class PsmDataset(ABC):
 
         return (scores - target_score) / (target_score - decoy_score)
 
+    # TODO: Update this method
     def _split(self, folds):
         """
         Get the indices for random, even splits of the dataset.
@@ -365,7 +399,7 @@ class PsmDataset(ABC):
         return tuple(utils.flatten(s) for s in splits)
 
 
-class LinearPsmDataset(PsmDataset):
+class PsmDataset(_BaseDataset):
     """Store and analyze a collection of PSMs.
 
     Store a collection of PSMs from data-dependent acquisition proteomics
@@ -447,8 +481,8 @@ class LinearPsmDataset(PsmDataset):
 
     def __init__(
         self,
-        psms,
-        target_column,
+        psms: pl.DataFrame | pl.LazyFrame | pd.DataFrame,
+        target_column: str,
         spectrum_columns,
         peptide_column,
         protein_column=None,
@@ -460,11 +494,9 @@ class LinearPsmDataset(PsmDataset):
         expmass_column=None,
         rt_column=None,
         charge_column=None,
-        copy_data=True,
         rng=None,
     ):
         """Initialize a PsmDataset object."""
-        self._target_column = target_column
         self._peptide_column = peptide_column
         self._protein_column = protein_column
 
@@ -488,15 +520,14 @@ class LinearPsmDataset(PsmDataset):
 
         super().__init__(
             psms=psms,
+            target_column=target_column,
             spectrum_columns=spectrum_columns,
             feature_columns=feature_columns,
             group_column=group_column,
             other_columns=other_columns,
-            copy_data=copy_data,
             rng=rng,
         )
 
-        self._data[target_column] = self._data[target_column].astype(bool)
         num_targets = (self.targets).sum()
         num_decoys = (~self.targets).sum()
         LOGGER.info(
@@ -526,47 +557,9 @@ class LinearPsmDataset(PsmDataset):
         )
 
     @property
-    def targets(self):
-        """A :py:class:`numpy.ndarray` indicating whether each PSM is a target
-        sequence.
-        """
-        return self.data[self._target_column].values
-
-    @property
     def peptides(self):
         """A :py:class:`pandas.Series` of the peptide column."""
         return self.data.loc[:, self._peptide_column]
-
-    def _update_labels(self, scores, eval_fdr=0.01, desc=True):
-        """Return the label for each PSM, given it's score.
-
-        This method is used during model training to define positive examples,
-        which are traditionally the target PSMs that fall within a specified
-        FDR threshold.
-
-        Parameters
-        ----------
-        scores : numpy.ndarray
-            The score used to rank the PSMs.
-        eval_fdr : float
-            The false discovery rate threshold to use.
-        desc : bool
-            Are higher scores better?
-
-        Returns
-        -------
-        np.ndarray
-            The label of each PSM, where 1 indicates a positive example, -1
-            indicates a negative example, and 0 removes the PSM from training.
-            Typically, 0 is reserved for targets, below a specified FDR
-            threshold.
-        """
-        qvals = qvalues.tdc(scores, target=self.targets, desc=desc)
-        unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
-        new_labels = np.ones(len(qvals))
-        new_labels[~self.targets] = -1
-        new_labels[unlabeled] = 0
-        return new_labels
 
     def assign_confidence(self, scores=None, desc=True, eval_fdr=0.01):
         """Assign confidence to PSMs peptides, and optionally, proteins.
@@ -620,140 +613,14 @@ class LinearPsmDataset(PsmDataset):
             )
 
 
-class CrossLinkedPsmDataset(PsmDataset):
-    """
-    Store and analyze a collection of PSMs
-
-    A `PsmDataset` is intended to store a collection of PSMs from
-    standard, data-dependent acquisition proteomics experiments and
-    defines the necessary fields for mokapot analysis.
-
-    Parameters
-    ----------
-    psms : pandas.DataFrame
-        A collection of PSMs.
-    target_column : tuple of str
-        The columns specifying whether each peptide of a PSM is a target
-        (`True`) or a decoy (`False`) sequence. These columns will be coerced
-        to boolean, so the
-        specifying targets as `1` and decoys as `-1` will not work correctly.
-    spectrum_columns : str or tuple of str
-        The column(s) that collectively identify unique mass spectra.
-        Multiple columns can be useful to avoid combining scans from
-        multiple mass spectrometry runs.
-    peptide_columns : str or tuple of str
-        The column(s) that collectively define a peptide. Multiple
-        columns may be useful if sequence and modifications are provided
-        as separate columns.
-    protein_column : str
-        The column that specifies which protein(s) the detected peptide
-        might have originated from. This column should contain a
-        delimited list of protein identifiers that match the FASTA file
-        used for database searching.
-    feature_columns : str or tuple of str
-        The column(s) specifying the feature(s) for mokapot analysis. If
-        `None`, these are assumed to be all columns not specified in the
-        previous parameters.
+@dataclass
+class BestFeature:
+    """Store information about the best feature.
 
     :meta private:
     """
 
-    def __init__(
-        self,
-        psms: pd.DataFrame,
-        spectrum_columns,
-        target_columns,
-        peptide_columns,
-        protein_columns,
-        feature_columns=None,
-    ):
-        """Initialize a PsmDataset object."""
-        self._target_columns = utils.tuplize(target_columns)
-        self._peptide_columns = tuple(
-            utils.tuplize(c) for c in peptide_columns
-        )
-        self._protein_columns = tuple(
-            utils.tuplize(c) for c in protein_columns
-        )
-
-        # Finish initialization
-        other_columns = sum(
-            [
-                self._target_columns,
-                *self._peptide_columns,
-                *self._protein_columns,
-            ],
-            tuple(),
-        )
-
-        super().__init__(
-            psms=psms,
-            spectrum_columns=spectrum_columns,
-            feature_columns=feature_columns,
-            other_columns=other_columns,
-        )
-
-    @property
-    def targets(self):
-        """An array indicating whether each PSM is a target."""
-        bool_targs = self.data.loc[:, self._target_columns].astype(bool)
-        return bool_targs.sum(axis=1).values
-
-    def _update_labels(self, scores, eval_fdr=0.01, desc=True):
-        """
-        Return the label for each PSM, given it's score.
-
-        This method is used during model training to define positive
-        examples, which are traditionally the target PSMs that fall
-        within a specified FDR threshold.
-
-        Parameters
-        ----------
-        scores : numpy.ndarray
-            The score used to rank the PSMs.
-        eval_fdr : float
-            The false discovery rate threshold to use.
-        desc : bool
-            Are higher scores better?
-
-        Returns
-        -------
-        np.ndarray
-            The label of each PSM, where 1 indicates a positive example,
-            -1 indicates a negative example, and 0 removes the PSM from
-            training. Typically, 0 is reserved for targets, below a
-            specified FDR threshold.
-        """
-        qvals = qvalues.crosslink_tdc(
-            scores, num_targets=self.targets, desc=desc
-        )
-        unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
-        new_labels = np.ones(len(qvals))
-        new_labels[~self.targets] = -1
-        new_labels[unlabeled] = 0
-        return new_labels
-
-    def assign_confidence(self, scores, desc=True):
-        """
-        Assign confidence to crosslinked PSMs and peptides.
-
-        Two forms of confidence estimates are calculated: q-values,
-        which are the minimum false discovery rate at which a given PSMs
-        would be accepted, and posterior error probabilities (PEPs),
-        which probability that the given PSM is incorrect. For more
-        information see the :doc:`PsmConfidence <confidence>` page.
-
-        Parameters
-        ----------
-        scores : numpy.ndarray
-            The scores used to rank the PSMs.
-        desc : bool
-            Are higher scores better?
-
-        Returns
-        -------
-        CrossLinkedPsmConfidence
-            A :py:class:`CrossLinkedPsmConfidence` object storing the
-            confidence for the provided PSMs.
-        """
-        return CrossLinkedConfidence(self, scores, desc)
+    feature: str
+    num_passing: int
+    labels: np.ndarray
+    desc: bool
