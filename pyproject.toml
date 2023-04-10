@@ -63,6 +63,7 @@ find = {namespaces = false}
 [tool.setuptools_scm]
 
 [tool.ruff]
+select = ["E", "F", "T20"]  # T20 is for print() statements.
 exclude = ["docs/source/conf.py"]
 
 [tool.ruff.per-file-ignores]

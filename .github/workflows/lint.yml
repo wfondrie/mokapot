@@ -27,11 +27,3 @@ jobs:
       - name: Lint with Ruff
         run: |
           ruff check . --format=github
-
-      - name: Check for debugging print statements
-        run: |
-          if grep -rq "print(" mokapot; then
-              echo "Found the following print statements:"
-              grep -r "print(" mokapot
-              exit 1
-          fi

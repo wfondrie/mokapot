@@ -39,8 +39,6 @@ def test_model_init():
     model = mokapot.Model(LogisticRegression())
     assert isinstance(model.scaler, StandardScaler)
 
-    print(model)
-
 
 def test_perc_init():
     """Test the initialization of a PercolatorModel"""
