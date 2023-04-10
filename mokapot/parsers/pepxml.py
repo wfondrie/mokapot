@@ -330,8 +330,11 @@ def _log_features(col, features):
         The log-transformed values of the column if the feature was determined
         to be a p-value.
     """
+    print(col.name, col.dtype)
     if col.name not in features:
         return col
+    elif col.dtype == "bool":
+        return col.astype(float)
 
     col = col.astype(str).str.lower()
 
