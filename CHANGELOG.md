@@ -10,6 +10,7 @@
 
 ### Fixed
 - The PepXML reader, which broke due to a Pandas update.
+- Potential bug if lowercase peptide sequences were used and protein-level confidence estimates were enabled
 
 ## [0.9.1] - 2022-12-14
 ### Changed
@@ -36,7 +37,7 @@
 
 ## [0.8.2] - 2022-07-18
 ### Added
-- `mokapot.Model()` objects now recored the CV fold that they were fit on.
+- `mokapot.Model()` objects now recorded the CV fold that they were fit on.
   This means that they can be provided to `mokapot.brew()` in any order
   and still maintain proper cross-validation bins.
 
