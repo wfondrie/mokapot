@@ -24,10 +24,10 @@ def test_compare_to_percolator():
     dat.add_proteins(os.path.join("data", "human_sp_td.fasta"))
     res, _ = mokapot.brew(dat)
 
-    perc_path = os.path.join("data", "percolator.{l}.txt")
+    perc_path = os.path.join("data", "percolator.{p}.txt")
     perc_res = {
-        l: mokapot.read_percolator(perc_path.format(l=l))
-        for l in ["psms", "peptides", "proteins"]
+        p: mokapot.read_percolator(perc_path.format(p=p))
+        for p in ["psms", "peptides", "proteins"]
     }
 
     for level in ["psms", "peptides", "proteins"]:

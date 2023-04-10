@@ -1,5 +1,4 @@
 """Test that FlashLFQ export is working"""
-import copy
 
 import pytest
 import mokapot
@@ -11,7 +10,7 @@ def test_sanity(psms, tmp_path):
     """Run simple sanity checks"""
     conf = psms.assign_confidence()
     test1 = conf.to_flashlfq(tmp_path / "test1.txt")
-    test2 = mokapot.to_flashlfq(conf, tmp_path / "test2.txt")
+    mokapot.to_flashlfq(conf, tmp_path / "test2.txt")
     test3 = mokapot.to_flashlfq([conf, conf], tmp_path / "test3.txt")
     with pytest.raises(ValueError):
         mokapot.to_flashlfq("blah", tmp_path / "test4.txt")

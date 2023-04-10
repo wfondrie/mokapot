@@ -2,7 +2,6 @@
 import pytest
 import mokapot
 import numpy as np
-from lxml import etree
 
 
 @pytest.fixture

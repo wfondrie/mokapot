@@ -111,7 +111,9 @@ def test_brew_trained_models(psms, svm):
 
 
 def test_brew_using_few_models_error(psms, svm):
-    """Test that if the number of trained models less than the number of folds we get the expected error message"""
+    """Test that if the number of trained models less than the number of
+    folds we get the expected error message.
+    """
     with pytest.raises(ValueError) as err:
         mokapot.brew(psms, [svm, svm], test_fdr=0.05)
     assert (

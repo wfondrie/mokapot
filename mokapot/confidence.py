@@ -17,9 +17,7 @@ confidence estimates, rather than initializing the classes below directly.
 """
 import copy
 import logging
-from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
@@ -651,7 +649,7 @@ def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
 
     ax.set_xlim(0 - xmargin, threshold + xmargin)
     ax.set_xlabel("q-value")
-    ax.set_ylabel(f"Discoveries")
+    ax.set_ylabel("Discoveries")
 
     ax.step(qvals["qvalue"].values, qvals.num.values, where="post", **kwargs)
 

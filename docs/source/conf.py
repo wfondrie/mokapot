@@ -17,7 +17,7 @@ import subprocess
 sys.path.insert(0, os.path.abspath(os.path.join("..", "..")))
 
 try:
-    import numpydoc
+    pass
 except ModuleNotFoundError:
     subprocess.run(["pip", "install", "numpydoc"], check=True)
 
@@ -27,7 +27,7 @@ project = "mokapot"
 copyright = "2022, William E. Fondrie"
 author = "William E. Fondrie"
 
-import mokapot
+import mokapot  # noqa: E402
 
 version = str(mokapot.__version__)
 release = version

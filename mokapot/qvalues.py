@@ -2,7 +2,6 @@
 This module estimates q-values.
 """
 import numpy as np
-import pandas as pd
 import numba as nb
 
 

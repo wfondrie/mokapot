@@ -3,7 +3,6 @@ Implementation of the picked-protein approach for protein-level
 confidence estimates.
 """
 import logging
-import numpy as np
 import pandas as pd
 
 from .peptides import match_decoy

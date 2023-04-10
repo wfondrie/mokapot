@@ -16,7 +16,6 @@ want to emulate the behavior of Percolator.
 import copy
 import logging
 import pickle
-import warnings
 
 import numpy as np
 import pandas as pd
