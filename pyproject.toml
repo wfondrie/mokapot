@@ -64,7 +64,7 @@ find = {namespaces = false}
 
 [tool.ruff]
 select = ["E", "F", "T20"]  # T20 is for print() statements.
-exclude = ["docs/source/conf.py"]
+extend-exclude = ["docs/source/conf.py"]
 
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]
