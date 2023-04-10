@@ -12,8 +12,8 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
     """Format help text to keep newlines and whitespace"""
 
     def _fill_text(self, text, width, indent):
-        text_list = text.splitlines(keepends=True)
-        return "\n".join(_process_line(l, width, indent) for l in text_list)
+        lines = text.splitlines(keepends=True)
+        return "\n".join(_process_line(txt, width, indent) for txt in lines)
 
 
 class Config:

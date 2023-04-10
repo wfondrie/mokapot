@@ -4,7 +4,6 @@ This module contains the parsers for reading in PSMs
 import gzip
 import logging
 
-import numpy as np
 import pandas as pd
 
 from .. import utils
@@ -234,7 +233,7 @@ def _parse_in_chunks(file_obj, columns, chunk_size=int(1e8)):
         if not psms:
             break
 
-        psms = [l.rstrip().split("\t", len(columns) - 1) for l in psms]
+        psms = [p.rstrip().split("\t", len(columns) - 1) for p in psms]
         psms = pd.DataFrame.from_records(psms, columns=columns)
         yield psms.apply(pd.to_numeric, errors="ignore")
 

@@ -332,6 +332,8 @@ def _log_features(col, features):
     """
     if col.name not in features:
         return col
+    elif col.dtype == "bool":
+        return col.astype(float)
 
     col = col.astype(str).str.lower()
 

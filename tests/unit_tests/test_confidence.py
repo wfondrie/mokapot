@@ -1,7 +1,6 @@
 """Test that Confidence classes are working correctly"""
 import pickle
 
-import pytest
 import numpy as np
 import pandas as pd
 from mokapot import LinearPsmDataset

@@ -27,7 +27,7 @@ project = "mokapot"
 copyright = "2022, William E. Fondrie"
 author = "William E. Fondrie"
 
-import mokapot
+import mokapot  # noqa: E402
 
 version = str(mokapot.__version__)
 release = version

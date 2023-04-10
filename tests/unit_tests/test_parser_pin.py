@@ -34,4 +34,4 @@ def test_pin_parsing(std_pin):
 
 def test_pin_wo_dir():
     """Test a PIN file without a DefaultDirection line"""
-    dat = mokapot.read_pin("data/scope2_FP97AA.pin")
+    mokapot.read_pin("data/scope2_FP97AA.pin")

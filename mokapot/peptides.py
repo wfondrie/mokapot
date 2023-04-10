@@ -3,10 +3,6 @@ Match target peptides to plausible corresponding decoys
 """
 from collections import defaultdict
 
-import numpy as np
-import pandas as pd
-import numba as nb
-
 
 def match_decoy(decoys, targets, ignore_mods=True):
     """Find a corresponding target for each decoy.
