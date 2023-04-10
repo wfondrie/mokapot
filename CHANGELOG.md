@@ -8,6 +8,9 @@
 ### Changed
 - Added linting with Ruff to tests and pre-commit hooks (along with others)!
 
+### Fixed
+- The PepXML reader, which broke due to a Pandas update.
+
 ## [0.9.1] - 2022-12-14
 ### Changed
 - Cross-validation classes are now detected by looking for inheritance from the `sklearn.model_selection._search.BaseSearchCV` class.
