@@ -128,6 +128,13 @@ def strip_peptides(sequences):
     -------
     pandas.Series
         The stripped peptide sequences.
+
+    Example
+    -------
+    >>> pep = pd.Series(["A.LES[+79.]LIEK.A"])
+    >>> srip_peptides(pep)
+    0    LESLIEK
+    dtype: object
     """
     # Strip modifications and flanking AA's from peptide sequences.
     sequences = (

@@ -63,6 +63,8 @@ find = {namespaces = false}
 [tool.setuptools_scm]
 
 [tool.ruff]
+exclude = ["docs/source/conf.py"]
+
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]
 "test_parser_pepxml.py" = ["E501"]

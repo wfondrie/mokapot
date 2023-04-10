@@ -17,7 +17,7 @@ import subprocess
 sys.path.insert(0, os.path.abspath(os.path.join("..", "..")))
 
 try:
-    pass
+    import numpydoc
 except ModuleNotFoundError:
     subprocess.run(["pip", "install", "numpydoc"], check=True)
 
