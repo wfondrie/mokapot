@@ -5,18 +5,20 @@ import datetime
 import logging
 import sys
 import time
+import warnings
 from functools import partial
 from pathlib import Path
 
 import numpy as np
 
 from . import __version__
-from .brew import brew
 from .config import Config
-from .model import PercolatorModel, load_model
-from .parsers.fasta import read_fasta
+from .parsers.pin import read_pin, read_data_for_rescale
 from .parsers.pepxml import read_pepxml
-from .parsers.pin import read_pin
+from .parsers.fasta import read_fasta
+from .brew import brew
+from .model import PercolatorModel, load_model
+from .confidence import assign_confidence
 from .plugins import get_plugins
 
 
@@ -40,7 +42,8 @@ def main():
         2: logging.INFO,
         3: logging.DEBUG,
     }
-
+    if verbosity_dict[config.verbosity] != logging.DEBUG:
+        warnings.filterwarnings("ignore")
     logging.basicConfig(
         format=("[{levelname}] {message}"),
         style="{",
@@ -65,16 +68,15 @@ def main():
     parse = get_parser(config)
     enabled_plugins = {p: plugins[p]() for p in config.plugin}
 
+    datasets = parse(config.psm_files)
     if config.aggregate or len(config.psm_files) == 1:
-        datasets = parse(config.psm_files)
         for plugin in enabled_plugins.values():
             datasets = plugin.process_data(datasets, config)
+        prefixes = [None for f in config.psm_files]
     else:
-        datasets = [parse(f) for f in config.psm_files]
         for plugin in enabled_plugins.values():
             datasets = [plugin.process_data(ds, config) for ds in datasets]
         prefixes = [Path(f).stem for f in config.psm_files]
-
     # Parse FASTA, if required:
     if config.proteins is not None:
         logging.info("Protein-level confidence estimates enabled.")
@@ -88,17 +90,22 @@ def main():
             semi=config.semi,
             decoy_prefix=config.decoy_prefix,
         )
-
-        if config.aggregate or len(config.psm_files) == 1:
-            datasets.add_proteins(proteins)
-        else:
-            for dataset in datasets:
-                dataset.add_proteins(proteins)
+    else:
+        proteins = None
 
     # Define a model:
     model = None
     if config.load_models:
-        model = [load_model(model_file) for model_file in config.load_models]
+        data_to_rescale = None
+        if config.rescale:
+            data_to_rescale = read_data_for_rescale(
+                psms=datasets,
+                subset_max_rescale=config.subset_max_rescale,
+            )
+        model = [
+            load_model(model_file, data_to_rescale)
+            for model_file in config.load_models
+        ]
     elif enabled_plugins:
         plugin_models = {}
         for plugin_name, plugin in enabled_plugins.items():
@@ -129,20 +136,37 @@ def main():
             max_iter=config.max_iter,
             direction=config.direction,
             override=config.override,
-            subset_max_train=config.subset_max_train,
+            rng=config.seed,
         )
 
     # Fit the models:
-    psms, models = brew(
+    psms, models, scores, desc = brew(
         datasets,
         model=model,
         test_fdr=config.test_fdr,
         folds=config.folds,
         max_workers=config.max_workers,
+        subset_max_train=config.subset_max_train,
+        ensemble=config.ensemble,
+        rng=config.seed,
     )
-
+    logging.info("")
     if config.dest_dir is not None:
         Path(config.dest_dir).mkdir(exist_ok=True)
+    deduplication = not config.skip_deduplication
+    if config.file_root is not None:
+        config.dest_dir = f"{Path(config.dest_dir, config.file_root)}."
+    assign_confidence(
+        psms=psms,
+        scores=scores,
+        eval_fdr=config.test_fdr,
+        descs=desc,
+        dest_dir=config.dest_dir,
+        decoys=config.keep_decoys,
+        deduplication=deduplication,
+        proteins=proteins,
+        prefixes=prefixes,
+    )
 
     if config.save_models:
         logging.info("Saving models...")
@@ -156,25 +180,6 @@ def main():
                 out_file = Path(config.dest_dir, out_file)
 
             trained_model.save(str(out_file))
-
-    # Determine how to write the results:
-    logging.info("Writing results...")
-    if config.aggregate or len(config.psm_files) == 1:
-        psms.to_txt(
-            dest_dir=config.dest_dir,
-            file_root=config.file_root,
-            decoys=config.keep_decoys,
-        )
-    else:
-        for dat, prefix in zip(psms, prefixes):
-            if config.file_root is not None:
-                prefix = ".".join([config.file_root, prefix])
-
-            dat.to_txt(
-                dest_dir=config.dest_dir,
-                file_root=prefix,
-                decoys=config.keep_decoys,
-            )
 
     total_time = round(time.time() - start)
     total_time = str(datetime.timedelta(seconds=total_time))
@@ -225,4 +230,11 @@ def get_parser(config):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as e:
+        logging.error(f"[Error] {e}")
+        sys.exit(250)  # input failure
+    except ValueError as e:
+        logging.error(f"[Error] {e}")
+        sys.exit(250)  # input failure
