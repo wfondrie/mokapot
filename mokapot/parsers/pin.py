@@ -276,7 +276,8 @@ def drop_missing_values_and_fill_spectra_dataframe(
 
 def read_file_in_chunks(file, chunk_size, use_cols):
     """
-    when reading in chunks an open file object is required as input to iterate over the chunks
+    when reading in chunks an open file object is required as input to iterate over the
+    chunks
     """
     return pd.read_csv(
         file,

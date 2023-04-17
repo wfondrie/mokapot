@@ -206,7 +206,8 @@ def brew(
                 [[i] * len(idx) for i, idx in enumerate(test_fold_idx)]
                 for test_fold_idx in test_folds_idx
             ]
-            # sort test indices and model indices in the original order (order of input data)
+            # sort test indices and model indices in the original order
+            # (order of input data)
             original_order_idx = [
                 np.argsort(utils.flatten(test_fold_idx)).tolist()
                 for test_fold_idx in test_folds_idx

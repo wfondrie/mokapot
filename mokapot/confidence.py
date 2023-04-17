@@ -17,7 +17,6 @@ confidence estimates, rather than initializing the classes below directly.
 """
 import os
 import glob
-from pathlib import Path
 
 import logging
 import pandas as pd
@@ -345,7 +344,8 @@ class Confidence(object):
         Parameters
         ----------
         psms : Dataframe
-            Dataframe of percolator with metadata columns [SpecId, Label, ScanNr, ExpMass, Peptide, score, Proteins].
+            Dataframe of percolator with metadata columns
+            [SpecId, Label, ScanNr, ExpMass, Peptide, score, Proteins].
         psm_columns : str or list of str
             The columns that define a PSM.
         """
