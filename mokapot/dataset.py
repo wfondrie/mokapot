@@ -854,7 +854,7 @@ def read_file(file_name, use_cols=None, target_column=None):
         df = pd.read_csv(
             f, sep="\t", usecols=use_cols, index_col=False, on_bad_lines="skip"
         ).apply(pd.to_numeric, errors="ignore")
-    try:
+    if target_column:
         return utils.convert_targets_column(df, target_column)
-    except:
+    else:
         return df
