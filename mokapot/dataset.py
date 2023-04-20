@@ -744,6 +744,7 @@ class OnDiskPsmDataset:
             Each of the returned tuples contains the indices  of PSMs in a
             split.
         """
+
         self.spectra_dataframe = self.spectra_dataframe[self.spectrum_columns]
         scans = list(
             self.spectra_dataframe.groupby(

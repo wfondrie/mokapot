@@ -106,6 +106,7 @@ def get_next_row(file_handles, current_rows, col_index, sep="\t"):
 
     try:
         current_rows[max_key] = next(file_handles[max_key]).split(sep)
+
     except StopIteration:
         file_handles[max_key].close()
         del current_rows[max_key]

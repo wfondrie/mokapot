@@ -285,7 +285,6 @@ def read_file_in_chunks(file, chunk_size, use_cols):
         chunksize=chunk_size,
         usecols=use_cols,
         index_col=False,
-        on_bad_lines="skip",
     )
 
 
