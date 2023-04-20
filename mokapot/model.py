@@ -272,9 +272,12 @@ class Model:
             )
 
         # Choose the initial direction
-        start_labels, feat_pass, best_feat, desc = _get_starting_labels(
-            psms, self
-        )
+        (
+            start_labels,
+            self.feat_pass,
+            self.best_feat,
+            self.desc,
+        ) = _get_starting_labels(psms, self)
 
         # Normalize Features
         self.features = psms.features.columns.tolist()
@@ -316,7 +319,7 @@ class Model:
         # If the model performs worse than what was initialized:
         if (
             num_passed[-1] < (start_labels == 1).sum()
-            or num_passed[-1] < feat_pass
+            or num_passed[-1] < self.feat_pass
         ):
             if self.override:
                 LOGGER.warning("Model performs worse after training.")
@@ -331,9 +334,6 @@ class Model:
                 LOGGER.debug("    %s", line)
 
         self.is_trained = True
-        self.feat_pass = feat_pass
-        self.best_feat = best_feat
-        self.desc = desc
         LOGGER.info("Done training.")
         return self
 

@@ -344,8 +344,10 @@ class Confidence(object):
         Parameters
         ----------
         psms : Dataframe
+
             Dataframe of percolator with metadata columns
             [SpecId, Label, ScanNr, ExpMass, Peptide, score, Proteins].
+
         psm_columns : str or list of str
             The columns that define a PSM.
         """
