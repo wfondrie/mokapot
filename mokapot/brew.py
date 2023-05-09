@@ -253,7 +253,7 @@ def brew(
         descs = [desc] * len(psms)
         scores = [
             read_file(
-                _psms.file_name,
+                _psms.filename,
                 use_cols=[feat],
             ).values
             for _psms in psms

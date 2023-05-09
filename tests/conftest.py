@@ -4,7 +4,7 @@ This file contains fixtures that are used at multiple points in the tests.
 import pytest
 import numpy as np
 import pandas as pd
-from mokapot import LinearPsmDataset
+from mokapot import LinearPsmDataset, OnDiskPsmDataset
 
 
 @pytest.fixture(scope="session")
@@ -83,6 +83,54 @@ def psms(psm_df_1000):
         rt_column="ret_time",
         charge_column="charge",
         copy_data=True,
+    )
+    return psms
+
+
+@pytest.fixture
+def psms_ondisk():
+    """A small OnDiskPsmDataset"""
+    filename = "data/scope2_FP97AA.pin"
+    df_spectra = pd.read_csv(
+        filename, sep="\t", usecols=["ScanNr", "ExpMass", "Label"]
+    )
+    with open(filename) as perc:
+        columns = perc.readline().rstrip().split("\t")
+    psms = OnDiskPsmDataset(
+        filename=filename,
+        target_column="Label",
+        spectrum_columns=["ScanNr", "ExpMass"],
+        peptide_column="Peptide",
+        scan_column="ScanNr",
+        calcmass_column="CalcMass",
+        expmass_column="ExpMass",
+        rt_column="ret_time",
+        charge_column=None,
+        protein_column=None,
+        group_column=None,
+        feature_columns=[
+            "CalcMass",
+            "lnrSp",
+            "deltLCn",
+            "deltCn",
+            "Sp",
+            "IonFrac",
+            "RefactoredXCorr",
+            "NegLog10PValue",
+            "NegLog10ResEvPValue",
+            "NegLog10CombinePValue",
+            "enzN",
+            "enzC",
+            "enzInt",
+            "lnNumDSP",
+            "dM",
+            "absdM",
+        ],
+        metadata_columns=["SpecId", "ScanNr", "Peptide", "Proteins", "Label"],
+        filename_column=None,
+        specId_column="SpecId",
+        spectra_dataframe=df_spectra,
+        columns=columns,
     )
     return psms
 
