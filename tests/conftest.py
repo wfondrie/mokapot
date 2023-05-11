@@ -23,33 +23,77 @@ def psm_df_6():
 
 
 @pytest.fixture()
+def psm_df_100(tmp_path):
+    """A DataFrame with 100 PSMs."""
+    rng = np.random.Generator(np.random.PCG64(42))
+    targets = {
+        "specid": np.arange(50),
+        "target": [True] * 50,
+        "scannr": np.random.randint(0, 100, 50),
+        "calcmass": rng.uniform(500, 2000, size=50),
+        "expmass": rng.uniform(500, 2000, size=50),
+        "group": rng.choice(2, size=50),
+        "peptide": [_random_peptide(5, rng) for _ in range(50)],
+        "proteins": ["_dummy" for _ in range(50)],
+        "score": np.concatenate([rng.normal(3, size=20), rng.normal(size=30)]),
+        "filename": "test.mzML",
+        "ret_time": rng.uniform(0, 60 * 120, size=50),
+        "charge": rng.choice([2, 3, 4], size=50),
+    }
+
+    decoys = {
+        "specid": np.arange(50, 100),
+        "target": [False] * 50,
+        "scannr": np.random.randint(0, 100, 50),
+        "calcmass": rng.uniform(500, 2000, size=50),
+        "expmass": rng.uniform(500, 2000, size=50),
+        "group": rng.choice(2, size=50),
+        "peptide": [_random_peptide(5, rng) for _ in range(50)],
+        "proteins": ["_dummy" for _ in range(50)],
+        "score": rng.normal(size=50),
+        "filename": "test.mzML",
+        "ret_time": rng.uniform(0, 60 * 120, size=50),
+        "charge": rng.choice([2, 3, 4], size=50),
+    }
+
+    pin = tmp_path / "test.pin"
+    df = pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)])
+    df.to_csv(pin, sep="\t", index=False)
+    return pin
+
+
+@pytest.fixture()
 def psm_df_1000(tmp_path):
     """A DataFrame with 1000 PSMs from 500 spectra and a FASTA file."""
     rng = np.random.Generator(np.random.PCG64(42))
     targets = {
+        "specid": np.arange(500),
         "target": [True] * 500,
-        "spectrum": np.arange(500),
-        "group": rng.choice(2, size=500),
+        "scannr": np.random.randint(0, 1000, 500),
+        "calcmass": rng.uniform(500, 2000, size=500),
+        "expmass": rng.uniform(500, 2000, size=500),
+        "group": [0 for _ in range(500)],
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
+        "proteins": ["_dummy" for _ in range(500)],
         "score": np.concatenate(
             [rng.normal(3, size=200), rng.normal(size=300)]
         ),
         "filename": "test.mzML",
-        "calcmass": rng.uniform(500, 2000, size=500),
-        "expmass": rng.uniform(500, 2000, size=500),
         "ret_time": rng.uniform(0, 60 * 120, size=500),
         "charge": rng.choice([2, 3, 4], size=500),
     }
 
     decoys = {
+        "specid": np.arange(500, 1000),
         "target": [False] * 500,
-        "spectrum": np.arange(500),
-        "group": rng.choice(2, size=500),
-        "peptide": [_random_peptide(5, rng) for _ in range(500)],
-        "score": rng.normal(size=500),
-        "filename": "test.mzML",
+        "scannr": np.random.randint(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
+        "group": [0 for _ in range(500)],
+        "peptide": [_random_peptide(5, rng) for _ in range(500)],
+        "proteins": ["_dummy" for _ in range(500)],
+        "score": rng.normal(size=500),
+        "filename": "test.mzML",
         "ret_time": rng.uniform(0, 60 * 120, size=500),
         "charge": rng.choice([2, 3, 4], size=500),
     }
@@ -60,16 +104,18 @@ def psm_df_1000(tmp_path):
     )
 
     fasta = tmp_path / "test_1000.fasta"
+    pin = tmp_path / "test.pin"
     with open(fasta, "w+") as fasta_ref:
         fasta_ref.write(fasta_data)
-
-    return (pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)]), fasta)
+    df = pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)])
+    df.to_csv(pin, sep="\t", index=False)
+    return pin, df, fasta
 
 
 @pytest.fixture
 def psms(psm_df_1000):
     """A small LinearPsmDataset"""
-    df, _ = psm_df_1000
+    _, df, _ = psm_df_1000
     psms = LinearPsmDataset(
         psms=df,
         target_column="target",
@@ -126,7 +172,13 @@ def psms_ondisk():
             "dM",
             "absdM",
         ],
-        metadata_columns=["SpecId", "ScanNr", "Peptide", "Proteins", "Label"],
+        metadata_columns=[
+            "SpecId",
+            "ScanNr",
+            "Peptide",
+            "Proteins",
+            "Label",
+        ],
         filename_column=None,
         specId_column="SpecId",
         spectra_dataframe=df_spectra,

@@ -22,4 +22,4 @@ from .parsers.pin import read_pin, read_percolator
 from .parsers.pepxml import read_pepxml
 from .parsers.fasta import read_fasta, make_decoys, digest
 from .writers import to_flashlfq, to_txt
-from .confidence import LinearConfidence, plot_qvalues
+from .confidence import LinearConfidence, plot_qvalues, assign_confidence
