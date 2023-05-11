@@ -664,7 +664,7 @@ class OnDiskPsmDataset:
 
         return (
             _update_labels(
-                df.loc[:, self.columns],
+                df.loc[:, column],
                 targets=df.loc[:, self.target_column],
                 eval_fdr=eval_fdr,
                 desc=desc,

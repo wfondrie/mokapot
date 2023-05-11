@@ -86,14 +86,9 @@ class GroupedConfidence:
         prefixes=None,
     ):
         """Initialize a GroupedConfidence object"""
-        data = read_file(
-            psms.filename,
-            use_cols=list(psms.feature_columns) + list(psms.metadata_columns),
-        )
+        data = read_file(psms.filename, use_cols=list(psms.columns))
         self.group_column = psms.group_column
         psms.group_column = None
-        scores = scores * (desc * 2 - 1)
-
         # Do TDC to eliminate multiples PSMs for a spectrum that may occur
         # in different groups.
         keep = "last" if desc else "first"
@@ -106,15 +101,14 @@ class GroupedConfidence:
             .drop_duplicates(psms.spectrum_columns, keep=keep)
             .index
         )
-
-        self._group_confidence_estimates = {}
         append_to_group = False
         group_file = "group_psms.csv"
         for group, group_df in data.groupby(self.group_column):
             LOGGER.info("Group: %s == %s", self.group_column, group)
             tdc_winners = group_df.index.intersection(idx)
             group_psms = group_df.loc[tdc_winners, :]
-            group_scores = scores.loc[group_psms.index].values + 1
+            group_scores = scores.loc[group_psms.index].values
+
             group_psms.to_csv(group_file, sep="\t", index=False)
             psms.filename = group_file
             assign_confidence(
@@ -768,9 +762,10 @@ def assign_confidence(
             feat, _, _, desc = _psms.find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
             scores.append(
-                read_file(file_name=_psms.filename, use_cols=[feat]).values
+                read_file(file_name=_psms.filename, use_cols=[feat])[
+                    feat
+                ].values
             )
-
     psms_path = "psms.csv"
     peptides_path = "peptides.csv"
     levels = ["psms"]
@@ -781,7 +776,6 @@ def assign_confidence(
     if proteins:
         levels.append("proteins")
 
-    metadata_columns = ["PSMId", "Label", "peptide", "proteinIds", "score"]
     output_columns = [
         "PSMId",
         "peptide",
@@ -792,10 +786,17 @@ def assign_confidence(
     ]
 
     for _psms, score, desc, prefix in zip(psms, scores, descs, prefixes):
+        metadata_columns = [
+            "PSMId",
+            _psms.target_column,
+            "peptide",
+            "proteinIds",
+            "score",
+        ]
         if _psms.group_column is None:
             out_files = []
             for level in levels:
-                dest_dir_prefix = dest_dir
+                dest_dir_prefix = f"{dest_dir}/"
                 if prefix is not None:
                     dest_dir_prefix = dest_dir_prefix + f"{prefix}."
                 if group_column is not None and not combine:
@@ -811,6 +812,7 @@ def assign_confidence(
                         with open(outfile_d, "w") as fp:
                             fp.write(f"{sep.join(output_columns)}\n")
                     out_files[-1].append(outfile_d)
+
             reader = read_file_in_chunks(
                 file=_psms.filename,
                 chunk_size=CONFIDENCE_CHUNK_SIZE,
