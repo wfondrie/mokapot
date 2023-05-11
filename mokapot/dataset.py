@@ -456,7 +456,9 @@ class LinearPsmDataset(PsmDataset):
         return self.data.loc[:, self._peptide_column]
 
     def _update_labels(self, scores, eval_fdr=0.01, desc=True):
-        return _update_labels(scores=scores, targets=self.targets, desc=desc)
+        return _update_labels(
+            scores=scores, targets=self.targets, eval_fdr=eval_fdr, desc=desc
+        )
 
 
 class CrossLinkedPsmDataset(PsmDataset):
