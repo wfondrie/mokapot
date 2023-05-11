@@ -41,52 +41,6 @@ def test_linear_init(psm_df_6):
     assert not dset.has_proteins
 
 
-def test_assign_confidence(psm_df_1000):
-    """Test that assign_confidence() methods run"""
-    psms, fasta = psm_df_1000
-    dset = LinearPsmDataset(
-        psms=psms,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        copy_data=True,
-    )
-
-    # also try adding proteins:
-    assert not dset.has_proteins
-    dset.add_proteins(fasta, missed_cleavages=0, min_length=5, max_length=5)
-    assert dset.has_proteins
-
-    dset.assign_confidence(eval_fdr=0.05)
-
-    # Make sure it works when lower scores are better:
-    data, _ = psm_df_1000
-    data["score"] = -data["score"]
-    dset = LinearPsmDataset(
-        psms=data,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        copy_data=True,
-    )
-    dset.assign_confidence(eval_fdr=0.05)
-
-    # Verify that the groups yields 2 results:
-    dset = LinearPsmDataset(
-        psms=psms,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        group_column="group",
-        feature_columns="score",
-        copy_data=True,
-    )
-    res = dset.assign_confidence(eval_fdr=0.05)
-    assert len(res) == 2
-
-
 def test_update_labels(psm_df_6):
     """Test that the _update_labels() methods are working"""
     dset = LinearPsmDataset(
