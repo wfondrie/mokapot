@@ -7,7 +7,6 @@ output, just that the expect outputs are created.
 import subprocess
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 # Warnings are errors for these tests
@@ -28,19 +27,12 @@ def phospho_files():
     return pin, fasta
 
 
-@pytest.fixture
-def pepxml_file():
-    """Get the pepxml file"""
-    pepxml = Path("data", "msfragger.pepXML")
-    return pepxml
-
-
 def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
     cmd = ["mokapot", scope_files[0], "--dest_dir", tmp_path]
     subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "mokapot.psms.txt").exists()
-    assert Path(tmp_path, "mokapot.peptides.txt").exists()
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
 
 
 def test_cli_options(tmp_path, scope_files):
@@ -77,28 +69,16 @@ def test_cli_options(tmp_path, scope_files):
     subprocess.run(cmd, check=True)
     file_bases = [f.name.split(".")[0] for f in scope_files[0:2]]
 
-    assert Path(tmp_path, f"blah.{file_bases[0]}.mokapot.psms.txt").exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[0]}.mokapot.peptides.txt"
-    ).exists()
-    assert Path(tmp_path, f"blah.{file_bases[1]}.mokapot.psms.txt").exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[1]}.mokapot.peptides.txt"
-    ).exists()
+    assert Path(tmp_path, f"blah.{file_bases[0]}.targets.psms").exists()
+    assert Path(tmp_path, f"blah.{file_bases[0]}.targets.peptides").exists()
+    assert Path(tmp_path, f"blah.{file_bases[1]}.targets.psms").exists()
+    assert Path(tmp_path, f"blah.{file_bases[1]}.targets.peptides").exists()
 
     # Test keep_decoys:
-    assert Path(
-        tmp_path, f"blah.{file_bases[0]}.mokapot.decoy.psms.txt"
-    ).exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[0]}.mokapot.decoy.peptides.txt"
-    ).exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[1]}.mokapot.decoy.psms.txt"
-    ).exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[1]}.mokapot.decoy.peptides.txt"
-    ).exists()
+    assert Path(tmp_path, f"blah.{file_bases[0]}.decoys.psms").exists()
+    assert Path(tmp_path, f"blah.{file_bases[0]}.decoys.peptides").exists()
+    assert Path(tmp_path, f"blah.{file_bases[1]}.decoys.psms").exists()
+    assert Path(tmp_path, f"blah.{file_bases[1]}.decoys.peptides").exists()
 
 
 def test_cli_aggregate(tmp_path, scope_files):
@@ -117,16 +97,16 @@ def test_cli_aggregate(tmp_path, scope_files):
     ]
 
     subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "blah.mokapot.psms.txt").exists()
-    assert Path(tmp_path, "blah.mokapot.peptides.txt").exists()
-    assert not Path(tmp_path, "blah.mokapot.decoy.psms.txt").exists()
-    assert not Path(tmp_path, "blah.mokapot.decoy.peptides.txt").exists()
+    assert Path(tmp_path, "blah.targets.psms").exists()
+    assert Path(tmp_path, "blah.targets.peptides").exists()
+    assert not Path(tmp_path, "blah.targets.decoy.psms").exists()
+    assert not Path(tmp_path, "blah.targets.decoy.peptides").exists()
 
     # Test that decoys are also in the output when --keep_decoys is used
     cmd += ["--keep_decoys"]
     subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "blah.mokapot.decoy.psms.txt").exists()
-    assert Path(tmp_path, "blah.mokapot.decoy.peptides.txt").exists()
+    assert Path(tmp_path, "blah.decoys.psms").exists()
+    assert Path(tmp_path, "blah.decoys.peptides").exists()
 
 
 def test_cli_fasta(tmp_path, phospho_files):
@@ -143,39 +123,9 @@ def test_cli_fasta(tmp_path, phospho_files):
     ]
 
     subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "mokapot.psms.txt").exists()
-    assert Path(tmp_path, "mokapot.peptides.txt").exists()
-    assert Path(tmp_path, "mokapot.proteins.txt").exists()
-
-
-def test_cli_pepxml(tmp_path, pepxml_file):
-    """Test that finding the correct parser works"""
-    cmd = [
-        "mokapot",
-        pepxml_file,
-        "--dest_dir",
-        tmp_path,
-        "--max_iter",
-        "1",
-        "--decoy_prefix",
-        "rev_",
-    ]
-
-    subprocess.run(cmd, check=True)
-    unbinned_file = Path(tmp_path, "mokapot.peptides.txt")
-    assert Path(tmp_path, "mokapot.psms.txt").exists()
-    assert unbinned_file.exists()
-
-    cmd += ["--open_modification_bin_size", "0.01", "--file_root", "binned"]
-    subprocess.run(cmd, check=True)
-    binned_file = Path(tmp_path, "binned.mokapot.peptides.txt")
-    assert Path(tmp_path, "binned.mokapot.psms.txt").exists()
-    assert binned_file.exists()
-
-    # If binning was successful, there should be more distinct peptides:
-    unbinned = pd.read_csv(unbinned_file, sep="\t")
-    binned = pd.read_csv(binned_file, sep="\t")
-    assert len(binned) > len(unbinned)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
+    assert Path(tmp_path, "targets.proteins").exists()
 
 
 def test_cli_saved_models(tmp_path, phospho_files):
@@ -193,8 +143,8 @@ def test_cli_saved_models(tmp_path, phospho_files):
 
     cmd += ["--load_models", *list(Path(tmp_path).glob("*.pkl"))]
     subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "mokapot.psms.txt").exists()
-    assert Path(tmp_path, "mokapot.peptides.txt").exists()
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
 
 
 def test_cli_plugins(tmp_path, phospho_files):

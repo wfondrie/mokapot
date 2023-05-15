@@ -293,7 +293,7 @@ def get_column_names_from_file(file):
         return perc.readline().rstrip().split("\t")
 
 
-def get_rows_from_dataframe(idx, chunk, train_psms):
+def get_rows_from_dataframe(idx, chunk, train_psms, psms):
     """
     extract rows from a chunk of a dataframe
 
@@ -311,6 +311,10 @@ def get_rows_from_dataframe(idx, chunk, train_psms):
     List
         list of list of dataframes
     """
+    chunk = convert_targets_column(
+        data=chunk.apply(pd.to_numeric, errors="ignore"),
+        target_column=psms.target_column,
+    )
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
         train_psms[k].append(
@@ -345,7 +349,7 @@ def parse_in_chunks(psms, train_idx, chunk_size):
             use_cols=_psms.columns,
         )
         Parallel(n_jobs=-1, require="sharedmem")(
-            delayed(get_rows_from_dataframe)(idx, chunk, train_psms)
+            delayed(get_rows_from_dataframe)(idx, chunk, train_psms, _psms)
             for chunk in reader
         )
     return Parallel(n_jobs=-1, require="sharedmem")(
