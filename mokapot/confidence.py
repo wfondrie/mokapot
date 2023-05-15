@@ -54,6 +54,10 @@ class GroupedConfidence:
     ----------
     psms : OnDiskPsmDataset
         A collection of PSMs.
+    rng : int or np.random.Generator, optional
+        A seed or generator used for cross-validation split creation and to
+        break ties, or ``None`` to use the default random number generator
+        state.
     scores : np.ndarray
         A vector containing the score of each PSM.
     desc : bool
@@ -84,6 +88,7 @@ class GroupedConfidence:
         proteins=None,
         combine=False,
         prefixes=None,
+        rng=0,
     ):
         """Initialize a GroupedConfidence object"""
         data = read_file(psms.filename, use_cols=list(psms.columns))
@@ -124,6 +129,7 @@ class GroupedConfidence:
                 combine=combine,
                 prefixes=prefixes,
                 append_to_output_file=append_to_group,
+                rng=rng,
             )
             if combine:
                 append_to_group = True
@@ -236,11 +242,12 @@ class Confidence(object):
         "peptide_pairs": "Peptide Pairs",
     }
 
-    def __init__(self, psms, proteins=None):
+    def __init__(self, psms, proteins=None, rng=0):
         """Initialize a PsmConfidence object."""
         self._score_column = "score"
         self._target_column = psms.target_column
         self._protein_column = "proteinIds"
+        self._rng = rng
         self._group_column = psms.group_column
         self._metadata_column = psms.metadata_columns
 
@@ -393,6 +400,10 @@ class LinearConfidence(Confidence):
     ----------
     psms : OnDiskPsmDataset
         A collection of PSMs.
+    rng : int or np.random.Generator, optional
+        A seed or generator used for cross-validation split creation and to
+        break ties, or ``None`` to use the default random number generator
+        state.
     level_paths : List(Path)
             Files with unique psms and unique peptides.
     levels : List(str)
@@ -422,12 +433,12 @@ class LinearConfidence(Confidence):
         deduplication=True,
         proteins=None,
         sep="\t",
+        rng=0,
     ):
         """Initialize a a LinearPsmConfidence object"""
-        super().__init__(psms, proteins)
+        super().__init__(psms, proteins, rng)
         self._target_column = psms.target_column
-        self._psm_columns = psms.spectrum_columns
-        self._peptide_column = psms.peptide_column
+        self._peptide_column = "peptide"
         self._protein_column = "proteinIds"
         self._eval_fdr = eval_fdr
         self.deduplication = deduplication
@@ -510,7 +521,7 @@ class LinearConfidence(Confidence):
                 self._peptide_column,
                 self._score_column,
                 self._proteins,
-                self.rng,
+                self._rng,
             )
             proteins_path = "proteins.csv"
             proteins.to_csv(proteins_path, index=False, sep=sep)
@@ -640,8 +651,7 @@ class CrossLinkedConfidence(Confidence):
         """Initialize a CrossLinkedConfidence object"""
         super().__init__(psms)
         self._target_column = psms.target_column
-        self._psm_columns = psms.spectrum_columns
-        self._peptide_column = psms.peptide_column
+        self._peptide_column = "peptide"
 
         self._assign_confidence(
             level_paths=level_paths,
@@ -711,6 +721,7 @@ def assign_confidence(
     group_column=None,
     combine=False,
     append_to_output_file=False,
+    rng=0,
 ):
     """Assign confidence to PSMs peptides, and optionally, proteins.
 
@@ -718,6 +729,10 @@ def assign_confidence(
     ----------
     psms : OnDiskPsmDataset
         A collection of PSMs.
+    rng : int or np.random.Generator, optional
+        A seed or generator used for cross-validation split creation and to
+        break ties, or ``None`` to use the default random number generator
+        state.
     scores : numpy.ndarray
         The scores by which to rank the PSMs. The default, :code:`None`,
         uses the feature that accepts the most PSMs at an FDR threshold of
@@ -766,6 +781,7 @@ def assign_confidence(
                     feat
                 ].values
             )
+
     psms_path = "psms.csv"
     peptides_path = "peptides.csv"
     levels = ["psms"]
@@ -796,7 +812,10 @@ def assign_confidence(
         if _psms.group_column is None:
             out_files = []
             for level in levels:
-                dest_dir_prefix = f"{dest_dir}/"
+                if str(dest_dir)[-1] == ".":
+                    dest_dir_prefix = dest_dir
+                else:
+                    dest_dir_prefix = f"{dest_dir}/"
                 if prefix is not None:
                     dest_dir_prefix = dest_dir_prefix + f"{prefix}."
                 if group_column is not None and not combine:
@@ -892,6 +911,7 @@ def assign_confidence(
                 decoys=decoys,
                 deduplication=deduplication,
                 proteins=proteins,
+                rng=rng,
             )
             if prefix is None:
                 append_to_output_file = True
@@ -908,12 +928,17 @@ def assign_confidence(
                 proteins=proteins,
                 combine=combine,
                 prefixes=[prefix],
+                rng=rng,
             )
 
 
 def save_sorted_metadata_chunks(
     chunk_metadata, score_chunk, psms, deduplication, i, sep
 ):
+    chunk_metadata = convert_targets_column(
+        data=chunk_metadata.apply(pd.to_numeric, errors="ignore"),
+        target_column=psms.target_column,
+    )
     chunk_metadata["score"] = score_chunk
     chunk_metadata.sort_values(by="score", ascending=False, inplace=True)
     if deduplication:

@@ -166,6 +166,7 @@ def main():
         deduplication=deduplication,
         proteins=proteins,
         prefixes=prefixes,
+        rng=config.seed,
     )
 
     if config.save_models:
