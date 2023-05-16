@@ -523,6 +523,9 @@ class LinearConfidence(Confidence):
                 self._proteins,
                 self._rng,
             )
+            proteins = proteins.sort_values(
+                by=self._score_column, ascending=False
+            ).reset_index(drop=True)
             proteins_path = "proteins.csv"
             proteins.to_csv(proteins_path, index=False, sep=sep)
             levels += ["proteins"]
@@ -791,8 +794,7 @@ def assign_confidence(
         level_data_path.append(peptides_path)
     if proteins:
         levels.append("proteins")
-
-    output_columns = [
+    out_columns_psms_peps = [
         "PSMId",
         "peptide",
         "score",
@@ -800,6 +802,19 @@ def assign_confidence(
         "posterior_error_prob",
         "proteinIds",
     ]
+    out_columns_proteins = [
+        "mokapot protein group",
+        "best peptide",
+        "stripped sequence",
+        "score",
+        "q-value",
+        "posterior_error_prob",
+    ]
+    output_columns = {
+        "psms": out_columns_psms_peps,
+        "peptides": out_columns_psms_peps,
+        "proteins": out_columns_proteins,
+    }
 
     for _psms, score, desc, prefix in zip(psms, scores, descs, prefixes):
         metadata_columns = [
@@ -824,12 +839,12 @@ def assign_confidence(
                 outfile_d = str(dest_dir_prefix) + f"decoys.{level}"
                 if not append_to_output_file:
                     with open(outfile_t, "w") as fp:
-                        fp.write(f"{sep.join(output_columns)}\n")
+                        fp.write(f"{sep.join(output_columns[level])}\n")
                 out_files.append([outfile_t])
                 if decoys:
                     if not append_to_output_file:
                         with open(outfile_d, "w") as fp:
-                            fp.write(f"{sep.join(output_columns)}\n")
+                            fp.write(f"{sep.join(output_columns[level])}\n")
                     out_files[-1].append(outfile_d)
 
             reader = read_file_in_chunks(
