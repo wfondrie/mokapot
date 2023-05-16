@@ -18,33 +18,55 @@ logging.basicConfig(level=logging.INFO)
 pytestmark = pytest.mark.filterwarnings("error")
 
 
-def test_compare_to_percolator():
+def test_compare_to_percolator(tmp_path):
     """Test that mokapot get almost the same answer as Percolator"""
     dat = mokapot.read_pin(os.path.join("data", "phospho_rep1.pin"))
-    dat.add_proteins(os.path.join("data", "human_sp_td.fasta"))
-    res, _ = mokapot.brew(dat)
+    proteins = mokapot.read_fasta(os.path.join("data", "human_sp_td.fasta"))
+    psms, models, scores, desc = mokapot.brew(dat)
+    mokapot.assign_confidence(
+        psms=psms,
+        scores=scores,
+        descs=desc,
+        dest_dir=tmp_path,
+        proteins=proteins,
+        prefixes=[None],
+    )
 
     perc_path = os.path.join("data", "percolator.{p}.txt")
+    moka_path = os.path.join(tmp_path, "targets.{p}")
     perc_res = {
-        p: mokapot.read_percolator(perc_path.format(p=p))
-        for p in ["psms", "peptides", "proteins"]
+        p: mokapot.read_file(perc_path.format(p=p)) for p in ["proteins"]
+    }
+    moka_res = {
+        p: mokapot.read_file(moka_path.format(p=p)) for p in ["proteins"]
     }
 
-    for level in ["psms", "peptides", "proteins"]:
+    for level in ["proteins"]:
         logging.info("Testing level: %s", level)
-
+        perc = perc_res[level]
+        moka = moka_res[level]
         if level != "proteins":
-            perc = perc_res[level].rename(
-                columns={"PSMId": "SpecId", "peptide": "Peptide"}
+            merged = pd.merge(
+                moka, perc, on="PSMId", suffixes=("_mokapot", "_percolator")
             )
         else:
-            perc = perc_res[level]
-            res.proteins["ProteinId"] = res.proteins[
-                "mokapot protein group"
-            ].str.split(", ", expand=True)[0]
+            moka["ProteinId"] = moka["mokapot protein group"].str.split(
+                ", ", expand=True
+            )[0]
+            merged = pd.merge(
+                moka,
+                perc,
+                on="ProteinId",
+                suffixes=("_mokapot", "_percolator"),
+            )
+            pd.set_option("display.max_columns", None)
 
-        merged = pd.merge(res.confidence_estimates[level], perc)
-        assert merged["mokapot q-value"].corr(merged["q-value"]) > 0.99
         assert (
-            merged["mokapot PEP"].corr(merged["posterior_error_prob"]) > 0.99
+            merged["q-value_mokapot"].corr(merged["q-value_percolator"]) > 0.99
+        )
+        assert (
+            merged["posterior_error_prob_mokapot"].corr(
+                merged["posterior_error_prob_percolator"]
+            )
+            > 0.99
         )

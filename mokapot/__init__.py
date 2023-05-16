@@ -15,7 +15,7 @@ except ImportError:
     except DistributionNotFound:
         pass
 
-from .dataset import LinearPsmDataset, OnDiskPsmDataset
+from .dataset import LinearPsmDataset, OnDiskPsmDataset, read_file
 from .model import Model, PercolatorModel, save_model, load_model
 from .brew import brew
 from .parsers.pin import read_pin, read_percolator
