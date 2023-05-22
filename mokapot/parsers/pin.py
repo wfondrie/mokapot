@@ -401,7 +401,6 @@ def read_data_for_rescale(psms, subset_max_rescale):
             read_file(
                 _psms.filename,
                 use_cols=_psms.feature_columns,
-                target_column=_psms.target_column,
             )
             for _psms, skip_rows in zip(psms, skip_rows_per_file)
         ]

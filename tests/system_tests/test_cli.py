@@ -176,3 +176,71 @@ def test_cli_plugins(tmp_path, phospho_files):
     cmd += ["--plugin", "mokapot_ctree", "--yell"]
     res = subprocess.run(cmd, check=True, capture_output=True)
     assert "Yelling at the user" in res.stderr.decode()
+
+
+def test_cli_skip_deduplication(tmp_path, phospho_files):
+    """Test that peptides file results is skipped when using skip_deduplication"""
+    cmd = [
+        "mokapot",
+        phospho_files[0],
+        "--dest_dir",
+        tmp_path,
+        "--test_fdr",
+        "0.01",
+        "--skip_deduplication",
+    ]
+
+    subprocess.run(cmd, check=True)
+
+    assert Path(tmp_path, "targets.psms").exists()
+    assert not Path(tmp_path, "targets.peptides").exists()
+
+
+def test_cli_ensemble(tmp_path, phospho_files):
+    """Test ensemble flag"""
+    cmd = [
+        "mokapot",
+        phospho_files[0],
+        "--dest_dir",
+        tmp_path,
+        "--test_fdr",
+        "0.01",
+        "--ensemble",
+    ]
+
+    subprocess.run(cmd, check=True)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
+
+
+def test_cli_rescale(tmp_path, scope_files):
+    """Test that rescale works"""
+    cmd = [
+        "mokapot",
+        scope_files[0],
+        "--dest_dir",
+        tmp_path,
+        "--test_fdr",
+        "0.01",
+    ]
+
+    subprocess.run(cmd + ["--save_models"], check=True)
+
+    cmd = [
+        "mokapot",
+        scope_files[1],
+        "--dest_dir",
+        tmp_path,
+        "--test_fdr",
+        "0.01",
+        "--load_models",
+        *list(Path(tmp_path).glob("*.pkl")),
+        "--rescale",
+    ]
+    subprocess.run(cmd, check=True)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
+
+    subprocess.run(cmd + ["--subset_max_rescale", "5000"], check=True)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
