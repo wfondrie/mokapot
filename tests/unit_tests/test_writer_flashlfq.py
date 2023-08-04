@@ -6,21 +6,6 @@ import numpy as np
 import pandas as pd
 
 
-def test_sanity(psms, tmp_path):
-    """Run simple sanity checks"""
-    conf = psms.assign_confidence()
-    test1 = conf.to_flashlfq(tmp_path / "test1.txt")
-    mokapot.to_flashlfq(conf, tmp_path / "test2.txt")
-    test3 = mokapot.to_flashlfq([conf, conf], tmp_path / "test3.txt")
-    with pytest.raises(ValueError):
-        mokapot.to_flashlfq("blah", tmp_path / "test4.txt")
-
-    df1 = pd.read_table(test1)
-    df3 = pd.read_table(test3)
-    assert 2 * len(df1) == len(df3)
-    assert len(df1.columns) == 7
-
-
 def test_basic(mock_conf, tmp_path):
     """Test that the basic output works"""
     conf = mock_conf

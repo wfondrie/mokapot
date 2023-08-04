@@ -19,6 +19,7 @@ One of more instance of this class are required to use the
 import logging
 from abc import ABC, abstractmethod
 
+from zlib import crc32
 import numpy as np
 import pandas as pd
 
@@ -746,28 +747,38 @@ class OnDiskPsmDataset:
             Each of the returned tuples contains the indices  of PSMs in a
             split.
         """
-
-        self.spectra_dataframe = self.spectra_dataframe[self.spectrum_columns]
-        scans = list(
-            self.spectra_dataframe.groupby(
-                list(self.spectra_dataframe.columns), sort=False
-            ).indices.values()
+        spectra = self.spectra_dataframe[self.spectrum_columns].values
+        del self.spectra_dataframe
+        spectra = np.apply_along_axis(
+            lambda x: crc32(str((x[0], x[1])).encode()),
+            1,
+            spectra,
         )
-        self.spectra_dataframe = None
-        for indices in scans:
+
+        # sort values to get start position of unique hashes
+        spectra_idx = np.argsort(spectra)
+        spectra = spectra[spectra_idx]
+        idx_start_unique = np.unique(spectra, return_index=True)[1]
+        del spectra
+
+        fold_size = len(spectra_idx) // folds
+        remainder = len(spectra_idx) % folds
+        start_split_indices = []
+        start_idx = 0
+        for i in range(folds - 1):
+            end_idx = start_idx + fold_size + (1 if i < remainder else 0)
+            start_split_indices.append(end_idx)
+            start_idx = end_idx
+
+        # search for smallest index bigger of equal to split index in start indexes of unique groups
+        idx_split = idx_start_unique[
+            np.searchsorted(idx_start_unique, start_split_indices)
+        ]
+        del idx_start_unique
+        spectra_idx = np.split(spectra_idx, idx_split)
+        for indices in spectra_idx:
             rng.shuffle(indices)
-        rng.shuffle(scans)
-        scans = list(scans)
-
-        # Split the data evenly
-        num = len(scans) // folds
-        splits = [scans[i : i + num] for i in range(0, len(scans), num)]
-
-        if len(splits[-1]) < num:
-            splits[-2] += splits[-1]
-            splits = splits[:-1]
-
-        return tuple(utils.flatten(s) for s in splits)
+        return spectra_idx
 
 
 def _update_labels(scores, targets, eval_fdr=0.01, desc=True):

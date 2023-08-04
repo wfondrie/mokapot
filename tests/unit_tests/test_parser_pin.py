@@ -22,7 +22,7 @@ def std_pin(tmp_path):
 
 def test_pin_parsing(std_pin):
     """Test pin parsing"""
-    dat = mokapot.read_pin(std_pin)
+    dat = mokapot.read_pin(std_pin, max_workers=4,)
     df = pd.read_csv(std_pin, sep="\t")
     assert len(dat) == 1
     assert dat[0].filename == std_pin
@@ -42,4 +42,4 @@ def test_pin_parsing(std_pin):
 
 def test_pin_wo_dir():
     """Test a PIN file without a DefaultDirection line"""
-    mokapot.read_pin("data/scope2_FP97AA.pin")
+    mokapot.read_pin("data/scope2_FP97AA.pin", max_workers=4)

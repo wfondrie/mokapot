@@ -20,7 +20,7 @@ pytestmark = pytest.mark.filterwarnings("error")
 
 def test_compare_to_percolator(tmp_path):
     """Test that mokapot get almost the same answer as Percolator"""
-    dat = mokapot.read_pin(os.path.join("data", "phospho_rep1.pin"))
+    dat = mokapot.read_pin(os.path.join("data", "phospho_rep1.pin"), max_workers=3)
     proteins = mokapot.read_fasta(os.path.join("data", "human_sp_td.fasta"))
     psms, models, scores, desc = mokapot.brew(dat)
     mokapot.assign_confidence(
@@ -30,6 +30,7 @@ def test_compare_to_percolator(tmp_path):
         dest_dir=tmp_path,
         proteins=proteins,
         prefixes=[None],
+        max_workers=4,
     )
 
     perc_path = os.path.join("data", "percolator.{p}.txt")

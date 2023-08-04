@@ -19,6 +19,20 @@ def df():
     return pd.DataFrame(data), pd.DataFrame(max_res)
 
 
+@pytest.fixture
+def psms():
+    """Create a standard psms iterable"""
+    yield [
+        ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
+        ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
+        ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
+        ["4", "1", "QILVQLR", "-5.92", "0.12", "1.0", "_.dummy._\n"],
+        ["5", "1", "HLAQLLR", "-6.05", "0.13", "1.0", "_.dummy._\n"],
+        ["6", "0", "QILVQLR", "-6.06", "0.14", "1.0", "_.dummy._\n"],
+        ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
+    ]
+
+
 def test_groupby_max(df):
     """Test that the groupby_max() function works"""
     in_df, val1_max = df
@@ -85,3 +99,29 @@ def test_tuplize():
     tuple_in = ("blah", 1, "x")
     tuple_out = ("blah", 1, "x")
     assert utils.tuplize(tuple_in) == tuple_out
+
+
+def test_get_unique_psms_and_peptides(tmp_path, psms):
+    psms_iterable = psms
+    out_peptides = tmp_path / "peptides.csv"
+    with open(out_peptides, "w") as f:
+        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
+    utils.get_unique_peptides_from_psms(
+        iterable=psms_iterable,
+        peptide_col_index=2,
+        out_peptides=out_peptides,
+        sep="\t",
+    )
+
+    expected_output = pd.DataFrame(
+        [
+            [1, 1, "HLAQLLR", -5.75, "_.dummy._"],
+            [3, 0, "NVPTSLLK", -5.83, "_.dummy._"],
+            [4, 1, "QILVQLR", -5.92, "_.dummy._"],
+            [7, 1, "SRTSVIPGPK", -6.12, "_.dummy._"],
+        ],
+        columns=["PSMId", "Label", "Peptide", "score", "proteinIds"],
+    )
+
+    output = pd.read_csv(out_peptides, sep="\t")
+    pd.testing.assert_frame_equal(expected_output, output)

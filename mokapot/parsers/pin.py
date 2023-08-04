@@ -26,6 +26,7 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 def read_pin(
     pin_files,
+    max_workers,
     group_column=None,
     filename_column=None,
     calcmass_column=None,
@@ -106,6 +107,7 @@ def read_pin(
     return [
         read_percolator(
             pin_file,
+            max_workers=max_workers,
             group_column=group_column,
             filename_column=filename_column,
             calcmass_column=calcmass_column,
@@ -117,8 +119,30 @@ def read_pin(
     ]
 
 
+def create_chunks_with_identifier(data, identifier_column, chunk_size):
+    """
+    This function will split data into chunks but will make sure that identifier_columns
+    is never split
+    Parameters
+    ----------
+    data: the data you want to split in chunks (1d list)
+    identifier_column: columns that should never be splitted. Must be of length 2.
+    chunk_size: the chunk size
+
+    Returns
+    -------
+
+    """
+    if (len(data) + len(identifier_column)) % chunk_size != 1:
+        data_copy = data + identifier_column
+        return create_chunks(data_copy, chunk_size)
+    else:
+        return create_chunks(data, chunk_size) + [identifier_column]
+
+
 def read_percolator(
     perc_file,
+    max_workers,
     group_column=None,
     filename_column=None,
     calcmass_column=None,
@@ -194,12 +218,13 @@ def read_percolator(
         )
 
     # Check that features don't have missing values:
-    feat_slices = create_chunks(
-        data=features + spectra + labels,
+    feat_slices = create_chunks_with_identifier(
+        data=features,
+        identifier_column=spectra + labels,
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra = []
-    features_to_drop = Parallel(n_jobs=-1, require="sharedmem")(
+    features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
             file=perc_file,
             column=c,
@@ -293,7 +318,7 @@ def get_column_names_from_file(file):
         return perc.readline().rstrip().split("\t")
 
 
-def get_rows_from_dataframe(idx, chunk, train_psms, psms):
+def get_rows_from_dataframe(idx, chunk, train_psms, psms, file_idx):
     """
     extract rows from a chunk of a dataframe
 
@@ -305,6 +330,9 @@ def get_rows_from_dataframe(idx, chunk, train_psms, psms):
         Contains subsets of dataframes that are already extracted.
     chunk : dataframe
         Subset of a dataframe.
+    psms : OnDiskPsmDataset
+        A collection of PSMs.
+    file_idx : the index of the file being searched
 
     Returns
     -------
@@ -317,12 +345,16 @@ def get_rows_from_dataframe(idx, chunk, train_psms, psms):
     )
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
-        train_psms[k].append(
+        train_psms[file_idx][k].append(
             chunk.loc[idx_].apply(pd.to_numeric, errors="ignore")
         )
 
 
-def parse_in_chunks(psms, train_idx, chunk_size):
+def concat_and_reindex_chunks(df, orig_idx):
+    return [pd.concat(df_fold).reindex(orig_idx_fold) for df_fold, orig_idx_fold in zip(df, orig_idx)]
+
+
+def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
     """
     Parse a file in chunks
 
@@ -330,10 +362,13 @@ def parse_in_chunks(psms, train_idx, chunk_size):
     ----------
     psms : OnDiskPsmDataset
         A collection of PSMs.
-    train_idx : list of list of indexes
+    train_idx : list of a list of a list of indexes (first level are training splits,
+        second one is the number of input files, third level the actual idexes
         The indexes to select from data.
     chunk_size : int
         The chunk size in bytes.
+    max_workers: int
+            Number of workers for Parallel
 
     Returns
     -------
@@ -341,20 +376,22 @@ def parse_in_chunks(psms, train_idx, chunk_size):
         list of dataframes
     """
 
-    train_psms = [[] for _ in range(len(train_idx))]
-    for _psms, idx in zip(psms, zip(*train_idx)):
+    train_psms = [[[] for _ in range(len(train_idx))] for _ in range(len(psms))]
+    for _psms, idx, file_idx in zip(psms, zip(*train_idx), range(len(psms))):
         reader = read_file_in_chunks(
             file=_psms.filename,
             chunk_size=chunk_size,
             use_cols=_psms.columns,
         )
-        Parallel(n_jobs=-1, require="sharedmem")(
-            delayed(get_rows_from_dataframe)(idx, chunk, train_psms, _psms)
+        Parallel(n_jobs=max_workers, require="sharedmem")(
+            delayed(get_rows_from_dataframe)(idx, chunk, train_psms, _psms, file_idx)
             for chunk in reader
         )
-    return Parallel(n_jobs=-1, require="sharedmem")(
-        delayed(pd.concat)(df) for df in train_psms
+    train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(
+        delayed(concat_and_reindex_chunks)(df=df, orig_idx=orig_idx)
+        for df, orig_idx in zip(train_psms, zip(*train_idx))
     )
+    return [pd.concat(df) for df in zip(*train_psms_reordered)]
 
 
 def _check_column(col, columns, default):
