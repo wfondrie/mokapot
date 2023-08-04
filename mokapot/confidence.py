@@ -80,6 +80,7 @@ class GroupedConfidence:
         self,
         psms,
         scores,
+        max_workers,
         desc=True,
         eval_fdr=0.01,
         decoys=False,
@@ -89,6 +90,7 @@ class GroupedConfidence:
         combine=False,
         prefixes=None,
         rng=0,
+        peps_error=False,
     ):
         """Initialize a GroupedConfidence object"""
         data = read_file(psms.filename, use_cols=list(psms.columns))
@@ -107,7 +109,7 @@ class GroupedConfidence:
             .index
         )
         append_to_group = False
-        group_file = "group_psms.csv"
+        group_file = f"{dest_dir}{prefixes}group_psms.csv"
         for group, group_df in data.groupby(self.group_column):
             LOGGER.info("Group: %s == %s", self.group_column, group)
             tdc_winners = group_df.index.intersection(idx)
@@ -118,6 +120,7 @@ class GroupedConfidence:
             psms.filename = group_file
             assign_confidence(
                 [psms],
+                max_workers,
                 [group_scores],
                 descs=[desc],
                 eval_fdr=eval_fdr,
@@ -130,6 +133,7 @@ class GroupedConfidence:
                 prefixes=prefixes,
                 append_to_output_file=append_to_group,
                 rng=rng,
+                peps_error=peps_error,
             )
             if combine:
                 append_to_group = True
@@ -432,6 +436,7 @@ class LinearConfidence(Confidence):
         decoys=None,
         deduplication=True,
         proteins=None,
+        peps_error=False,
         sep="\t",
         rng=0,
     ):
@@ -450,6 +455,7 @@ class LinearConfidence(Confidence):
             desc=desc,
             decoys=decoys,
             sep=sep,
+            peps_error=peps_error,
         )
 
         self.accepted = {}
@@ -488,6 +494,7 @@ class LinearConfidence(Confidence):
         out_paths,
         desc=True,
         decoys=False,
+        peps_error=False,
         sep="\t",
     ):
         """
@@ -582,6 +589,8 @@ class LinearConfidence(Confidence):
                     self.peps = 0
                 else:
                     raise
+            if peps_error and all(self.peps == 1):
+                raise ValueError("PEP values are all equal to 1.")
 
             logging.info(f"Writing {level} results...")
 
@@ -649,6 +658,7 @@ class CrossLinkedConfidence(Confidence):
         out_paths,
         desc=True,
         decoys=None,
+        peps_error=False,
         sep="\t",
     ):
         """Initialize a CrossLinkedConfidence object"""
@@ -662,6 +672,7 @@ class CrossLinkedConfidence(Confidence):
             desc=desc,
             decoys=decoys,
             sep=sep,
+            peps_error=peps_error,
         )
 
     def _assign_confidence(
@@ -670,6 +681,7 @@ class CrossLinkedConfidence(Confidence):
         out_paths,
         desc=True,
         decoys=False,
+        peps_error=False,
         sep="\t",
     ):
         """
@@ -705,6 +717,8 @@ class CrossLinkedConfidence(Confidence):
             _, self.peps = qvality.getQvaluesFromScores(
                 self.scores[self.targets == 2], self.scores[~self.targets]
             )
+            if peps_error and all(self.peps == 1):
+                raise ValueError("PEP values are all equal to 1.")
             logging.info(f"Writing {level} results...")
             self.to_txt(data_path, data_columns, level.lower(), decoys, sep)
 
@@ -712,6 +726,7 @@ class CrossLinkedConfidence(Confidence):
 # Functions -------------------------------------------------------------------
 def assign_confidence(
     psms,
+    max_workers,
     scores=None,
     descs=None,
     eval_fdr=0.01,
@@ -725,11 +740,13 @@ def assign_confidence(
     combine=False,
     append_to_output_file=False,
     rng=0,
+    peps_error=False,
 ):
     """Assign confidence to PSMs peptides, and optionally, proteins.
 
     Parameters
     ----------
+    max_workers
     psms : OnDiskPsmDataset
         A collection of PSMs.
     rng : int or np.random.Generator, optional
@@ -774,6 +791,7 @@ def assign_confidence(
         A :py:class:`~mokapot.confidence.LinearConfidence` object storing
         the confidence estimates for the collection of PSMs.
     """
+
     if scores is None:
         scores = []
         for _psms in psms:
@@ -785,8 +803,8 @@ def assign_confidence(
                 ].values
             )
 
-    psms_path = "psms.csv"
-    peptides_path = "peptides.csv"
+    psms_path = f"{dest_dir}psms.csv"
+    peptides_path = f"{dest_dir}peptides.csv"
     levels = ["psms"]
     level_data_path = [psms_path]
     if deduplication:
@@ -825,18 +843,20 @@ def assign_confidence(
             "score",
         ]
         if _psms.group_column is None:
+            if str(dest_dir)[-1] == ".":
+                dest_dir_prefix = dest_dir
+            else:
+                dest_dir_prefix = f"{dest_dir}/"
+            if prefix is not None:
+                dest_dir_prefix = dest_dir_prefix + f"{prefix}."
             out_files = []
             for level in levels:
-                if str(dest_dir)[-1] == ".":
-                    dest_dir_prefix = dest_dir
-                else:
-                    dest_dir_prefix = f"{dest_dir}/"
-                if prefix is not None:
-                    dest_dir_prefix = dest_dir_prefix + f"{prefix}."
                 if group_column is not None and not combine:
-                    dest_dir_prefix = f"{dest_dir_prefix}{group_column}."
-                outfile_t = str(dest_dir_prefix) + f"targets.{level}"
-                outfile_d = str(dest_dir_prefix) + f"decoys.{level}"
+                    dest_dir_prefix_group = f"{dest_dir_prefix}{group_column}."
+                else:
+                    dest_dir_prefix_group = dest_dir_prefix
+                outfile_t = str(dest_dir_prefix_group) + f"targets.{level}"
+                outfile_d = str(dest_dir_prefix_group) + f"decoys.{level}"
                 if not append_to_output_file:
                     with open(outfile_t, "w") as fp:
                         fp.write(f"{sep.join(output_columns[level])}\n")
@@ -856,7 +876,7 @@ def assign_confidence(
                 score, chunk_size=CONFIDENCE_CHUNK_SIZE
             )
 
-            Parallel(n_jobs=-1, require="sharedmem")(
+            Parallel(n_jobs=max_workers, require="sharedmem")(
                 delayed(save_sorted_metadata_chunks)(
                     chunk_metadata,
                     score_chunk,
@@ -864,13 +884,14 @@ def assign_confidence(
                     deduplication,
                     i,
                     sep,
+                    dest_dir_prefix
                 )
                 for chunk_metadata, score_chunk, i in zip(
                     reader, scores_slices, range(len(scores_slices))
                 )
             )
 
-            scores_metadata_paths = glob.glob("scores_metadata_*")
+            scores_metadata_paths = glob.glob(f"{dest_dir_prefix}scores_metadata_*")
             iterable_sorted = merge_sort(
                 scores_metadata_paths, col_score="score", sep=sep
             )
@@ -893,8 +914,8 @@ def assign_confidence(
                     unique_peptides,
                 ) = get_unique_psms_and_peptides(
                     iterable=iterable_sorted,
-                    out_psms="psms.csv",
-                    out_peptides="peptides.csv",
+                    out_psms=f"{dest_dir}psms.csv",
+                    out_peptides=f"{dest_dir}peptides.csv",
                     sep=sep,
                 )
                 LOGGER.info(
@@ -927,6 +948,7 @@ def assign_confidence(
                 deduplication=deduplication,
                 proteins=proteins,
                 rng=rng,
+                peps_error=peps_error,
             )
             if prefix is None:
                 append_to_output_file = True
@@ -935,6 +957,7 @@ def assign_confidence(
             GroupedConfidence(
                 _psms,
                 score,
+                max_workers,
                 eval_fdr=eval_fdr,
                 desc=desc,
                 dest_dir=dest_dir,
@@ -944,11 +967,12 @@ def assign_confidence(
                 combine=combine,
                 prefixes=[prefix],
                 rng=rng,
+                peps_error=peps_error,
             )
 
 
 def save_sorted_metadata_chunks(
-    chunk_metadata, score_chunk, psms, deduplication, i, sep
+    chunk_metadata, score_chunk, psms, deduplication, i, sep, dest_dir_prefix
 ):
     chunk_metadata = convert_targets_column(
         data=chunk_metadata.apply(pd.to_numeric, errors="ignore"),
@@ -959,7 +983,7 @@ def save_sorted_metadata_chunks(
     if deduplication:
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
     chunk_metadata.to_csv(
-        f"scores_metadata_{i}.csv",
+        f"{dest_dir_prefix}scores_metadata_{i}.csv",
         sep=sep,
         index=False,
         mode="w",

@@ -217,7 +217,7 @@ def test_cli_rescale(tmp_path, scope_files):
     """Test that rescale works"""
     cmd = [
         "mokapot",
-        scope_files[0],
+        scope_files[1],
         "--dest_dir",
         tmp_path,
         "--test_fdr",
@@ -228,7 +228,7 @@ def test_cli_rescale(tmp_path, scope_files):
 
     cmd = [
         "mokapot",
-        scope_files[1],
+        scope_files[0],
         "--dest_dir",
         tmp_path,
         "--test_fdr",

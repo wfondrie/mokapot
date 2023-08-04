@@ -46,13 +46,14 @@ def test_one_group(psm_df_1000, tmp_path):
         prefixes=[None],
         descs=[True],
         dest_dir=tmp_path,
+        max_workers=4,
     )
     df_results_group = pd.read_csv(tmp_path / "0.targets.peptides", sep="\t")
 
     np.random.seed(42)
     psms_disk.group_column = None
     assign_confidence(
-        [psms_disk], prefixes=[None], descs=[True], dest_dir=tmp_path
+        [psms_disk], prefixes=[None], descs=[True], dest_dir=tmp_path, max_workers=4,
     )
     df_results_no_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
 
@@ -93,7 +94,7 @@ def test_multi_groups(psm_df_100, tmp_path):
         spectra_dataframe=df_spectra,
     )
     assign_confidence(
-        [psms_disk], prefixes=[None], descs=[True], dest_dir=tmp_path
+        [psms_disk], prefixes=[None], descs=[True], dest_dir=tmp_path, max_workers=4,
     )
     assert Path(tmp_path, f"{0}.targets.psms").exists()
     assert Path(tmp_path, f"{1}.targets.psms").exists()

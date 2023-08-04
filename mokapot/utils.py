@@ -68,6 +68,21 @@ def create_chunks(data, chunk_size):
     return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
+def get_unique_peptides_from_psms(
+    iterable, peptide_col_index, out_peptides, sep
+):
+    f_peptide = open(out_peptides, "a")
+    seen_peptide = set()
+    for line_list in iterable:
+        line_hash_peptide = line_list[peptide_col_index]
+        if line_hash_peptide not in seen_peptide:
+            seen_peptide.add(line_hash_peptide)
+            f_peptide.write(f"{sep.join(line_list[:4] + [line_list[-1]])}")
+
+    f_peptide.close()
+    return len(seen_peptide)
+
+
 def get_unique_psms_and_peptides(iterable, out_psms, out_peptides, sep):
     seen_psm = set()
     seen_peptide = set()
@@ -111,12 +126,12 @@ def get_next_row(file_handles, current_rows, col_index, sep="\t"):
         file_handles[max_key].close()
         del current_rows[max_key]
         del file_handles[max_key]
-        return max_row
+        return [max_row, max_key]
 
-    return max_row
+    return [max_row, max_key]
 
 
-def merge_sort(paths, col_score, sep="\t"):
+def merge_sort(paths, col_score, target_column=None, sep="\t"):
     file_handles = {i: open(path, "r") for i, path in enumerate(paths)}
     current_rows = {}
     for key, f in file_handles.items():
@@ -128,8 +143,10 @@ def merge_sort(paths, col_score, sep="\t"):
         header = next(f)
     col_index = header.rstrip().split(sep).index(col_score)
     while file_handles != {}:
-        row = get_next_row(file_handles, current_rows, col_index)
+        [row, key] = get_next_row(file_handles, current_rows, col_index)
         if row is not None:
+            if target_column:
+                row.insert(1, str(key))
             yield row
 
 

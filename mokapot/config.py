@@ -332,6 +332,13 @@ def _parser():
     )
 
     parser.add_argument(
+        "--peps_error",
+        default=False,
+        action="store_true",
+        help=("raise error when all PEPs values are equal to 1."),
+    )
+
+    parser.add_argument(
         "--open_modification_bin_size",
         type=float,
         help=(
