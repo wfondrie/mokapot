@@ -1,10 +1,11 @@
 """
 This file contains fixtures that are used at multiple points in the tests.
 """
-import pytest
 import numpy as np
 import pandas as pd
-from mokapot import LinearPsmDataset
+import pytest
+
+from mokapot import PsmDataset
 
 
 @pytest.fixture(scope="session")
@@ -68,9 +69,9 @@ def psm_df_1000(tmp_path):
 
 @pytest.fixture
 def psms(psm_df_1000):
-    """A small LinearPsmDataset"""
+    """A small PsmDataset"""
     df, _ = psm_df_1000
-    psms = LinearPsmDataset(
+    psms = PsmDataset(
         psms=df,
         target_column="target",
         spectrum_columns="spectrum",
