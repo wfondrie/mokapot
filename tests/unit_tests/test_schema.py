@@ -2,13 +2,13 @@
 import polars as pl
 import pytest
 
-from mokapot import PsmColumns
+from mokapot import PsmSchema
 
 
 def test_init():
     """Test that we can init it."""
     # Only required:
-    cols = PsmColumns(
+    cols = PsmSchema(
         target="x",
         spectrum=["y", "z"],
         peptide="p",
@@ -16,7 +16,7 @@ def test_init():
     assert cols.target == "x"
     assert cols.group is None
 
-    cols = PsmColumns(
+    cols = PsmSchema(
         target="x",
         spectrum=["y", "z"],
         peptide="p",
@@ -38,14 +38,14 @@ def test_init():
 def test_init_errors():
     """Test initialization errors"""
     with pytest.raises(ValueError):
-        PsmColumns(
+        PsmSchema(
             target="x",
             spectrum=["y", "z"],
             peptide=None,
         )
 
     with pytest.raises(ValueError):
-        PsmColumns(
+        PsmSchema(
             target=["a", "x"],
             spectrum=["y", "z"],
             peptide="p",
@@ -58,7 +58,7 @@ def test_good_data():
         {"t": [True, False], "s": [1, 2], "p": ["A", "B"]}
     ).lazy()
 
-    cols = PsmColumns("t", "s", "p")
+    cols = PsmSchema("t", "s", "p")
     cols.validate(df)
 
 
@@ -68,7 +68,7 @@ def test_missing_column():
         {"t": [True, False], "s": [1, 2], "p": ["A", "B"]}
     ).lazy()
 
-    cols = PsmColumns("t", "s", "p", "x")
+    cols = PsmSchema("t", "s", "p", "x")
     with pytest.raises(ValueError):
         cols.validate(df)
 
@@ -76,26 +76,27 @@ def test_missing_column():
 def test_labels():
     """Test that labels are working correctly."""
     df = pl.DataFrame(
-        {"t": [True, False], "s": [1, 2], "p": ["A", "B"]}
+        {"t": [True, False], "s": [1, 2], "p": ["A", "B"], "f": [1, 2]}
     ).lazy()
 
-    cols = PsmColumns("t", "s", "p")
+    cols = PsmSchema("t", "s", "p")
     assert not cols.validate(df)
+    assert cols.features == ["f"]
 
     df = pl.DataFrame({"t": [1, -1], "s": [1, 2], "p": ["A", "B"]}).lazy()
 
-    cols = PsmColumns("t", "s", "p")
+    cols = PsmSchema("t", "s", "p")
     assert cols.validate(df)
 
     df = pl.DataFrame({"t": [1, 0], "s": [1, 2], "p": ["A", "B"]}).lazy()
 
-    cols = PsmColumns("t", "s", "p")
+    cols = PsmSchema("t", "s", "p")
     assert not cols.validate(df)
 
     df = pl.DataFrame(
         {"t": [1, 0, -1], "s": [1, 2, 3], "p": ["A", "B", "C"]}
     ).lazy()
 
-    cols = PsmColumns("t", "s", "p")
+    cols = PsmSchema("t", "s", "p")
     with pytest.raises(ValueError):
         cols.validate(df)

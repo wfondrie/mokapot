@@ -10,7 +10,7 @@ import polars as pl
 from . import utils
 
 
-class _ColumnValidatorMixin:
+class _SchemaValidatorMixin:
     """Methods to validate columns for a dataset.
 
     Parameters
@@ -93,9 +93,12 @@ class _ColumnValidatorMixin:
 
         # all of the unique columns:
         all_cols = set(sum(all_cols, []))
-        print(all_cols)
 
-        # Verify they all are present in the data.
+        # Add features as needed:
+        if self.features is None:
+            self.features = [c for c in data.columns if c not in all_cols]
+
+        # Verify they all specified columns are present in the data.
         missing = [
             c for c in all_cols if c not in data.columns and c is not None
         ]
@@ -160,7 +163,7 @@ class _ColumnValidatorMixin:
 
 
 @dataclass
-class PsmColumns(_ColumnValidatorMixin):
+class PsmSchema(_SchemaValidatorMixin):
     """The columns for a dataset of PSMs.
 
     Parameters

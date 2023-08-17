@@ -1,20 +1,5 @@
 """Initialize the mokapot package."""
-try:
-    from importlib.metadata import PackageNotFoundError, version
-
-    try:
-        __version__ = version(__name__)
-    except PackageNotFoundError:
-        pass
-
-except ImportError:
-    from pkg_resources import DistributionNotFound, get_distribution
-
-    try:
-        __version__ = get_distribution(__name__).version
-    except DistributionNotFound:
-        pass
-
+from .version import _get_version
 
 # from .model import Model, PercolatorModel, save_model, load_model
 # from .brew import brew
@@ -22,3 +7,6 @@ except ImportError:
 # from .parsers.fasta import read_fasta, make_decoys, digest
 # from .writers import to_flashlfq, to_txt
 # from .confidence import LinearConfidence, plot_qvalues
+
+
+__version__ = _get_version()

@@ -17,15 +17,11 @@ confidence estimates, rather than initializing the classes below directly.
 """
 import copy
 import logging
-from pathlib import Path
 
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from triqler import qvality
 
-from . import qvalues
-from . import utils
+from . import qvalues, utils
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
 
@@ -285,40 +281,6 @@ class Confidence(object):
             self._rng,
         )
         self._data = self._data.loc[psm_idx, :]
-
-    def plot_qvalues(self, level="psms", threshold=0.1, ax=None, **kwargs):
-        """Plot the cumulative number of discoveries over range of q-values.
-
-        The available levels can be found using
-        :py:meth:`~mokapot.confidence.Confidence.levels` attribute.
-
-        Parameters
-        ----------
-        level : str, optional
-            The level of q-values to report.
-        threshold : float, optional
-            Indicates the maximum q-value to plot.
-        ax : matplotlib.pyplot.Axes, optional
-            The matplotlib Axes on which to plot. If `None` the current
-            Axes instance is used.
-        **kwargs : dict, optional
-            Arguments passed to :py:func:`matplotlib.pyplot.plot`.
-
-        Returns
-        -------
-        matplotlib.pyplot.Axes
-            An :py:class:`matplotlib.axes.Axes` with the cumulative
-            number of accepted target PSMs or peptides.
-        """
-        qvals = self.confidence_estimates[level]["mokapot q-value"]
-        if qvals is None:
-            raise ValueError(f"{level}-level estimates are unavailable.")
-
-        ax = plot_qvalues(qvals, threshold=threshold, ax=ax, **kwargs)
-        ax.set_xlabel("q-value")
-        ax.set_ylabel(f"Accepted {self._level_labs[level]}")
-
-        return ax
 
 
 class LinearConfidence(Confidence):
@@ -601,61 +563,6 @@ class CrossLinkedConfidence(Confidence):
             )
             data["mokapot PEP"] = pep
             self._confidence_estimates[level] = data
-
-
-# Functions -------------------------------------------------------------------
-def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
-    """
-    Plot the cumulative number of discoveries over range of q-values.
-
-    Parameters
-    ----------
-    qvalues : numpy.ndarray
-        The q-values to plot.
-    threshold : float, optional
-        Indicates the maximum q-value to plot.
-    ax : matplotlib.pyplot.Axes, optional
-        The matplotlib Axes on which to plot. If `None` the current
-        Axes instance is used.
-    **kwargs : dict, optional
-        Arguments passed to :py:func:`matplotlib.axes.Axes.plot`.
-
-    Returns
-    -------
-    matplotlib.pyplot.Axes
-        An :py:class:`matplotlib.axes.Axes` with the cumulative
-        number of accepted target PSMs or peptides.
-    """
-    if ax is None:
-        ax = plt.gca()
-
-    # Calculate cumulative targets at each q-value
-    qvals = pd.Series(qvalues, name="qvalue")
-    qvals = qvals.sort_values(ascending=True).to_frame()
-    qvals["target"] = 1
-    qvals["num"] = qvals["target"].cumsum()
-    qvals = qvals.groupby(["qvalue"]).max().reset_index()
-    qvals = qvals[["qvalue", "num"]]
-
-    zero = pd.DataFrame({"qvalue": qvals["qvalue"][0], "num": 0}, index=[-1])
-    qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
-
-    xmargin = threshold * 0.05
-    ymax = qvals.num[qvals["qvalue"] <= (threshold + xmargin)].max()
-    ymargin = ymax * 0.05
-
-    # Set margins
-    curr_ylims = ax.get_ylim()
-    if curr_ylims[1] < ymax + ymargin:
-        ax.set_ylim(0 - ymargin, ymax + ymargin)
-
-    ax.set_xlim(0 - xmargin, threshold + xmargin)
-    ax.set_xlabel("q-value")
-    ax.set_ylabel(f"Discoveries")
-
-    ax.step(qvals["qvalue"].values, qvals.num.values, where="post", **kwargs)
-
-    return ax
 
 
 def _new_column(name, df):
