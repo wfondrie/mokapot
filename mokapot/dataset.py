@@ -65,6 +65,7 @@ class _BaseDataset:
     Attributes
     ----------
     data : polars.LazyFrame
+    columns : list of str
     targets : numpy.ndarray
     features : numpy.ndarray
     proteins : mokapot.Proteins
@@ -90,10 +91,19 @@ class _BaseDataset:
         self.eval_fdr = eval_fdr
         self.proteins = proteins
 
+        # Try and read data.
+        # This should work with pl.DataFrame, pl.LazyFrame,
+        # pd.DataFrame, or dictionary.
         try:
             self._data = data.lazy()
-        except AttributeError:
-            self._data = pl.from_pandas(data).lazy()
+        except AttributeError as exc:
+            try:
+                self._data = pl.from_pandas(data).lazy()
+            except ValueError:
+                try:
+                    self._data = pl.DataFrame(data).lazy()
+                except ValueError:
+                    raise ValueError("Incompatible type for 'data'") from exc
 
         self._perc_style_targets = schema.validate(self._data)
         self._stratification = stratification
@@ -143,11 +153,6 @@ class _BaseDataset:
             .flatten()
         )
 
-    @property
-    def data(self) -> pl.LazyFrame:
-        """The underyling data."""
-        return self._data
-
     def __len__(self) -> int:
         """The number of examples"""
         if self._len is None:
@@ -156,6 +161,16 @@ class _BaseDataset:
             )
 
         return self._len
+
+    @property
+    def data(self) -> pl.LazyFrame:
+        """The underyling data."""
+        return self._data
+
+    @property
+    def columns(self) -> list[str]:
+        """The columns in the underlying data."""
+        return self.data.columns
 
     @property
     def features(self) -> np.ndarray:
@@ -410,6 +425,9 @@ class PsmDataset(_BaseDataset):
     Attributes
     ----------
     data : polars.LazyFrame
+    schema : PsmSchema
+        The meaning of the columns in the data.
+    columns : list of str
     targets : numpy.ndarray
     features : numpy.ndarray
     proteins : mokapot.Proteins

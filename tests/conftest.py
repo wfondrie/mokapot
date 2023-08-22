@@ -2,10 +2,10 @@
 This file contains fixtures that are used at multiple points in the tests.
 """
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 
-from mokapot import PsmDataset
+from mokapot import PsmDataset, PsmSchema
 
 
 @pytest.fixture(scope="session")
@@ -20,12 +20,21 @@ def psm_df_6():
         "feature_1": [4, 3, 2, 2, 1, 0],
         "feature_2": [2, 3, 4, 1, 2, 3],
     }
-    return pd.DataFrame(data)
+
+    schema = dict(
+        target="target",
+        spectrum="spectrum",
+        group="group",
+        peptide="peptide",
+        metadata="protein",
+    )
+    return pl.DataFrame(data), schema
 
 
 @pytest.fixture()
 def psm_df_1000(tmp_path):
     """A DataFrame with 1000 PSMs from 500 spectra and a FASTA file."""
+    # The simulated data:
     rng = np.random.Generator(np.random.PCG64(42))
     targets = {
         "target": [True] * 500,
@@ -35,6 +44,7 @@ def psm_df_1000(tmp_path):
         "score": np.concatenate(
             [rng.normal(3, size=200), rng.normal(size=300)]
         ),
+        "score2": rng.normal(size=500),
         "filename": "test.mzML",
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
@@ -48,6 +58,7 @@ def psm_df_1000(tmp_path):
         "group": rng.choice(2, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "score": rng.normal(size=500),
+        "score2": rng.normal(size=500),
         "filename": "test.mzML",
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
@@ -55,6 +66,23 @@ def psm_df_1000(tmp_path):
         "charge": rng.choice([2, 3, 4], size=500),
     }
 
+    df = pl.concat([pl.DataFrame(targets), pl.DataFrame(decoys)])
+
+    # The schema for it:
+    schema_kwargs = dict(
+        target="target",
+        spectrum="spectrum",
+        peptide="peptide",
+        features=["score", "score2"],
+        file="filename",
+        scan="spectrum",
+        calcmass="calcmass",
+        expmass="expmass",
+        ret_time="ret_time",
+        charge="charge",
+    )
+
+    # The fasta for it:
     fasta_data = "\n".join(
         _make_fasta(100, targets["peptide"], 10, rng)
         + _make_fasta(100, decoys["peptide"], 10, rng, "decoy")
@@ -64,28 +92,14 @@ def psm_df_1000(tmp_path):
     with open(fasta, "w+") as fasta_ref:
         fasta_ref.write(fasta_data)
 
-    return (pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)]), fasta)
+    return df, fasta, schema_kwargs
 
 
 @pytest.fixture
 def psms(psm_df_1000):
     """A small PsmDataset"""
-    df, _ = psm_df_1000
-    psms = PsmDataset(
-        psms=df,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        filename_column="filename",
-        scan_column="spectrum",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
-        copy_data=True,
-    )
-    return psms
+    df, _, schema_kwargs = psm_df_1000
+    return PsmDataset(data=df, schema=PsmSchema(**schema_kwargs))
 
 
 def _make_fasta(
@@ -131,12 +145,13 @@ def _random_peptide(length, random_state):
 
 @pytest.fixture
 def mock_proteins():
-    class proteins:
+    class Proteins:
         def __init__(self):
             self.peptide_map = {"ABCDXYZ": "X|Y|Z"}
             self.shared_peptides = {"ABCDEFG": "A|B|C; X|Y|Z"}
+            self.protein_map = {"X|Y|Z": "A|B|C"}
 
-    return proteins()
+    return Proteins()
 
 
 @pytest.fixture
@@ -158,7 +173,7 @@ def mock_conf():
             self._proteins = None
             self._has_proteins = False
 
-            self.peptides = pd.DataFrame(
+            self.peptides = pl.DataFrame(
                 {
                     "filename": "a/b/c.mzML",
                     "calcmass": [1, 2],
