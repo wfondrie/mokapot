@@ -29,10 +29,14 @@ def test_init():
         charge="g",
         metadata="h",
         features="i",
+        score="j",
+        desc=False,
     )
 
     assert cols.spectrum == ["y", "z"]
     assert cols.group == ["a"]
+    assert cols.score == "j"
+    assert not cols.desc
 
 
 def test_init_errors():

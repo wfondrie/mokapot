@@ -1,12 +1,15 @@
 """
 This module estimates q-values.
 """
-import numpy as np
-import pandas as pd
 import numba as nb
+import numpy as np
 
 
-def tdc(scores, target, desc=True):
+def tdc(
+    scores: np.ndarray,
+    target: np.ndarray,
+    desc: bool | None = True,
+):
     """
     Estimate q-values using target decoy competition.
 
@@ -41,9 +44,10 @@ def tdc(scores, target, desc=True):
         `metric[i]`; thus `target` and `metric` should be of
         equal length.
 
-    desc : bool
+    desc : bool or None, optional
         Are higher scores better? `True` indicates that they are,
-        `False` indicates that they are not.
+        `False` indicates that they are not. `None` indicates that
+        the data are already sorted.
 
     Returns
     -------
@@ -66,14 +70,17 @@ def tdc(scores, target, desc=True):
     if np.issubdtype(scores.dtype, np.integer):
         scores = scores.astype(np.float_)
 
-    # Sort and estimate FDR
-    if desc:
-        srt_idx = np.argsort(-scores)
-    else:
-        srt_idx = np.argsort(scores)
+    # Sort only if required:
+    if desc is not None:
+        if desc:
+            srt_idx = np.argsort(-scores)
+        else:
+            srt_idx = np.argsort(scores)
 
-    scores = scores[srt_idx]
-    target = target[srt_idx]
+        scores = scores[srt_idx]
+        target = target[srt_idx]
+
+    # Compute FDR
     cum_targets = target.cumsum()
     cum_decoys = ((target - 1) ** 2).cumsum()
     num_total = cum_targets + cum_decoys
@@ -99,7 +106,9 @@ def tdc(scores, target, desc=True):
 
     qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
     qvals = np.flip(qvals)
-    qvals = qvals[np.argsort(srt_idx)]
+
+    if desc is not None:
+        qvals = qvals[np.argsort(srt_idx)]
 
     return qvals
 

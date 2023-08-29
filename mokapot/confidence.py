@@ -1,6 +1,6 @@
 """One of the primary purposes of mokapot is to assign confidence estimates to
 PSMs. This task is accomplished by ranking PSMs according to a score and using
-an appropriate confidence estimation procedure for the type of data. mokapot
+an appropriate confidence estimation procedure for the type of data. Mokapot
 can provide confidence estimates based any score, regardless of whether it was
 the result of a learned :py:func:`~mokapot.model.Model` instance or provided
 independently.
@@ -8,231 +8,181 @@ independently.
 The following classes store the confidence estimates for a dataset based on the
 provided score. They provide utilities to access, save, and plot these
 estimates for the various relevant levels (i.e. PSMs, peptides, and proteins).
-The :py:func:`LinearConfidence` class is appropriate for most data-dependent
-acquisition proteomics datasets.
+The :py:class:`~mokapot.confidence.PsmConfidence` class is appropriate for most
+data-dependent acquisition proteomics datasets. In contrast, the
+:py:class:`~mokapot.confidence.PeptideConfidence` class uses peptide-level
+competition to assign confidence to peptides, which is particularly relevant
+for data-independent acquisition proteomics datasets.
 
 We recommend using the :py:func:`~mokapot.brew()` function or the
-:py:meth:`~mokapot.LinearPsmDataset.assign_confidence()` method to obtain these
+:py:meth:`~mokapot.PsmDataset.assign_confidence()` method to obtain these
 confidence estimates, rather than initializing the classes below directly.
 """
-import copy
-import logging
+from __future__ import annotations
 
-import pandas as pd
+import logging
+from dataclasses import dataclass
+
+import numpy as np
+import polars as pl
 from triqler import qvality
 
 from . import qvalues, utils
+from .base import BaseData
 from .picked_protein import picked_protein
+from .proteins import Proteins
+from .schema import PsmSchema
 from .writers import to_flashlfq, to_txt
 
 LOGGER = logging.getLogger(__name__)
 
 
-# Classes ---------------------------------------------------------------------
-class GroupedConfidence:
-    """Perform grouped confidence estimation for a collection of PSMs.
-
-    Groups are defined by the :py:class:`~mokapot.dataset.LinearPsmDataset`.
-    Confidence estimates for each group can be retrieved by using the group
-    name as an attribute, or from the
-    :py:meth:`~GroupedConfidence.group_confidence_estimates` property.
+class Confidence(BaseData):
+    """Estimate and store the statistical confidence for a collection of PSMs.
 
     Parameters
     ----------
-    psms : LinearPsmDataset object
-        A collection of PSMs.
+    data : polars.DataFrame, polars.LazyFrame, or pandas.DataFrame
+        A collection of examples, where the rows are an example and the columns
+        are features or metadata describing them.
+    schema : mokapot.PsmSchema
+        The meaning of the columns in the data.
     scores : np.ndarray
         A vector containing the score of each PSM.
     desc : bool
         Are higher scores better?
+    proteins : mokapot.Proteins
+        The proteins to use for protein-level confidence estimation. This
+        may be created with :py:func:`mokapot.read_fasta()`.
     eval_fdr : float
-        The FDR threshold at which to report performance. This parameter
-        has no affect on the analysis itself, only logging messages.
-    rng : int, np.random.Generator, optional
-        A seed or generator used to break ties, or None to use the
-        default random number generator state.
+        The false discovery rate threshold for choosing the best feature and
+        creating positive labels during the trainging procedure.
+    rng : int or np.random.Generator
+        A seed or generator used for cross-validation split creation and to
+        break ties, or :code:`None` to use the default random number
+        generator state.
+    unit : str
+        The unit to use in logging messages.
+    levels : list of TdcLevel
+        The levels on which to compute confidence estimates.
 
     Attributes
     ----------
-    groups: List
-    group_confidence_estimates: Dict
-    """
-
-    def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
-        """Initialize a GroupedConfidence object"""
-        group_psms = copy.copy(psms)
-        self.group_column = group_psms._group_column
-        group_psms._group_column = None
-
-        # Do TDC to eliminate multiples PSMs for a spectrum that may occur
-        # in different groups.
-        keep = "last" if desc else "first"
-        scores = (
-            pd.Series(scores, index=psms._data.index)
-            .sample(frac=1)
-            .sort_values()
-        )
-
-        idx = (
-            psms.data.loc[scores.index, :]
-            .drop_duplicates(psms._spectrum_columns, keep=keep)
-            .index
-        )
-
-        self._group_confidence_estimates = {}
-        for group, group_df in psms._data.groupby(psms._group_column):
-            LOGGER.info("Group: %s == %s", self.group_column, group)
-            group_psms._data = None
-            tdc_winners = group_df.index.intersection(idx)
-            group_psms._data = group_df.loc[tdc_winners, :]
-            group_scores = scores.loc[group_psms._data.index].values
-            res = group_psms.assign_confidence(
-                group_scores,
-                desc=desc,
-                eval_fdr=eval_fdr,
-            )
-            self._group_confidence_estimates[group] = res
-
-    @property
-    def group_confidence_estimates(self):
-        """A dictionary of the confidence estimates for each group."""
-        return self._group_confidence_estimates
-
-    @property
-    def groups(self):
-        """The groups for confidence estimation"""
-        return list(self._group_confidence_estimates.keys())
-
-    def to_txt(
-        self,
-        dest_dir=None,
-        file_root=None,
-        sep="\t",
-        decoys=False,
-        combine=False,
-    ):
-        """Save confidence estimates to delimited text files.
-
-        Parameters
-        ----------
-        dest_dir : str or None, optional
-            The directory in which to save the files. `None` will use the
-            current working directory.
-        file_root : str or None, optional
-            An optional prefix for the confidence estimate files. The suffix
-            will be "mokapot.{level}.txt", where "{level}" indicates the level
-            at which confidence estimation was performed (i.e. PSMs, peptides,
-            proteins) if :code:`combine=True`. If :code:`combine=False` (the
-            default), additionally the group value is prepended, yeilding a
-            suffix "{group}.mokapot.{level}.txt".
-        sep : str, optional
-            The delimiter to use.
-        decoys : bool, optional
-            Save decoys confidence estimates as well?
-        combine : bool, optional
-            Should groups be combined into a single file?
-
-        Returns
-        -------
-        list of str
-            The paths to the saved files.
-
-        """
-        if combine:
-            res = self.group_confidence_estimates.values()
-            ret_files = to_txt(
-                res,
-                dest_dir=dest_dir,
-                file_root=file_root,
-                sep=sep,
-                decoys=decoys,
-            )
-            return ret_files
-
-        ret_files = []
-        for group, res in self.group_confidence_estimates.items():
-            prefix = file_root + f".{group}"
-            new_files = res.to_txt(
-                dest_dir=dest_dir, file_root=prefix, sep=sep, decoys=decoys
-            )
-            ret_files.append(new_files)
-
-        return ret_files
-
-    def __repr__(self):
-        """Nice printing."""
-        ngroups = len(self.group_confidence_estimates)
-        lines = [
-            "A mokapot.confidence.GroupedConfidence object with "
-            f"{ngroups} groups:\n"
-        ]
-
-        for group, conf in self.group_confidence_estimates.items():
-            lines += [f"Group: {self.group_column} == {group}"]
-            lines += ["-" * len(lines[-1])]
-            lines += [str(conf)]
-
-        return "\n".join(lines)
-
-    def __getattr__(self, attr):
-        """Make groups accessible easily"""
-        try:
-            return self.group_confidence_estimates[attr]
-        except KeyError:
-            raise AttributeError
-
-    def __len__(self):
-        """Report the number of groups"""
-        return len(self.group_confidence_estimates)
-
-
-class Confidence(object):
-    """Estimate and store the statistical confidence for a collection of PSMs.
+    data : polars.LazyFrame
+    columns : list of str
+    targets : numpy.ndarray
+    proteins : mokapot.Proteins
+    rng : numpy.random.Generator
 
     :meta private:
     """
 
-    _level_labs = {
-        "psms": "PSMs",
-        "peptides": "Peptides",
-        "proteins": "Proteins",
-        "csms": "Cross-Linked PSMs",
-        "peptide_pairs": "Peptide Pairs",
-    }
+    def __init__(
+        self,
+        data: pl.DataFrame | pl.LazyFrame | dict,
+        schema: PsmSchema,
+        scores: np.ndarray | pl.Series,
+        desc: bool,
+        proteins: Proteins | None,
+        eval_fdr: float,
+        rng: float | None,
+        unit: str,
+        levels: list[TdcLevel],
+    ) -> None:
+        """Initialize a Confidence object."""
+        super().__init__(
+            data=data,
+            schema=schema,
+            proteins=proteins,
+            eval_fdr=eval_fdr,
+            unit=unit,
+            rng=rng,
+        )
 
-    def __init__(self, psms, scores, desc):
-        """Initialize a PsmConfidence object."""
-        self._data = psms.metadata
-        self._score_column = _new_column("score", self._data)
-        self._has_proteins = psms.has_proteins
-        self._rng = psms.rng
-        if psms.has_proteins:
-            self._proteins = psms._proteins
-        else:
-            self._proteins = None
+        keep_cols = [
+            c
+            for c in self.data.columns
+            if c not in schema.features or c in schema.metadata
+        ]
 
-        # Flip sign of scores if not descending
-        self._data[self._score_column] = scores * (desc * 2 - 1)
+        # Create the scores Series.
+        try:
+            self.schema.score = scores.name
+        except AttributeError:
+            self.schema.score = "provided score"
 
-        # This attribute holds the results as DataFrames:
+        self.schema.desc = bool(desc)
+        self._levels = levels
+        self._data = self.data.select(keep_cols).with_columns(
+            pl.lit(scores).alias(self.schema.score)
+        )
+
+        # Add proteins if necessary
+        if self.proteins is not None:
+            protein_groups = picked_protein(
+                data=self.data,
+                schema=self.schema,
+                proteins=self.proteins,
+                rng=self.rng,
+            )
+            self._data = self.data.with_columns(
+                pl.lit(protein_groups).alias("mokapot protein group")
+            )
+
+            self._levels.append(
+                TdcLevel(
+                    name="proteins",
+                    columns="mokapot protein group",
+                    unit="protein groups",
+                    schema=self.schema,
+                    rng=self.rng,
+                )
+            )
+
+        # Transform the labels into the correct format,
+        # replacing the original coluimn in the dataframe.
+        # Also sort for TDC.
+        # The '__rand__' column is used to ensure ties are broken
+        # randomly.
+        n_rows = self.data.select(pl.count()).collect(streaming=True).item()
+        self._data = (
+            self.data.with_columns(
+                pl.lit(self.targets).alias(schema.target),
+                pl.lit(self.rng.random(n_rows, dtype=np.float32)).alias(
+                    "__rand__"
+                ),
+            )
+            .sort(by=[schema.score, "__rand__"], descending=schema.desc)
+            .drop("__rand__")
+        )
+
+        # These attribute holds the results as DataFrames:
         self.confidence_estimates = {}
         self.decoy_confidence_estimates = {}
-
-    def __getattr__(self, attr):
-        if attr.startswith("__"):
-            return super().__getattr__(attr)
-
-        try:
-            return self.confidence_estimates[attr]
-        except KeyError:
-            raise AttributeError
+        self.num_accepted = {}
+        self._assign_confidence()
 
     @property
-    def levels(self):
+    def desc(self) -> bool:
+        """Are higher scores better?"""
+        return self.schema.desc
+
+    @property
+    def levels(self) -> list[str]:
         """
         The available levels for confidence estimates.
         """
-        return list(self.confidence_estimates.keys())
+        return [x.name for x in self._levels]
+
+    def __getattr__(self, attr):
+        """Add confidence estimates as attributes."""
+        if "confidence_estimates" not in vars(self):
+            raise AttributeError
+
+        try:
+            return self.confidence_estimates[attr].collect(streaming=True)
+        except KeyError as exc:
+            raise AttributeError from exc
 
     def to_txt(self, dest_dir=None, file_root=None, sep="\t", decoys=False):
         """Save confidence estimates to delimited text files.
@@ -266,40 +216,64 @@ class Confidence(object):
             decoys=decoys,
         )
 
-    def _perform_tdc(self, psm_columns):
-        """Perform target-decoy competition.
+    def _assign_confidence(self) -> None:
+        """Assign confidence estimates for the various levels."""
+        data = self._data
+        filter_expr = pl.col("mokapot q-value") <= self.eval_fdr
+        for level in self._levels:
+            data = level.assign_confidence(data)
+            self.confidence_estimates[level.name] = data.filter(
+                pl.col(self.schema.target)
+            ).drop([self.schema.target])
 
-        Parameters
-        ----------
-        psm_columns : str or list of str
-            The columns that define a PSM.
-        """
-        psm_idx = utils.groupby_max(
-            self._data,
-            psm_columns,
-            self._score_column,
-            self._rng,
-        )
-        self._data = self._data.loc[psm_idx, :]
+            self.decoy_confidence_estimates[level.name] = data.filter(
+                ~pl.col(self.schema.target)
+            ).drop([self.schema.target])
+
+            n_accepted = (
+                data.filter(pl.col(self.schema.target) & filter_expr)
+                .select(pl.count())
+                .collect(streaming=True)
+                .item()
+            )
+
+            self.num_accepted[level.name] = n_accepted
+            LOGGER.info(
+                "  - Found %i %s with q<=%g",
+                n_accepted,
+                level.unit,
+                self.eval_fdr,
+            )
+            data = data.clone().drop(["mokapot q-value", "mokapot PEP"])
 
 
-class LinearConfidence(Confidence):
+class PsmConfidence(Confidence):
     """Assign confidence estimates to a set of PSMs
 
-    Estimate q-values and posterior error probabilities (PEPs) for PSMs and
-    peptides when ranked by the provided scores.
+    Estimate q-values and posterior error probabilities (PEPs) for PSMs,
+    peptides, and optionally proteins when ranked by the provided scores.
 
     Parameters
     ----------
-    psms : LinearPsmDataset object
-        A collection of PSMs.
+    data : polars.DataFrame, polars.LazyFrame, or pandas.DataFrame
+        A collection of examples, where the rows are an example and the columns
+        are features or metadata describing them.
+    schema : mokapot.PsmSchema
+        The meaning of the columns in the data.
     scores : np.ndarray
         A vector containing the score of each PSM.
     desc : bool
         Are higher scores better?
+    proteins : mokapot.Proteins
+        The proteins to use for protein-level confidence estimation. This
+        may be created with :py:func:`mokapot.read_fasta()`.
     eval_fdr : float
-        The FDR threshold at which to report performance. This parameter
-        has no affect on the analysis itself, only logging messages.
+        The false discovery rate threshold for choosing the best feature and
+        creating positive labels during the trainging procedure.
+    rng : int or np.random.Generator
+        A seed or generator used for cross-validation split creation and to
+        break ties, or :code:`None` to use the default random number
+        generator state.
 
     Attributes
     ----------
@@ -316,147 +290,61 @@ class LinearConfidence(Confidence):
         A dictionary of confidence estimates for the decoys at each level.
     """
 
-    def __init__(self, psms, scores, desc=True, eval_fdr=0.01):
+    def __init__(
+        self,
+        data: pl.DataFrame | pl.LazyFrame | dict,
+        schema: PsmSchema,
+        scores: np.ndarray | pl.Series,
+        desc: bool = True,
+        proteins: Proteins | None = None,
+        eval_fdr: float = 0.01,
+        rng: float | None = None,
+    ) -> None:
         """Initialize a a LinearPsmConfidence object"""
-        super().__init__(psms, scores, desc)
-        self._target_column = _new_column("target", self._data)
-        self._data[self._target_column] = psms.targets
-        self._psm_columns = psms._spectrum_columns
-        self._peptide_column = psms._peptide_column
-        self._protein_column = psms._protein_column
-        self._optional_columns = psms._optional_columns
-        self._eval_fdr = eval_fdr
-
         LOGGER.info("Performing target-decoy competition...")
-        LOGGER.info(
-            "Keeping the best match per %s columns...",
-            "+".join(self._psm_columns),
+        super().__init__(
+            data=data,
+            schema=schema,
+            scores=scores,
+            desc=desc,
+            proteins=proteins,
+            eval_fdr=eval_fdr,
+            rng=rng,
+            unit="PSMs",
+            levels=[
+                TdcLevel(
+                    name="psms",
+                    columns=schema.spectrum,
+                    unit="PSMs",
+                    schema=schema,
+                    rng=rng,
+                ),
+                TdcLevel(
+                    name="peptides",
+                    columns=schema.peptide,
+                    unit="peptides",
+                    schema=schema,
+                    rng=rng,
+                ),
+            ],
         )
-
-        self._perform_tdc(self._psm_columns)
-        LOGGER.info("\t- Found %i PSMs from unique spectra.", len(self._data))
-
-        self._assign_confidence(desc=desc)
-
-        self.accepted = {}
-        for level in self.levels:
-            self.accepted[level] = self._num_accepted(level)
 
     def __repr__(self):
         """How to print the class"""
         base = (
             "A mokapot.confidence.LinearConfidence object:\n"
-            f"\t- PSMs at q<={self._eval_fdr:g}: {self.accepted['psms']}\n"
-            f"\t- Peptides at q<={self._eval_fdr:g}: "
-            f"{self.accepted['peptides']}\n"
+            f"\t- PSMs at q<={self.eval_fdr:g}: {self.num_accepted['psms']}\n"
+            f"\t- Peptides at q<={self.eval_fdr:g}: "
+            f"{self.num_accepted['peptides']}\n"
         )
 
-        if self._has_proteins:
+        if self.proteins is not None:
             base += (
-                f"\t- Protein groups at q<={self._eval_fdr:g}: "
-                f"{self.accepted['proteins']}\n"
+                f"\t- Protein groups at q<={self.eval_fdr:g}: "
+                f"{self.num_accepted['proteins']}\n"
             )
 
         return base
-
-    def _num_accepted(self, level):
-        """Calculate the number of accepted discoveries"""
-        disc = self.confidence_estimates[level]
-        if disc is not None:
-            return (disc["mokapot q-value"] <= self._eval_fdr).sum()
-        else:
-            return None
-
-    def _assign_confidence(self, desc=True):
-        """
-        Assign confidence to PSMs and peptides.
-
-        Parameters
-        ----------
-        desc : bool
-            Are higher scores better?
-        """
-        levels = ["PSMs", "peptides"]
-        peptide_idx = utils.groupby_max(
-            self._data,
-            self._peptide_column,
-            self._score_column,
-            self._rng,
-        )
-
-        peptides = self._data.loc[peptide_idx]
-        LOGGER.info("\t- Found %i unique peptides.", len(peptides))
-
-        level_data = [self._data, peptides]
-
-        if self._has_proteins:
-            proteins = picked_protein(
-                peptides,
-                self._target_column,
-                self._peptide_column,
-                self._score_column,
-                self._proteins,
-                self._rng,
-            )
-            levels += ["proteins"]
-            level_data += [proteins]
-            LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
-
-        for level, data in zip(levels, level_data):
-            data = data.sort_values(
-                self._score_column, ascending=False
-            ).reset_index(drop=True)
-            scores = data.loc[:, self._score_column].values
-            targets = data.loc[:, self._target_column].astype(bool).values
-            if all(targets):
-                LOGGER.warning(
-                    "No decoy PSMs remain for confidence estimation. "
-                    "Confidence estimates may be unreliable."
-                )
-
-            # Estimate q-values and assign to dataframe
-            LOGGER.info("Assiging q-values to %s...", level)
-            data["mokapot q-value"] = qvalues.tdc(scores, targets, desc=True)
-
-            # Make output tables pretty
-            data = data.drop(self._target_column, axis=1).rename(
-                columns={self._score_column: "mokapot score"}
-            )
-
-            # Set scores to be the correct sign again:
-            data["mokapot score"] = data["mokapot score"] * (desc * 2 - 1)
-
-            # Logging update on q-values
-            LOGGER.info(
-                "\t- Found %i %s with q<=%g",
-                (data.loc[targets, "mokapot q-value"] <= self._eval_fdr).sum(),
-                level,
-                self._eval_fdr,
-            )
-
-            # Calculate PEPs
-            LOGGER.info("Assiging PEPs to %s...", level)
-            try:
-                _, pep = qvality.getQvaluesFromScores(
-                    scores[targets], scores[~targets], includeDecoys=True
-                )
-            except SystemExit as msg:
-                if "no decoy hits available for PEP calculation" in str(msg):
-                    pep = 0
-                else:
-                    raise
-
-            level = level.lower()
-            data["mokapot PEP"] = pep
-            if level != "proteins" and self._protein_column is not None:
-                data[self._protein_column] = data.pop(self._protein_column)
-
-            self.confidence_estimates[level] = data.loc[targets, :]
-            self.decoy_confidence_estimates[level] = data.loc[~targets, :]
-
-        if "proteins" not in self.confidence_estimates.keys():
-            self.confidence_estimates["proteins"] = None
-            self.decoy_confidence_estimates["proteins"] = None
 
     def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
         """Save confidenct peptides for quantification with FlashLFQ.
@@ -486,92 +374,128 @@ class LinearConfidence(Confidence):
         return to_flashlfq(self, out_file)
 
 
-class CrossLinkedConfidence(Confidence):
-    """
-    Assign confidence estimates to a set of cross-linked PSMs
-
-    Estimate q-values and posterior error probabilities (PEPs) for
-    cross-linked PSMs (CSMs) and the peptide pairs when ranked by the
-    provided scores.
+@dataclass
+class TdcLevel:
+    """A level for confidence estimation.
 
     Parameters
     ----------
-    psms : CrossLinkedPsmDataset object
-        A collection of cross-linked PSMs.
-    scores : np.ndarray
-        A vector containing the score of each PSM.
-    desc : bool
-        Are higher scores better?
-
-    Attributes
-    ----------
-    csms : pandas.DataFrame
-        Confidence estimates for cross-linked PSMs in the dataset.
-    peptide_pairs : pandas.DataFrame
-        Confidence estimates for peptide pairs in the dataset.
-
-    :meta private:
+    name : str
+        The name to use in reference attributes and such.
+    columns : str or list of str
+        The columns to perform competition on.
+    unit : str
+        The unit to use in logging messages.
+    schema : PsmSchema
+        The column schema to reference.
+    rng : numpy.random.Generator
+        The random number generator
     """
 
-    def __init__(self, psms, scores, desc=True):
-        """Initialize a CrossLinkedConfidence object"""
-        super().__init__(psms, scores, desc)
-        self._data[len(self._data.columns)] = psms.targets
-        self._target_column = self._data.columns[-1]
-        self._psm_columns = psms._spectrum_columns
-        self._peptide_column = psms._peptide_column
+    name: str
+    columns: str | list[str]
+    unit: str
+    schema: PsmSchema
+    rng: np.random.Generator
 
-        self._perform_tdc(self._psm_columns)
-        self._assign_confidence(desc=desc)
+    def __post_init__(self):
+        """Make sure columns are a list."""
+        self.columns = utils.listify(self.columns)
 
-    def _assign_confidence(self, desc=True):
-        """
-        Assign confidence to PSMs and peptides.
+    def assign_confidence(
+        self,
+        data: pl.LazyFrame,
+    ) -> pl.DataFrame:
+        """Compute confidence estimates at the specified level.
 
         Parameters
         ----------
+        data : polars.LazyFrame
+            The data to compute estimates from. We expect
+            the data to be sorted!
         desc : bool
-            Are higher scores better?
+            Are higher score better?
+
+        Returns
+        -------
+        polars.LazyFrame
+            The data with q-values.
+
+        :meta private:
         """
-        peptide_idx = utils.groupby_max(
-            self._data,
-            self._peptide_columns,
-            self._score_column,
-            self._rng,
+        # Define some shorhand:
+        score = self.schema.score
+        target = self.schema.target
+        keep = [*self.columns, target, score]
+        if self.schema.group is not None:
+            keep += self.schema.group
+
+        tdc_df = (
+            data.clone()
+            .groupby(self.columns)
+            .first()
+            .sort(by=self.schema.score, descending=self.schema.desc)
+            .select(keep)
+            .collect(streaming=True)
         )
 
-        peptides = self._data.loc[peptide_idx]
-        levels = ("csms", "peptide_pairs")
+        # Compute q-values
+        conf_out = []
+        if self.schema.group is not None:
+            group_iter = tdc_df.groupby(self.schema.group)
+        else:
+            group_iter = [(None, tdc_df)]
 
-        for level, data in zip(levels, (self._data, peptides)):
-            scores = data.loc[:, self._score_column].values
-            targets = data.loc[:, self._target_column].astype(bool).values
-            data["mokapot q-value"] = qvalues.crosslink_tdc(
-                scores, targets, desc
+        for grp_name, grp_df in group_iter:
+            if grp_name is not None:
+                LOGGER.info("=== Group %s ===", grp_name)
+
+            # Collect the data needed to compute q-values and PEPs:
+            score = self.schema.score
+            target = self.schema.target
+
+            # Warn if no decoys are available.
+            if grp_df[target].all():
+                LOGGER.warning(
+                    "No decoy %s remain for confidence estimation. "
+                    "Confidence estimates may be unreliable.",
+                    self.unit,
+                )
+
+            LOGGER.info("Assiging q-values to %s...", self.unit)
+            qvals = qvalues.tdc(
+                scores=grp_df[score],
+                target=grp_df[target],
             )
 
-            data = (
-                data.loc[targets, :]
-                .sort_values(self._score_column, ascending=(not desc))
-                .reset_index(drop=True)
-                .drop(self._target_column, axis=1)
-                .rename(columns={self._score_column: "mokapot score"})
+            # Calculate PEPs
+            LOGGER.info("Assiging PEPs to %s...", self.unit)
+            try:
+                _, peps = qvality.getQvaluesFromScores(
+                    grp_df.filter(pl.col(target))[score],
+                    grp_df.filter(~pl.col(target))[score],
+                    includeDecoys=True,
+                )
+            except SystemExit as msg:
+                if "no decoy hits available for PEP calculation" in str(msg):
+                    peps = 0
+                else:
+                    raise
+
+            # Add the columns
+            conf_out.append(
+                grp_df.with_columns(
+                    [
+                        pl.lit(qvals).alias("mokapot q-value"),
+                        pl.lit(peps).alias("mokapot PEP"),
+                    ]
+                )
             )
 
-            _, pep = qvality.getQvaluesFromScores(
-                scores[targets == 2], scores[~targets]
-            )
-            data["mokapot PEP"] = pep
-            self._confidence_estimates[level] = data
+        data = data.join(
+            pl.concat(conf_out, how="vertical").lazy(),
+            on=[*self.columns, target, score],
+            how="left",
+        )
 
-
-def _new_column(name, df):
-    """Add a new column, ensuring a unique name"""
-    new_name = name
-    cols = set(df.columns)
-    i = 0
-    while new_name in cols:
-        new_name = name + "_" + str(i)
-        i += 1
-
-    return new_name
+        return data

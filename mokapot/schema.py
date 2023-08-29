@@ -205,6 +205,11 @@ class PsmSchema(_SchemaValidatorMixin):
         The column(s) specifying the feature(s) to learn from. If
         :code:`None`, these are assumed to be all of the columns that were not
         specified in the other parameters.
+    score : str, optional
+        The column to use as the default score for ranking PSMs.
+    desc : bool, optional
+        Indicates that higher scores in the score column are better. This is
+        omly relevant if a score column is specified.
     """
 
     target: str
@@ -219,6 +224,8 @@ class PsmSchema(_SchemaValidatorMixin):
     charge: str | None = None
     metadata: str | list[str] | None = None
     features: str | list[str] | None = None
+    score: str | None = None
+    desc: bool = True
 
     def __post_init__(self):
         """Perform initial validation."""
@@ -233,6 +240,10 @@ class PsmSchema(_SchemaValidatorMixin):
                 "expmass",
                 "ret_time",
                 "charge",
+                "score",
             ],
             variadic=["spectrum", "metadata", "group", "features"],
         )
+
+        if self.metadata is None:
+            self.metadata = []

@@ -21,20 +21,21 @@ from __future__ import annotations
 import copy
 import logging
 import math
-from dataclasses import dataclass
 from functools import partial
 
 import numpy as np
 import polars as pl
 
 from . import qvalues
+from .base import BaseData
+from .confidence import Confidence, PsmConfidence
 from .proteins import Proteins
 from .schema import PsmSchema
 
 LOGGER = logging.getLogger(__name__)
 
 
-class _BaseDataset:
+class _BaseDataset(BaseData):
     """
     Store a dataset.
 
@@ -69,7 +70,7 @@ class _BaseDataset:
     targets : numpy.ndarray
     features : numpy.ndarray
     proteins : mokapot.Proteins
-    best_feature : mokapot.dataset.BestFeature
+    best_feature : tuple of (str, bool)
     rng : numpy.random.Generator
 
     :meta private:
@@ -77,7 +78,7 @@ class _BaseDataset:
 
     def __init__(
         self,
-        data: pl.DataFrame | pl.LazyFrame,
+        data: pl.DataFrame | pl.LazyFrame | dict,
         schema: PsmSchema,
         proteins: Proteins | None,
         eval_fdr: float,
@@ -86,34 +87,21 @@ class _BaseDataset:
         stratification: list[str],
     ):
         """Initialize an object"""
-        self.rng = rng
-        self.schema = schema
-        self.eval_fdr = eval_fdr
-        self.proteins = proteins
+        super.__init__(
+            data=data,
+            schema=schema,
+            proteins=proteins,
+            eval_fdr=eval_fdr,
+            rng=rng,
+            unit=unit,
+        )
 
-        # Try and read data.
-        # This should work with pl.DataFrame, pl.LazyFrame,
-        # pd.DataFrame, or dictionary.
-        try:
-            self._data = data.lazy()
-        except AttributeError as exc:
-            try:
-                self._data = pl.from_pandas(data).lazy()
-            except ValueError:
-                try:
-                    self._data = pl.DataFrame(data).lazy()
-                except ValueError:
-                    raise ValueError("Incompatible type for 'data'") from exc
-
-        self._perc_style_targets = schema.validate(self._data)
         self._stratification = stratification
 
         # Added later:
-        self._len = None
         self._folds = None
-        self._proteins = None
-        self._best_feature = None
 
+        # Provide some logging about the dataset:
         LOGGER.info("Using %i features:", len(self.schema.features))
         for i, feat in enumerate(self.schema.features):
             LOGGER.info("  (%i)\t%s", i + 1, feat)
@@ -126,51 +114,18 @@ class _BaseDataset:
         LOGGER.info(
             "  - %i target %s and %i decoy %s detected.",
             num_targets,
-            unit,
+            self._unit,
             num_decoys,
-            unit,
+            self._unit,
         )
 
+        # Validate the target column.
         if not num_targets:
-            raise ValueError(f"No target {unit} were detected.")
+            raise ValueError(f"No target {self._unit} were detected.")
         if not num_decoys:
-            raise ValueError(f"No decoy {unit} were detected.")
+            raise ValueError(f"No decoy {self._unit} were detected.")
         if not len(self):
-            raise ValueError(f"No {unit} were detected.")
-
-    @property
-    def targets(self) -> np.ndarray:
-        """A :py:class:`numpy.ndarray` indicating whether each row is a target."""
-        if self._perc_style_targets:
-            expr = pl.col(self.schema.target) + 1
-        else:
-            expr = pl.col(self.schema.target)
-
-        return (
-            self.data.select(expr.cast(pl.Boolean))
-            .collect(streaming=True)
-            .to_numpy()
-            .flatten()
-        )
-
-    def __len__(self) -> int:
-        """The number of examples"""
-        if self._len is None:
-            self._len = (
-                self._data.select(pl.count()).collect(streaming=True).item()
-            )
-
-        return self._len
-
-    @property
-    def data(self) -> pl.LazyFrame:
-        """The underyling data."""
-        return self._data
-
-    @property
-    def columns(self) -> list[str]:
-        """The columns in the underlying data."""
-        return self.data.columns
+            raise ValueError(f"No {self._unit} were detected.")
 
     @property
     def features(self) -> np.ndarray:
@@ -182,40 +137,12 @@ class _BaseDataset:
         )
 
     @property
-    def rng(self) -> np.random.Generator:
-        """The random number generator."""
-        return self._rng
-
-    @rng.setter
-    def rng(self, rng: int | np.random.Generator) -> None:
-        """Set the random number generator"""
-        self._rng = np.random.default_rng(rng)
-
-    @property
-    def proteins(self) -> Proteins | None:
-        """Has a FASTA file been added?"""
-        return self._proteins
-
-    @proteins.setter
-    def proteins(self, proteins: Proteins | None) -> None:
-        """Add protein information to the dataset."""
-        if proteins is None or isinstance(proteins, Proteins):
-            self._proteins = proteins
-            return
-
-        raise ValueError(
-            "Proteins must be a 'Proteins' object, such "
-            "as that returned by 'mokapot.read_fasta()'."
-        )
-
-    @property
-    def best_feature(self) -> BestFeature:
+    def best_feature(self) -> tuple(str, bool):
         """The best feature for separating target and decoy examples."""
-        if self._best_feature is not None:
-            return self._best_feature
+        if self.schema.score is None:
+            self._find_best_feature()
 
-        self._find_best_feature()
-        return self._best_feature
+        return self.schema.score, self.schema.bool
 
     def update_labels(
         self,
@@ -284,14 +211,10 @@ class _BaseDataset:
 
             if num_passing > best_positives:
                 best_positives = num_passing
-                self._best_feature = BestFeature(
-                    feature=best_feat,
-                    num_passing=num_passing,
-                    labels=labs[best_feat].to_numpy(),
-                    desc=desc,
-                )
+                self.schema.score = self._best_feature.feature
+                self.schema.desc = self._best_feature.desc
 
-        if self._best_feature is None:
+        if self.schema.score is None:
             raise RuntimeError("No PSMs found below the 'eval_fdr'.")
 
     def calibrate_scores(
@@ -397,6 +320,43 @@ class _BaseDataset:
         new_dset._len = None
         return new_dset
 
+    def assign_confidence(
+        self,
+        scores: str | pl.Series | np.ndarray | None = None,
+        desc: bool = True,
+    ) -> Confidence:
+        """Assign confidence estimates.
+
+        If :code:`scores` is not provided, the best feature
+        or the specifided score in the data will be used.
+
+        Parameters
+        ----------
+        scores : str, polars.Series, or numpy.ndarray, optionl
+            The scores by which to rank examples.
+        desc : bool
+            Are higher scores better?
+
+        Returns
+        -------
+        Confidence
+            The confidence estimates at various levels.
+        """
+        if scores is None:
+            feat, desc = self.best_feature
+            scores = self.data.select(feat).collect(streaming=True).to_series()
+
+        if isinstance(self.schema, PsmSchema):
+            return PsmConfidence(
+                data=self.data,
+                schema=self.schema,
+                scores=scores,
+                desc=desc,
+                proteins=self.proteins,
+                eval_fdr=self.eval_fdr,
+                rng=self.rng,
+            )
+
 
 class PsmDataset(_BaseDataset):
     """Store and analyze a collection of PSMs.
@@ -485,16 +445,3 @@ class PsmDataset(_BaseDataset):
             f"  - Unique peptides: {n_peptides}\n"
             f"  - Features:\n      {features}"
         )
-
-
-@dataclass
-class BestFeature:
-    """Store information about the best feature.
-
-    :meta private:
-    """
-
-    feature: str
-    num_passing: int
-    labels: np.ndarray
-    desc: bool

@@ -9,6 +9,25 @@ from mokapot import PsmDataset, PsmSchema
 
 
 @pytest.fixture(scope="session")
+def psm_df_easy():
+    """A DataFrame containing 6 PSMs"""
+    rng = np.random.Generator(np.random.PCG64(42))
+    data = {
+        "target": [True] * 100 + [False],
+        "spectrum": list(range(50)) * 2 + [51],
+        "peptide": [_random_peptide(5, rng) for i in range(100)] + ["DECOY"],
+        "feature": list(range(50)) * 2 + [-1],
+    }
+
+    schema = dict(
+        target="target",
+        spectrum="spectrum",
+        peptide="peptide",
+    )
+    return pl.DataFrame(data), schema
+
+
+@pytest.fixture(scope="session")
 def psm_df_6():
     """A DataFrame containing 6 PSMs"""
     data = {
@@ -18,7 +37,7 @@ def psm_df_6():
         "peptide": ["a", "b", "a", "c", "d", "e"],
         "protein": ["A", "B"] * 3,
         "feature_1": [4, 3, 2, 2, 1, 0],
-        "feature_2": [2, 3, 4, 1, 2, 3],
+        "feature_2": [2, 3, 3, 1, 2, 2],
     }
 
     schema = dict(

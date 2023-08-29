@@ -2,9 +2,11 @@
 These tests verify that the dataset classes are functioning properly.
 """
 import numpy as np
+import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
+import mokapot
 from mokapot import PsmDataset, PsmSchema
 from mokapot.proteins import Proteins
 
@@ -31,59 +33,53 @@ def test_psm_dataset_init(psm_df_6):
     assert isinstance(dset.rng, np.random.Generator)
 
     # Verify this is unitialized:
-    assert dset._best_feature is None
+    assert dset.schema.score is None
 
     # Also test dictionary init.
     data = {"s": [1, 2], "p": ["a", "b"], "t": [True, False]}
-    schema = PsmSchema("t", "s", "p")
+    schema = PsmSchema("t", "s", "p", score="s", desc=False)
     dset = PsmDataset(data, schema)
 
 
 @pytest.mark.skip()
 def test_assign_confidence(psm_df_1000):
     """Test that assign_confidence() methods run"""
-    psms, fasta = psm_df_1000
+    data, fasta, schema_kwargs = psm_df_1000
+    schema_kwargs["group"] = None
     dset = PsmDataset(
-        psms=psms,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        copy_data=True,
+        data=data, schema=PsmSchema(**schema_kwargs), eval_fdr=0.05
     )
 
     # also try adding proteins:
-    assert not dset.has_proteins
-    dset.add_proteins(fasta, missed_cleavages=0, min_length=5, max_length=5)
-    assert dset.has_proteins
-
-    dset.assign_confidence(eval_fdr=0.05)
+    assert dset.proteins is None
+    dset.assign_confidence()
 
     # Make sure it works when lower scores are better:
-    data, _ = psm_df_1000
-    data["score"] = -data["score"]
+    data = data.with_columns(pl.col("score") * -1)
     dset = PsmDataset(
-        psms=data,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        copy_data=True,
+        data=data, schema=PsmSchema(**schema_kwargs), eval_fdr=0.05
+    )
+
+    assert dset.proteins is None
+    dset.assign_confidence()
+
+    # also try adding proteins:
+    proteins = mokapot.read_fasta(
+        fasta,
+        missed_cleavages=0,
+        min_length=5,
+        max_length=5,
+    )
+    dset.proteins = proteins
+    dset.assign_confidence()
+
+    # Verify that the group column works:
+    schema_kwargs["group"] = "group"
+    data = data.with_columns(pl.col("score") * -1)
+    dset = PsmDataset(
+        data=data, schema=PsmSchema(**schema_kwargs), eval_fdr=0.05
     )
     dset.assign_confidence(eval_fdr=0.05)
-
-    # Verify that the groups yields 2 results:
-    dset = PsmDataset(
-        psms=psms,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        group_column="group",
-        feature_columns="score",
-        copy_data=True,
-    )
-    res = dset.assign_confidence(eval_fdr=0.05)
-    assert len(res) == 2
 
 
 def test_update_labels(psm_df_6):
@@ -101,13 +97,11 @@ def test_update_labels(psm_df_6):
 def test_best_feature(psm_df_6):
     """Test finding the best feature."""
     df, schema_kwargs = psm_df_6
-    schema = PsmSchema(**schema_kwargs)
+    schema = PsmSchema(desc=False, **schema_kwargs)
     dset = PsmDataset(df, schema, eval_fdr=0.5)
 
     best_feat = dset.best_feature
-    assert best_feat.feature == "feature_1"
-    assert best_feat.num_passing > 0
-    assert len(best_feat.labels) == 6
+    assert best_feat[0] == "feature_1"
     assert best_feat.desc is True
 
 

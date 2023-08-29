@@ -3,152 +3,147 @@ Implementation of the picked-protein approach for protein-level
 confidence estimates.
 """
 import logging
-import numpy as np
-import pandas as pd
+from collections import defaultdict
 
-from .peptides import match_decoy
-from . import utils
+import numpy as np
+import polars as pl
+
+from .proteins import Proteins
+from .schema import PsmSchema
 
 LOGGER = logging.getLogger(__name__)
 
 
 def picked_protein(
-    peptides, target_column, peptide_column, score_column, proteins, rng
-):
+    data: pl.LazyFrame,
+    schema: PsmSchema,
+    proteins: Proteins,
+    rng: np.random.Generator,
+) -> pl.LazyFrame:
     """Perform the picked-protein approach
 
     Parameters
     ----------
-    peptides : pandas.DataFrame
-        A dataframe of the peptides.
-    target_column : str
-        The column in `peptides` indicating if the peptide is a target.
-    peptide_column : str
-        The column in `peptides` containing the peptide sequence.
-    proteins : Proteins object
-        A Proteins object.
-    rng : int or numpy.random.Generator
-        The random number generator.
+    data : polars.LazyFrame
+        A collection of examples, where the rows are an example and the columns
+        are features or metadata describing them. We expect this dataframe to
+        be sorted already.
+    schema : mokapot.PsmSchema
+        The meaning of the columns in the data.
+    proteins : mokapot.Proteins
+        The proteins to use for protein-level confidence estimation. This
+        may be created with :py:func:`mokapot.read_fasta()`.
+    rng : np.random.Generator
+        A seed or generator used for cross-validation split creation and to
+        break ties, or :code:`None` to use the default random number
+        generator state.
 
     Returns
     -------
-    pandas.DataFrame
+    polars.LazyFrame
         The aggregated proteins for confidence estimation.
     """
-    keep = [target_column, peptide_column, score_column]
-
-    # Trim the dataframe
-    prots = peptides.loc[:, keep].rename(
-        columns={peptide_column: "best peptide"}
+    keep = [schema.target, schema.peptide, schema.score]
+    data = data.select(keep).with_columns(
+        pl.col(schema.peptide)
+        .str.replace(r"[\[\(].*?[\]\)]", "")
+        .str.replace(r"^.*?\.", "")
+        .str.replace(r"\..*?$", "")
+        .str.replace(r"[a-z]", "")
+        .alias("stripped sequence")
     )
-
-    # Strip modifications and flanking AA's from peptide sequences.
-    prots["stripped sequence"] = (
-        prots["best peptide"]
-        .str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
-        .str.replace(r"^.*?\.", "", regex=True)
-        .str.replace(r"\..*?$", "", regex=True)
-    )
-
-    # Sometimes folks use lowercase letters for the termini or mods:
-    if all(prots["stripped sequence"].str.islower()):
-        seqs = prots["stripped sequence"].upper()
-    else:
-        seqs = prots["stripped sequence"].str.replace(r"[a-z]", "", regex=True)
-
-    prots["stripped sequence"] = seqs
 
     # There are two cases we need to deal with:
     # 1. The fasta contained both targets and decoys (ideal)
     # 2. The fasta contained only targets (less ideal)
     if proteins.has_decoys:
-        prots["mokapot protein group"] = group_with_decoys(prots, proteins)
-
+        data = data.with_columns(
+            pl.col("stripped sequence")
+            .map_dict(proteins.peptide_map)
+            .alias("mokapot protein group")
+        )
     else:
         LOGGER.info("Mapping decoy peptides to protein groups...")
-        prots["mokapot protein group"] = group_without_decoys(
-            prots, target_column, proteins
+        data = data.with_columns(
+            pl.when(pl.col(schema.target))
+            .then(pl.col("stripped sequence").map_dict(proteins.peptde_map))
+            .otherwise(
+                pl.col("stripped sequence").map_dict(
+                    group_without_decoys(
+                        data=data, schema=schema, proteins=proteins, rng=rng
+                    )
+                )
+            )
+            .alias("mokapo protein group")
         )
 
     # Verify that unmatched peptides are shared:
-    unmatched = pd.isna(prots["mokapot protein group"])
-    if not proteins.has_decoys:
-        unmatched[~prots[target_column]] = False
-
-    unmatched_prots = prots.loc[unmatched, :]
-    shared = unmatched_prots["stripped sequence"].isin(
-        proteins.shared_peptides.keys()
+    unmatched = (
+        data.filter(pl.col("mokapot protein group").is_null())
+        .select(
+            [
+                pl.col(schema.target),
+                pl.col("stripped sequence"),
+            ]
+        )
+        .with_columns(
+            pl.col("stripped sequence")
+            .is_in(proteins.shared_peptides.keys())
+            .alias("is_shared")
+        )
     )
 
-    shared_unmatched = (~shared).sum()
-    num_shared = len(shared) - shared_unmatched
+    # Counts of everything:
+    n_total = data.select(pl.count()).collect(streaming=True)
+    n_unmatched = unmatched.select(pl.count()).collect(streaming=True)
+    n_targets = (
+        data.select(pl.col(schema.target).sum()).collect(streaming=True).item()
+    )
+
+    n_shared = (
+        unmatched.select(pl.col("is_shared") & pl.col(schema.target).sum())
+        .collect(streaming=True)
+        .item()
+    )
+
     LOGGER.debug(
-        "%i out of %i peptides were discarded as shared peptides.",
-        num_shared,
-        len(prots),
+        "%i out of %i target peptides were discarded as shared peptides.",
+        n_shared,
+        n_targets,
     )
 
-    if shared_unmatched:
-        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
+    if n_unmatched - n_shared:
         LOGGER.warning(
             "%i out of %i peptides could not be mapped. "
             "Please check your digest settings.",
-            shared_unmatched,
-            len(prots),
+            n_unmatched - n_shared,
+            n_total,
         )
 
-        if shared_unmatched / len(prots) > 0.10:
+        if (n_unmatched - n_shared) / n_total > 0.10:
             raise ValueError(
                 "Fewer than 90% of all peptides could be matched to proteins. "
                 "Please verify that your digest settings are correct."
             )
 
-    # Verify that reasonable number of decoys were matched.
-    if proteins.has_decoys:
-        num_unmatched_decoys = unmatched_prots[target_column][~shared].sum()
-        total_decoys = (~prots[target_column]).sum()
-        if num_unmatched_decoys / total_decoys > 0.05:
-            raise ValueError(
-                "Fewer than 5% of decoy peptides could be mapped to proteins."
-                " Was the correct FASTA file and digest settings used?"
-            )
-
-    prots = prots.loc[~unmatched, :]
-    prots["decoy"] = (
-        prots["mokapot protein group"]
-        .str.split(",", expand=True)[0]
-        .map(lambda x: proteins.protein_map.get(x, x))
+    data = data.filter(
+        ~pl.col("mokapot protein gruop").is_null()
+    ).with_columns(
+        pl.col("mokapot protein group")
+        .str.split(",")
+        .list.first()
+        .map_dict(proteins.protein_map, default=pl.first())
     )
 
-    prot_idx = utils.groupby_max(prots, ["decoy"], score_column, rng)
-    final_cols = [
-        "mokapot protein group",
-        "best peptide",
-        "stripped sequence",
-        score_column,
-        target_column,
-    ]
-    return prots.loc[prot_idx, final_cols]
+    return data
 
 
-def group_with_decoys(peptides, proteins):
-    """Retrieve the protein group in the case where the FASTA has decoys.
-
-    Parameters
-    ----------
-    peptides : pandas.DataFrame
-        The peptide dataframe.
-    proteins : a Proteins object
-
-    Returns
-    -------
-    pandas.Series
-        The protein group for each peptide.
-    """
-    return peptides["stripped sequence"].map(proteins.peptide_map.get)
-
-
-def group_without_decoys(peptides, target_column, proteins):
+def group_without_decoys(
+    data: pl.LazyFrame,
+    schema: PsmSchema,
+    proteins: Proteins,
+    rng: np.random.Generator,
+) -> dict[str, str]:
     """Retrieve the protein group with a target-only FASTA.
 
     Build a dictionary mapping the decoy peptides to a plausible unique
@@ -156,34 +151,123 @@ def group_without_decoys(peptides, target_column, proteins):
 
     Parameters
     ----------
-    peptides : pandas.DataFrame
-        The peptide dataframe.
-    target_column : str
-        The column indicating if the peptide is a target.
-    proteins : a Proteins object
+    data : polars.LazyFrame
+        A collection of examples, where the rows are an example and the columns
+        are features or metadata describing them. We expect this dataframe to
+        be sorted already.
+    schema : mokapot.PsmSchema
+        The meaning of the columns in the data.
+    proteins : mokapot.Proteins
+        The proteins to use for protein-level confidence estimation. This
+        may be created with :py:func:`mokapot.read_fasta()`.
+    rng : np.random.Generator
+        A seed or generator used for cross-validation split creation and to
+        break ties, or :code:`None` to use the default random number
+        generator state.
 
     Returns
     -------
-    pandas.Series
-        The protein group for each peptide.
+    dict str, str
+        The protein group for each decoy peptide.
     """
-    decoys = pd.Series(
-        peptides.loc[~peptides[target_column], "stripped sequence"].unique()
+    decoys = (
+        data.filter(~pl.col(schema.target))
+        .select("stripped sequence")
+        .unique()
+        .collect(streaming=True)
+        .to_series()
     )
 
-    # decoys is now a dict mapping decoy peptides to target peptides
-    decoys = match_decoy(decoys, pd.Series(proteins.peptide_map.keys()))
+    # decoy is now a dict mapping decoy peptides to target peptides
+    decoy_dict = match_decoys(
+        decoys=decoys,
+        targets=pl.Series("targets", proteins.peptide_map.keys()),
+        rng=rng,
+    )
 
     # Map decoys to target protein group:
     decoy_map = {}
-    for decoy_peptide, target_peptide in decoys.items():
+    for decoy_peptide, target_peptide in decoy_dict.items():
         protein_group = proteins.peptide_map[target_peptide].split(", ")
         protein_group = [proteins.decoy_prefix + p for p in protein_group]
         decoy_map[decoy_peptide] = ", ".join(protein_group)
 
-    # First lookup targets:
-    prots = peptides["stripped sequence"].map(proteins.peptide_map.get)
-    prots[prots.isna()] = peptides[prots.isna()]["stripped sequence"].map(
-        decoy_map.get
+    return decoy_map
+
+
+def match_decoys(
+    decoys: pl.Series,
+    targets: pl.Series,
+    rng: np.random.Generator,
+) -> dict[str, str]:
+    """Find a corresponding target for each decoy.
+
+    Matches a decoy to a unique random target peptide that
+    has the same amino acid composition, including modifications.
+    If none can be found, an :code:`nan` is returned for that
+    peptide.
+
+    Parameters
+    ----------
+    decoys : polars.Series
+        A collection of stripped decoy peptide sequences
+    targets : polars.Series
+        A collection of stripped target peptide sequences
+    rng : np.random.Generator
+        The random number generator to use.
+
+    Returns
+    -------
+    dict of str, str
+        The corresponding target peptide for each
+        decoy peptide.
+    """
+    targets = targets.shuffle(rng.integers(1, 9999))
+    decoys = decoys.shuffle(rng.integers(1, 9999))
+
+    # Get the compositions of each:
+    targets = residue_sort(targets)
+    decoys = residue_sort(decoys)
+
+    # Build a map of composition to lists of peptides:
+    targ_map = defaultdict(list)
+    for peptide, comp in targets.iter_rows():
+        targ_map[comp].append(peptide)
+
+    # Find the first target peptide that matches the decoy composition
+    decoy_map = {}
+    for peptide, comp in decoys.iter_rows():
+        try:
+            decoy_map[peptide] = targ_map[comp].pop()
+        except IndexError:
+            continue
+
+    return decoy_map
+
+
+def residue_sort(peptides: pl.Series) -> pl.DataFrame:
+    """Sort peptide sequences by amino acid
+
+    This function also considers potential modifications
+
+    Parameters
+    ----------
+    peptides : polars.Series
+        A collection of peptides
+
+    Returns
+    -------
+    polars.DataFrame
+        A lexographically sorted sequence that respects
+        modifications.
+    """
+    peptides.name = "peptide"
+    df = (
+        peptides.to_frame()
+        .lazy()
+        .groupby("peptide")
+        .agg(pl.col("targets").str.explode().sort().alias("sorted"))
+        .with_columns(pl.col("sorted").list.join(""))
+        .collect()
     )
-    return prots
+    return df

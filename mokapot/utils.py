@@ -4,20 +4,7 @@ Utility functions
 import itertools
 
 import numpy as np
-import pandas as pd
-
-
-def groupby_max(df, by_cols, max_col, rng):
-    """Quickly get the indices for the maximum value of col"""
-    by_cols = tuplize(by_cols)
-    idx = (
-        df.sample(frac=1, random_state=rng)
-        .sort_values(list(by_cols) + [max_col], axis=0)
-        .drop_duplicates(list(by_cols), keep="last")
-        .index
-    )
-
-    return idx
+import polars as pl
 
 
 def flatten(split):
@@ -27,10 +14,10 @@ def flatten(split):
 
 def safe_divide(numerator, denominator, ones=False):
     """Divide ignoring div by zero warnings"""
-    if isinstance(numerator, pd.Series):
+    if isinstance(numerator, pl.Series):
         numerator = numerator.values
 
-    if isinstance(denominator, pd.Series):
+    if isinstance(denominator, pl.Series):
         denominator = denominator.values
 
     numerator = numerator.astype(float)
@@ -67,3 +54,30 @@ def listify(obj):
             obj = [obj]
 
     return list(obj)
+
+
+def make_lazy(data: pl.DataFrame | pl.LazyFrame | dict) -> pl.LazyFrame:
+    """Coerce data into a LazyFrame.
+
+    Parameters
+    ----------
+    data : DataFrame or dict
+        A polars or pandas DataFrame or a dictionary that can be coerced into
+        one containing the data.
+    """
+    try:
+        return data.lazy().clone()
+    except AttributeError as exc:
+        last_exc = exc
+
+    try:
+        return pl.from_pandas(data).lazy().clone()
+    except ValueError as exc:
+        last_exc = exc
+
+    try:
+        return pl.DataFrame(data).lazy().clone()
+    except ValueError as exc:
+        last_exc = exc
+
+    raise ValueError("Incompatible type for 'data'") from last_exc

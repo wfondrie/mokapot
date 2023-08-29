@@ -1,69 +1,118 @@
 """Test that Confidence classes are working correctly"""
 import pickle
 
-import pytest
 import numpy as np
-import pandas as pd
-from mokapot import LinearPsmDataset
+import polars as pl
+from polars.testing import (assert_frame_equal, assert_frame_not_equal,
+                            assert_series_equal, assert_series_not_equal)
+
+from mokapot import PsmConfidence, PsmSchema
 
 
-def test_one_group(psm_df_1000):
-    """Test that one group is equivalent to no group."""
-    psm_data, _ = psm_df_1000
-    psm_data["group"] = 0
-
-    psms = LinearPsmDataset(
-        psms=psm_data,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        filename_column="filename",
-        scan_column="spectrum",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
-        group_column="group",
-        copy_data=True,
+def test_random_tie_break(psm_df_easy):
+    """Test that ties are broken randomly"""
+    data, schema_kwargs = psm_df_easy
+    schema = PsmSchema(**schema_kwargs)
+    rng = np.random.default_rng(42)
+    conf = PsmConfidence(
+        data=data,
+        schema=schema,
+        scores=data["feature"],
+        eval_fdr=0.2,
+        rng=rng,
     )
 
-    np.random.seed(42)
-    grouped = psms.assign_confidence()
-    scores1 = grouped.group_confidence_estimates[0].psms["mokapot score"]
+    df1 = conf.psms
 
-    np.random.seed(42)
-    psms._group_column = None
-    ungrouped = psms.assign_confidence()
-    scores2 = ungrouped.psms["mokapot score"]
+    rng = np.random.default_rng(1)
+    conf = PsmConfidence(
+        data=data,
+        schema=schema,
+        scores=data["feature"],
+        eval_fdr=0.2,
+        rng=rng,
+    )
 
-    pd.testing.assert_series_equal(scores1, scores2)
+    df2 = conf.psms
+    assert_frame_not_equal(df1, df2)
+
+    rng = np.random.default_rng(1)
+    conf = PsmConfidence(
+        data=data,
+        schema=schema,
+        scores=data["feature"],
+        eval_fdr=0.2,
+        rng=rng,
+    )
+
+    df3 = conf.psms
+    assert_frame_equal(df2, df3)
+
+
+def test_groups(psm_df_1000):
+    """Test that one group is equivalent to no group."""
+    data, _, schema_kwargs = psm_df_1000
+    schema = PsmSchema(group="group", **schema_kwargs)
+    print(schema_kwargs)
+    rng = np.random.default_rng(42)
+    conf = PsmConfidence(
+        data=data,
+        schema=schema,
+        scores=data["score"],
+        eval_fdr=0.01,
+        rng=rng,
+    )
+
+    scores0 = conf.psms["mokapot q-value"]
+
+    # Set to 1 group.
+    data = data.with_columns(pl.lit(0).alias("group"))
+    rng = np.random.default_rng(42)
+    conf = PsmConfidence(
+        data=data,
+        schema=schema,
+        scores=data["score"],
+        eval_fdr=0.01,
+        rng=rng,
+    )
+
+    scores1 = conf.psms["mokapot q-value"]
+    assert_series_not_equal(scores0, scores1)
+
+    # Remove gruops:
+    np.random.seed(42)
+    schema.group = None
+    rng = np.random.default_rng(42)
+    conf = PsmConfidence(
+        data=data,
+        schema=schema,
+        scores=data["score"],
+        eval_fdr=0.01,
+        rng=rng,
+    )
+    scores2 = conf.psms["mokapot q-value"]
+    assert_series_equal(scores1, scores2)
 
 
 def test_pickle(psm_df_1000, tmp_path):
     """Test that pickling works"""
-    psm_data, _ = psm_df_1000
-    psm_data["group"] = 0
+    data, _, schema_kwargs = psm_df_1000
+    data = data.with_columns(pl.lit(0).alias("group"))
 
-    psms = LinearPsmDataset(
-        psms=psm_data,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        filename_column="filename",
-        scan_column="spectrum",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
-        copy_data=True,
+    schema = PsmSchema(**schema_kwargs)
+
+    rng = np.random.default_rng(42)
+    conf = PsmConfidence(
+        data=data,
+        schema=schema,
+        scores=data["score"],
+        eval_fdr=0.01,
+        rng=rng,
     )
 
-    results = psms.assign_confidence()
     pkl_file = tmp_path / "results.pkl"
     with pkl_file.open("wb+") as pkl_dat:
-        pickle.dump(results, pkl_dat)
+        pickle.dump(conf, pkl_dat)
 
     with pkl_file.open("rb") as pkl_dat:
         pickle.load(pkl_dat)
