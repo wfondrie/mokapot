@@ -1,10 +1,10 @@
-"""Base classes used in mokapot"""
+"""Base classes used in mokapot."""
 import numpy as np
 import polars as pl
 
 from . import utils
-from .schema import PsmSchema
 from .proteins import Proteins
+from .schema import PsmSchema
 
 
 class BaseData:
@@ -43,16 +43,17 @@ class BaseData:
     rng : numpy.random.Generator
 
     """
+
     def __init__(
-            self,
-            data: pl.DataFrame | pl.LazyFrame | dict,
-            schema: PsmSchema,
-            proteins: Proteins | None,
-            eval_fdr: float,
-            rng: float | None,
-            unit: str,
+        self,
+        data: pl.DataFrame | pl.LazyFrame | dict,
+        schema: PsmSchema,
+        proteins: Proteins | None,
+        eval_fdr: float,
+        rng: float | None,
+        unit: str,
     ) -> None:
-        """Initialize the DataBase"""
+        """Initialize the DataBase."""
         self.rng = rng
         self.schema = schema
         self.eval_fdr = eval_fdr
@@ -68,10 +69,9 @@ class BaseData:
         self._data = utils.make_lazy(data)
         self._perc_style_targets = schema.validate(self._data)
 
-
     @property
     def targets(self) -> np.ndarray:
-        """A :py:class:`numpy.ndarray` indicating whether each row is a target."""
+        """An array indicating whether each row is a target."""
         if self._perc_style_targets:
             expr = pl.col(self.schema.target) + 1
         else:
@@ -85,7 +85,7 @@ class BaseData:
         )
 
     def __len__(self) -> int:
-        """The number of examples"""
+        """The number of examples."""
         if self._len is None:
             self._len = (
                 self._data.select(pl.count()).collect(streaming=True).item()
@@ -110,12 +110,12 @@ class BaseData:
 
     @rng.setter
     def rng(self, rng: int | np.random.Generator) -> None:
-        """Set the random number generator"""
+        """Set the random number generator."""
         self._rng = np.random.default_rng(rng)
 
     @property
     def proteins(self) -> Proteins | None:
-        """Has a FASTA file been added?"""
+        """Has a FASTA file been added?."""
         return self._proteins
 
     @proteins.setter
