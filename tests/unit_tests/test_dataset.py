@@ -1,6 +1,4 @@
-"""
-These tests verify that the dataset classes are functioning properly.
-"""
+"""These tests verify that the dataset classes are functioning properly."""
 import numpy as np
 import polars as pl
 import pytest
@@ -12,7 +10,7 @@ from mokapot.proteins import Proteins
 
 
 def test_psm_dataset_init(psm_df_6):
-    """Test that a PsmDataset initializes correctly"""
+    """Test that a PsmDataset initializes correctly."""
     df, schema_kwargs = psm_df_6
     schema = PsmSchema(**schema_kwargs)
     dset = PsmDataset(df, schema)
@@ -43,7 +41,7 @@ def test_psm_dataset_init(psm_df_6):
 
 @pytest.mark.skip()
 def test_assign_confidence(psm_df_1000):
-    """Test that assign_confidence() methods run"""
+    """Test that assign_confidence() methods run."""
     data, fasta, schema_kwargs = psm_df_1000
     schema_kwargs["group"] = None
     dset = PsmDataset(
@@ -69,6 +67,7 @@ def test_assign_confidence(psm_df_1000):
         missed_cleavages=0,
         min_length=5,
         max_length=5,
+        rng=1,
     )
     dset.proteins = proteins
     dset.assign_confidence()
@@ -83,7 +82,7 @@ def test_assign_confidence(psm_df_1000):
 
 
 def test_update_labels(psm_df_6):
-    """Test that the _update_labels() methods are working"""
+    """Test that the _update_labels() methods are working."""
     df, schema_kwargs = psm_df_6
     schema = PsmSchema(**schema_kwargs)
     dset = PsmDataset(df, schema, eval_fdr=0.5)
@@ -102,11 +101,11 @@ def test_best_feature(psm_df_6):
 
     best_feat = dset.best_feature
     assert best_feat[0] == "feature_1"
-    assert best_feat.desc is True
+    assert best_feat[1]
 
 
 def test_proteins(psm_df_6, mock_proteins):
-    """Test adding proteins"""
+    """Test adding proteins."""
     df, schema_kwargs = psm_df_6
     schema = PsmSchema(**schema_kwargs)
     dset = PsmDataset(df, schema, eval_fdr=0.5)
@@ -121,5 +120,6 @@ def test_proteins(psm_df_6, mock_proteins):
         mock_proteins.protein_map,
         mock_proteins.shared_peptides,
         True,
+        rng=1,
     )
     assert dset.proteins is not None

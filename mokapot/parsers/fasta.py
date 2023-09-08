@@ -1,13 +1,13 @@
-"""The code for parsing FASTA files"""
-import re
+"""The code for parsing FASTA files."""
 import logging
-from textwrap import wrap
+import re
 from collections import defaultdict
+from textwrap import wrap
 
 import numpy as np
 
-from ..utils import tuplize
 from ..proteins import Proteins
+from ..utils import tuplize
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,17 +21,12 @@ def read_fasta(
     max_length=50,
     semi=False,
     decoy_prefix="decoy_",
+    rng=None,
 ):
     """Parse a FASTA file, storing a mapping of peptides and proteins.
 
     Protein sequence information from the FASTA file is required to compute
     protein-level confidence estimates using the picked-protein approach.
-    Decoys proteins must be included and must be of the have a description in
-    format of `<prefix><protein ID>` for valid confidence estimates to be
-    calculated.
-
-    If you need to generate an appropriate FASTA file with decoy sequences for
-    your database search, see :py:func:`mokapot.make_decoys()`.
 
     Importantly, the parameters below should match the conditions in which the
     PSMs were assigned as closely as possible. Enzyme specificity is provided
@@ -62,6 +57,8 @@ def read_fasta(
         Was a semi-enzymatic digest used to assign PSMs? If :code:`True`, the
         protein database will likely contain many shared peptides and yield
         unhelpful protein-level confidence estimates.
+    rng : int or np.random.Generator
+        The random number generator used to create decoy protein groups.
 
     Returns
     -------
@@ -83,6 +80,8 @@ def read_fasta(
     peptides = defaultdict(set)
     for entry in fasta:
         prot, seq = _parse_protein(entry)
+        if prot.startswith(decoy_prefix):
+            continue
 
         peps = digest(
             seq,
@@ -106,84 +105,19 @@ def read_fasta(
     del fasta
 
     # Sort proteins by number of peptides:
-    proteins = {
-        k: v for k, v in sorted(proteins.items(), key=lambda i: len(i[1]))
-    }
+    proteins = dict(sorted(proteins.items(), key=lambda i: len(i[1])))
 
-    LOGGER.info("Matching target to decoy proteins...")
-    # Build the decoy map:
-    decoy_map = {}
-    no_decoys = 0
-    has_decoys = False
-    has_targets = False
-    for prot_name in proteins:
-        if not prot_name.startswith(decoy_prefix):
-            has_targets = True
-            decoy = decoy_prefix + prot_name
-            decoy_map[prot_name] = decoy
-            if decoy in proteins.keys():
-                has_decoys = True
-            else:
-                no_decoys += 1
-
-    if not has_targets:
-        raise ValueError("Only decoy proteins were found in the FASTA file.")
-
-    if no_decoys and no_decoys < len(decoy_map):
-        LOGGER.warning(
-            "Found %i target proteins without matching decoys.", no_decoys
-        )
-
-    LOGGER.info("Building protein groups...")
     # Group Proteins
+    LOGGER.info("Building protein groups...")
     num_before_group = len(proteins)
     proteins, peptides = _group_proteins(proteins, peptides)
     LOGGER.info(
-        "\t- Aggregated %i proteins into %i protein groups.",
+        "  - Aggregated %i proteins into %i protein groups.",
         num_before_group,
         len(proteins),
     )
 
-    if not has_decoys:
-        LOGGER.info("No decoy sequences were found in the FASTA file.")
-        LOGGER.info(
-            "  - Creating decoy protein groups that mirror the target "
-            "proteins."
-        )
-
-    # unique peptides:
-    LOGGER.info("Discarding shared peptides...")
-    shared_peptides = {}
-    unique_peptides = {}
-    for pep, prots in peptides.items():
-        if len(prots) == 1:
-            unique_peptides[pep] = next(iter(prots))
-        else:
-            shared_peptides[pep] = "; ".join(prots)
-
-    total_proteins = len(set(p for p in unique_peptides.values()))
-
-    LOGGER.info(
-        "  - Discarded %i peptides and %i proteins groups.",
-        len(peptides) - len(unique_peptides),
-        len(proteins) - total_proteins,
-    )
-
-    LOGGER.info(
-        "  - Retained %i peptides from %i protein groups.",
-        len(unique_peptides),
-        total_proteins,
-    )
-
-    parsed = Proteins(
-        decoy_prefix=decoy_prefix,
-        peptide_map=unique_peptides,
-        shared_peptides=shared_peptides,
-        protein_map=decoy_map,
-        has_decoys=has_decoys,
-    )
-
-    return parsed
+    return Proteins(peptides, rng)
 
 
 def make_decoys(
@@ -308,9 +242,8 @@ def digest(
     return peptides
 
 
-# Private Functions -----------------------------------------------------------
 def _parse_fasta_files(fasta_files):
-    """Read a fasta file and divide into proteins
+    """Read a fasta file and divide into proteins.
 
     Parameters
     ----------
@@ -357,7 +290,7 @@ def _parse_protein(raw_protein):
 
 
 def _shuffle_proteins(proteins, decoy_prefix, enzyme, reverse):
-    """Shuffle protein sequences
+    """Shuffle protein sequences.
 
     Parameters
     ----------
@@ -547,7 +480,7 @@ def _group_proteins(proteins, peptides):
 
         # Create new entries from subsets:
         for match in matches:
-            new_prot = ", ".join([match, prot])
+            new_prot = ",".join([match, prot])
             # Update grouped proteins:
             grouped[new_prot] = grouped.pop(match)
 

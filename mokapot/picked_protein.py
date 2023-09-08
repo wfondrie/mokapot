@@ -20,7 +20,7 @@ def picked_protein(
     proteins: Proteins,
     rng: np.random.Generator,
 ) -> pl.LazyFrame:
-    """Perform the picked-protein approach
+    """Perform the picked-protein approach.
 
     Parameters
     ----------
@@ -43,8 +43,7 @@ def picked_protein(
     polars.LazyFrame
         The aggregated proteins for confidence estimation.
     """
-    keep = [schema.target, schema.peptide, schema.score]
-    data = data.select(keep).with_columns(
+    data = data.select([schema.target, schema.peptide]).with_columns(
         pl.col(schema.peptide)
         .str.replace(r"[\[\(].*?[\]\)]", "")
         .str.replace(r"^.*?\.", "")
@@ -94,14 +93,15 @@ def picked_protein(
     )
 
     # Counts of everything:
-    n_total = data.select(pl.count()).collect(streaming=True)
-    n_unmatched = unmatched.select(pl.count()).collect(streaming=True)
+    n_total = data.select(pl.count()).collect(streaming=True).item()
+    n_unmatched = unmatched.select(pl.count()).collect(streaming=True).item()
     n_targets = (
         data.select(pl.col(schema.target).sum()).collect(streaming=True).item()
     )
 
     n_shared = (
-        unmatched.select(pl.col("is_shared") & pl.col(schema.target).sum())
+        unmatched.select(pl.col("is_shared") & pl.col(schema.target))
+        .sum()
         .collect(streaming=True)
         .item()
     )
@@ -246,7 +246,7 @@ def match_decoys(
 
 
 def residue_sort(peptides: pl.Series) -> pl.DataFrame:
-    """Sort peptide sequences by amino acid
+    """Sort peptide sequences by amino acid.
 
     This function also considers potential modifications
 

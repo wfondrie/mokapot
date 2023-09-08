@@ -85,9 +85,9 @@ class _BaseDataset(BaseData):
         rng: int | np.random.Generator | None,
         unit: str,
         stratification: list[str],
-    ):
-        """Initialize an object"""
-        super.__init__(
+    ) -> None:
+        """Initialize an object."""
+        super().__init__(
             data=data,
             schema=schema,
             proteins=proteins,
@@ -142,7 +142,7 @@ class _BaseDataset(BaseData):
         if self.schema.score is None:
             self._find_best_feature()
 
-        return self.schema.score, self.schema.bool
+        return self.schema.score, self.schema.desc
 
     def update_labels(
         self,
@@ -195,7 +195,7 @@ class _BaseDataset(BaseData):
         for desc in (True, False):
             update = partial(self.update_labels, desc=desc)
             labs = self.data.select(
-                pl.col(*self.schema.features).map(update).explode()
+                pl.col(*self.schema.features).map_batches(update).explode()
             ).collect()
 
             num_passing = labs.select((pl.all() == 1).sum())
@@ -211,8 +211,8 @@ class _BaseDataset(BaseData):
 
             if num_passing > best_positives:
                 best_positives = num_passing
-                self.schema.score = self._best_feature.feature
-                self.schema.desc = self._best_feature.desc
+                self.schema.score = best_feat
+                self.schema.desc = desc
 
         if self.schema.score is None:
             raise RuntimeError("No PSMs found below the 'eval_fdr'.")
@@ -223,7 +223,7 @@ class _BaseDataset(BaseData):
         desc: bool = True,
     ) -> np.ndarray:
         """
-        Calibrate scores as described in Granholm et al. [1]_
+        Calibrate scores as described in Granholm et al. [1]_.
 
         .. [1] Granholm V, Noble WS, Käll L. A cross-validation scheme
            for machine learning algorithms in shotgun proteomics. BMC
@@ -402,7 +402,7 @@ class PsmDataset(_BaseDataset):
         proteins: Proteins | None = None,
         eval_fdr: float = 0.01,
         rng: int | np.random.Generator | None = None,
-    ):
+    ) -> None:
         """Initialize a PsmDataset object."""
         super().__init__(
             data=data,
@@ -414,8 +414,8 @@ class PsmDataset(_BaseDataset):
             stratification=schema.spectrum,
         )
 
-    def __repr__(self):
-        """How to print the class"""
+    def __repr__(self) -> str:
+        """How to print the class."""
         targets = self.targets
         n_spectra = (
             self.data.select(self.schema.spectrum)

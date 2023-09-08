@@ -1,6 +1,4 @@
-"""
-Utility functions
-"""
+"""Utility functions."""
 import itertools
 
 import numpy as np
@@ -8,12 +6,12 @@ import polars as pl
 
 
 def flatten(split):
-    """Get the indices from split"""
+    """Get the indices from split."""
     return list(itertools.chain.from_iterable(split))
 
 
 def safe_divide(numerator, denominator, ones=False):
-    """Divide ignoring div by zero warnings"""
+    """Divide ignoring div by zero warnings."""
     if isinstance(numerator, pl.Series):
         numerator = numerator.values
 
@@ -31,7 +29,7 @@ def safe_divide(numerator, denominator, ones=False):
 
 
 def tuplize(obj):
-    """Convert obj to a tuple, without splitting strings"""
+    """Convert obj to a tuple, without splitting strings."""
     try:
         _ = iter(obj)
     except TypeError:
@@ -44,7 +42,7 @@ def tuplize(obj):
 
 
 def listify(obj):
-    """Convert obj to a list, without splitting strings"""
+    """Convert obj to a list, without splitting strings."""
     try:
         _ = iter(obj)
     except TypeError:
@@ -72,7 +70,7 @@ def make_lazy(data: pl.DataFrame | pl.LazyFrame | dict) -> pl.LazyFrame:
 
     try:
         return pl.from_pandas(data).lazy().clone()
-    except ValueError as exc:
+    except TypeError as exc:
         last_exc = exc
 
     try:

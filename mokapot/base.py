@@ -3,11 +3,12 @@ import numpy as np
 import polars as pl
 
 from . import utils
+from .mixins import RngMixin
 from .proteins import Proteins
 from .schema import PsmSchema
 
 
-class BaseData:
+class BaseData(RngMixin):
     """A base for mokapot classes handling data.
 
     This base class verifies that data is a polars LazyFrame,
@@ -102,16 +103,6 @@ class BaseData:
     def columns(self) -> list[str]:
         """The columns in the underlying data."""
         return self.data.columns
-
-    @property
-    def rng(self) -> np.random.Generator:
-        """The random number generator."""
-        return self._rng
-
-    @rng.setter
-    def rng(self, rng: int | np.random.Generator) -> None:
-        """Set the random number generator."""
-        self._rng = np.random.default_rng(rng)
 
     @property
     def proteins(self) -> Proteins | None:

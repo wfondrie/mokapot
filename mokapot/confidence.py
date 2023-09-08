@@ -29,7 +29,6 @@ from triqler import qvality
 
 from . import qvalues, utils
 from .base import BaseData
-from .picked_protein import picked_protein
 from .proteins import Proteins
 from .schema import PsmSchema
 from .writers import to_flashlfq, to_txt
@@ -119,15 +118,12 @@ class Confidence(BaseData):
 
         # Add proteins if necessary
         if self.proteins is not None:
-            protein_groups = picked_protein(
-                data=self.data,
-                schema=self.schema,
-                proteins=self.proteins,
-                rng=self.rng,
-            )
-            self._data = self.data.with_columns(
-                pl.lit(protein_groups).alias("mokapot protein group")
-            )
+            protein_groups = self.proteins.pick(self.data, self.schema)
+            self._data = self.data.join(
+                protein_groups,
+                on=[self.schema.target, self.schema.peptide],
+                how="left",
+            ).drop("stripped sequence")
 
             self._levels.append(
                 TdcLevel(
@@ -164,14 +160,12 @@ class Confidence(BaseData):
 
     @property
     def desc(self) -> bool:
-        """Are higher scores better?"""
+        """Are higher scores better?."""
         return self.schema.desc
 
     @property
     def levels(self) -> list[str]:
-        """
-        The available levels for confidence estimates.
-        """
+        """The available levels for confidence estimates."""
         return [x.name for x in self._levels]
 
     def __getattr__(self, attr):
@@ -248,7 +242,7 @@ class Confidence(BaseData):
 
 
 class PsmConfidence(Confidence):
-    """Assign confidence estimates to a set of PSMs
+    """Assign confidence estimates to a set of PSMs.
 
     Estimate q-values and posterior error probabilities (PEPs) for PSMs,
     peptides, and optionally proteins when ranked by the provided scores.
@@ -300,7 +294,7 @@ class PsmConfidence(Confidence):
         eval_fdr: float = 0.01,
         rng: float | None = None,
     ) -> None:
-        """Initialize a a LinearPsmConfidence object"""
+        """Initialize a a LinearPsmConfidence object."""
         LOGGER.info("Performing target-decoy competition...")
         super().__init__(
             data=data,
@@ -329,18 +323,18 @@ class PsmConfidence(Confidence):
             ],
         )
 
-    def __repr__(self):
-        """How to print the class"""
+    def __repr__(self) -> str:
+        """How to print the class."""
         base = (
-            "A mokapot.confidence.LinearConfidence object:\n"
-            f"\t- PSMs at q<={self.eval_fdr:g}: {self.num_accepted['psms']}\n"
-            f"\t- Peptides at q<={self.eval_fdr:g}: "
+            "A mokapot.PsmConfidence object:\n"
+            f"  - PSMs at q<={self.eval_fdr:g}: {self.num_accepted['psms']}\n"
+            f"  - Peptides at q<={self.eval_fdr:g}: "
             f"{self.num_accepted['peptides']}\n"
         )
 
         if self.proteins is not None:
             base += (
-                f"\t- Protein groups at q<={self.eval_fdr:g}: "
+                f"  - Protein groups at q<={self.eval_fdr:g}: "
                 f"{self.num_accepted['proteins']}\n"
             )
 
@@ -423,6 +417,7 @@ class TdcLevel:
 
         :meta private:
         """
+        print(data.collect()["mokapot protein group"].unique())
         # Define some shorhand:
         score = self.schema.score
         target = self.schema.target
@@ -430,9 +425,9 @@ class TdcLevel:
         if self.schema.group is not None:
             keep += self.schema.group
 
+        print(keep)
         tdc_df = (
-            data.clone()
-            .groupby(self.columns)
+            data.groupby(self.columns)
             .first()
             .sort(by=self.schema.score, descending=self.schema.desc)
             .select(keep)
