@@ -28,12 +28,12 @@ def test_one_group(psm_df_1000):
     )
 
     np.random.seed(42)
-    grouped = psms.assign_confidence()
+    grouped = psms.assign_confidence(eval_fdr=0.05)
     scores1 = grouped.group_confidence_estimates[0].psms["mokapot score"]
 
     np.random.seed(42)
     psms._group_column = None
-    ungrouped = psms.assign_confidence()
+    ungrouped = psms.assign_confidence(eval_fdr=0.05)
     scores2 = ungrouped.psms["mokapot score"]
 
     pd.testing.assert_series_equal(scores1, scores2)
@@ -59,7 +59,7 @@ def test_pickle(psm_df_1000, tmp_path):
         copy_data=True,
     )
 
-    results = psms.assign_confidence()
+    results = psms.assign_confidence(eval_fdr=0.05)
     pkl_file = tmp_path / "results.pkl"
     with pkl_file.open("wb+") as pkl_dat:
         pickle.dump(results, pkl_dat)

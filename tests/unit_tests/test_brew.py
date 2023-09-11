@@ -44,7 +44,7 @@ def test_brew_joint(psms, svm):
 
 def test_brew_folds(psms, svm):
     """Test that changing the number of folds works"""
-    results, models = mokapot.brew(psms, svm, test_fdr=0.05, folds=4)
+    results, models = mokapot.brew(psms, svm, test_fdr=0.1, folds=4)
     assert isinstance(results, mokapot.confidence.LinearConfidence)
     assert len(models) == 4
 

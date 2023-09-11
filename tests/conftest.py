@@ -38,7 +38,7 @@ def psm_df_1000(tmp_path):
         "spectrum": np.arange(500),
         "group": rng.choice(2, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
-        "score1": np.concatenate(
+        "score": np.concatenate(
             [rng.normal(3, size=200), rng.normal(size=300)]
         ),
         "score2": np.concatenate(
@@ -56,7 +56,7 @@ def psm_df_1000(tmp_path):
         "spectrum": np.arange(500),
         "group": rng.choice(2, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
-        "score1": rng.normal(size=500),
+        "score": rng.normal(size=500),
         "score2": rng.normal(size=500),
         "filename": "test.mzML",
         "calcmass": rng.uniform(500, 2000, size=500),
@@ -86,7 +86,7 @@ def psms(psm_df_1000):
         target_column="target",
         spectrum_columns="spectrum",
         peptide_column="peptide",
-        feature_columns=["score1", "score2"],
+        feature_columns=["score", "score2"],
         filename_column="filename",
         scan_column="spectrum",
         calcmass_column="calcmass",
