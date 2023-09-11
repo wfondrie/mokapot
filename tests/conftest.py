@@ -1,10 +1,17 @@
 """
 This file contains fixtures that are used at multiple points in the tests.
 """
+import logging
 import pytest
 import numpy as np
 import pandas as pd
 from mokapot import LinearPsmDataset
+
+
+@pytest.fixture(autouse=True)
+def set_logging(caplog):
+    """Add logging to everything."""
+    caplog.set_level(level=logging.INFO, logger="mokapot")
 
 
 @pytest.fixture(scope="session")
@@ -34,6 +41,9 @@ def psm_df_1000(tmp_path):
         "score": np.concatenate(
             [rng.normal(3, size=200), rng.normal(size=300)]
         ),
+        "score2": np.concatenate(
+            [rng.normal(3, size=200), rng.normal(size=300)]
+        ),
         "filename": "test.mzML",
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
@@ -47,6 +57,7 @@ def psm_df_1000(tmp_path):
         "group": rng.choice(2, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "score": rng.normal(size=500),
+        "score2": rng.normal(size=500),
         "filename": "test.mzML",
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
@@ -75,7 +86,7 @@ def psms(psm_df_1000):
         target_column="target",
         spectrum_columns="spectrum",
         peptide_column="peptide",
-        feature_columns="score",
+        feature_columns=["score", "score2"],
         filename_column="filename",
         scan_column="spectrum",
         calcmass_column="calcmass",

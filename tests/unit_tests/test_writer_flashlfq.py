@@ -8,7 +8,7 @@ import pandas as pd
 
 def test_sanity(psms, tmp_path):
     """Run simple sanity checks"""
-    conf = psms.assign_confidence()
+    conf = psms.assign_confidence(eval_fdr=0.05)
     test1 = conf.to_flashlfq(tmp_path / "test1.txt")
     mokapot.to_flashlfq(conf, tmp_path / "test2.txt")
     test3 = mokapot.to_flashlfq([conf, conf], tmp_path / "test3.txt")
