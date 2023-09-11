@@ -92,7 +92,12 @@ def test_brew_test_fdr_error(psms, svm):
 # @pytest.mark.skip(reason="Not currently working, at least on MacOS.")
 def test_brew_multiprocess(psms, svm):
     """Test that multiprocessing doesn't yield an error"""
-    mokapot.brew(psms, svm, test_fdr=0.05, max_workers=2)
+    _, models = mokapot.brew(psms, svm, test_fdr=0.05, max_workers=2)
+
+    # The models should not be the same:
+    assert_not_close(models[0].estimator.coef_, models[1].estimator.coef_)
+    assert_not_close(models[1].estimator.coef_, models[2].estimator.coef_)
+    assert_not_close(models[2].estimator.coef_, models[0].estimator.coef_)
 
 
 def test_brew_trained_models(psms, svm):
@@ -131,3 +136,8 @@ def test_brew_using_non_trained_models_error(psms, svm):
         "One or more of the provided models was not previously trained"
         in str(err)
     )
+
+
+def assert_not_close(x, y):
+    """Assert that two arrays are not equal"""
+    np.testing.assert_raises(AssertionError, np.testing.assert_allclose, x, y)
