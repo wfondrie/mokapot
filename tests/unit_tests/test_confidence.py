@@ -4,6 +4,7 @@ import pickle
 
 import numpy as np
 import polars as pl
+import pytest
 from polars.testing import (
     assert_frame_equal,
     assert_frame_not_equal,
@@ -167,3 +168,120 @@ def test_pickle(psm_df_1000, tmp_path):
 
     with pkl_file.open("rb") as pkl_dat:
         pickle.load(pkl_dat)
+
+
+@pytest.mark.parametrize(
+    ("decoys", "stem", "ext", "kwargs"),
+    [(False, None, "parquet", {}), (True, "foo", "bar", {"statistics": True})],
+)
+def test_to_parquet(mock_confidence, tmp_path, decoys, stem, ext, kwargs):
+    """Test writing parquet."""
+    out = mock_confidence.to_parquet(
+        dest_dir=tmp_path,
+        decoys=decoys,
+        stem=stem,
+        ext=ext,
+        **kwargs,
+    )
+
+    if stem and stem is not None:
+        stem = stem + "."
+    else:
+        stem = ""
+
+    assert (tmp_path / f"{stem}mokapot.x.{ext}").exists()
+    assert (tmp_path / f"{stem}mokapot.y.{ext}").exists()
+    assert decoys == (tmp_path / f"{stem}mokapot.decoy.z.{ext}").exists()
+
+    assert_frame_equal(
+        pl.read_parquet(out[0]),
+        mock_confidence.results.x.collect(),
+    )
+    assert_frame_equal(
+        pl.read_parquet(out[1]),
+        mock_confidence.results.y.collect(),
+    )
+
+    if decoys:
+        assert_frame_equal(
+            pl.read_parquet(out[2]),
+            mock_confidence.decoy_results.z.collect(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("decoys", "stem", "ext", "separator"),
+    [(False, None, "txt", "\t"), (True, "foo", "bar", ",")],
+)
+def test_to_txt(mock_confidence, tmp_path, decoys, stem, ext, separator):
+    """Test writing parquet."""
+    out = mock_confidence.to_txt(
+        dest_dir=tmp_path,
+        separator=separator,
+        decoys=decoys,
+        stem=stem,
+        ext=ext,
+    )
+
+    if stem and stem is not None:
+        stem = stem + "."
+    else:
+        stem = ""
+
+    assert (tmp_path / f"{stem}mokapot.x.{ext}").exists()
+    assert (tmp_path / f"{stem}mokapot.y.{ext}").exists()
+    assert decoys == (tmp_path / f"{stem}mokapot.decoy.z.{ext}").exists()
+
+    assert_frame_equal(
+        pl.read_csv(out[0], separator=separator),
+        mock_confidence.results.x.collect(),
+    )
+    assert_frame_equal(
+        pl.read_csv(out[1], separator=separator),
+        mock_confidence.results.y.collect(),
+    )
+
+    if decoys:
+        assert_frame_equal(
+            pl.read_csv(out[2], separator=separator),
+            mock_confidence.decoy_results.z.collect(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("decoys", "stem", "ext", "kwargs"),
+    [(False, None, "csv", {}), (True, "foo", "bar", {"separator": "\t"})],
+)
+def test_to_csv(mock_confidence, tmp_path, decoys, stem, ext, kwargs):
+    """Test writing parquet."""
+    out = mock_confidence.to_csv(
+        dest_dir=tmp_path,
+        decoys=decoys,
+        stem=stem,
+        ext=ext,
+        **kwargs,
+    )
+
+    if stem and stem is not None:
+        stem = stem + "."
+    else:
+        stem = ""
+
+    assert (tmp_path / f"{stem}mokapot.x.{ext}").exists()
+    assert (tmp_path / f"{stem}mokapot.y.{ext}").exists()
+    assert decoys == (tmp_path / f"{stem}mokapot.decoy.z.{ext}").exists()
+
+    assert_frame_equal(
+        pl.read_csv(out[0], **kwargs),
+        mock_confidence.results.x.collect(),
+    )
+    assert_frame_equal(
+        pl.read_csv(out[1], **kwargs),
+        mock_confidence.results.y.collect(),
+    )
+
+    if decoys:
+        assert_frame_equal(
+            pl.read_csv(out[2], **kwargs),
+            mock_confidence.decoy_results.z.collect(),
+        )

@@ -6,6 +6,7 @@ import polars as pl
 import pytest
 
 from mokapot import PsmDataset, PsmSchema
+from mokapot.confidence import Confidence, ConfidenceEstimates, TdcLevel
 
 
 @pytest.fixture(scope="session")
@@ -181,37 +182,24 @@ def mock_proteins():
 
 
 @pytest.fixture
-def mock_conf():
-    """Create a mock-up of a LinearConfidence object."""
+def mock_confidence():
+    """Create a mock-up of a Confidence object."""
+    xdf = pl.DataFrame({"x": [1, 2, 3], "y": list("abc")}).lazy()
+    ydf = pl.DataFrame({"x": [4, 5, 6, 7], "y": list("defg")}).lazy()
+    zdf = pl.DataFrame({"z": [1, 2, 3], "y": list("abc")}).lazy()
 
-    class Conf:
+    results = {
+        TdcLevel(name="x", columns="x", unit="xs", schema=None, rng=None): xdf,
+        TdcLevel(name="y", columns="y", unit="ys", schema=None, rng=None): ydf,
+    }
+
+    decoy_results = {
+        TdcLevel(name="z", columns="z", unit="zs", schema=None, rng=None): zdf,
+    }
+
+    class MockConfidence(Confidence):
         def __init__(self):
-            self._optional_columns = {
-                "filename": "filename",
-                "calcmass": "calcmass",
-                "rt": "ret_time",
-                "charge": "charge",
-            }
+            self._results = ConfidenceEstimates(0.01, results)
+            self._decoy_results = ConfidenceEstimates(0.01, decoy_results)
 
-            self._protein_column = "protein"
-            self._peptide_column = "peptide"
-            self._eval_fdr = 0.5
-            self._proteins = None
-            self._has_proteins = False
-
-            self.peptides = pl.DataFrame(
-                {
-                    "filename": "a/b/c.mzML",
-                    "calcmass": [1, 2],
-                    "ret_time": [60, 120],
-                    "charge": [2, 3],
-                    "peptide": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
-                    "mokapot q-value": [0.001, 0.1],
-                    "protein": ["A|B|C\tB|C|A", "A|B|C"],
-                }
-            )
-
-            self.confidence_estimates = {"peptides": self.peptides}
-            self.decoy_confidence_estimates = {"peptides": self.peptides}
-
-    return Conf()
+    return MockConfidence()
