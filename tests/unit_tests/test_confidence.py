@@ -1,4 +1,5 @@
 """Test that Confidence classes are working correctly."""
+
 import pickle
 
 import numpy as np
@@ -24,26 +25,25 @@ def test_with_proteins(psm_df_1000):
         data=data,
         schema=PsmSchema(**schema_kwargs),
         scores=data["score"],
-        eval_fdr=0.01,
+        eval_fdr=0.2,
         rng=rng,
         proteins=proteins,
     )
 
-    print(conf)  # Tests repr w/ proteins
-    prot1 = conf.proteins
-
+    prot1 = conf.results.proteins
     rng = np.random.default_rng(42)
     conf = PsmConfidence(
         data=data,
         schema=PsmSchema(**schema_kwargs),
         scores=data["score"],
-        eval_fdr=0.01,
+        eval_fdr=0.2,
         rng=rng,
         proteins=proteins,
     )
 
-    prot2 = conf.proteins
-    assert_frame_equal(prot1, prot2)
+    prot2 = conf.results.proteins
+    with pl.StringCache():
+        assert_frame_equal(prot1, prot2)
 
 
 def test_repr(psm_df_easy):
@@ -59,7 +59,7 @@ def test_repr(psm_df_easy):
         rng=rng,
     )
 
-    print(conf)
+    str(conf)
 
 
 def test_random_tie_break(psm_df_easy):
@@ -74,8 +74,7 @@ def test_random_tie_break(psm_df_easy):
         eval_fdr=0.2,
         rng=rng,
     )
-
-    df1 = conf.psms
+    df1 = conf.results.psms
 
     rng = np.random.default_rng(1)
     conf = PsmConfidence(
@@ -86,7 +85,7 @@ def test_random_tie_break(psm_df_easy):
         rng=rng,
     )
 
-    df2 = conf.psms
+    df2 = conf.results.psms
     assert_frame_not_equal(df1, df2)
 
     rng = np.random.default_rng(1)
@@ -98,7 +97,7 @@ def test_random_tie_break(psm_df_easy):
         rng=rng,
     )
 
-    df3 = conf.psms
+    df3 = conf.results.psms
     assert_frame_equal(df2, df3)
 
 
@@ -115,7 +114,7 @@ def test_groups(psm_df_1000):
         rng=rng,
     )
 
-    scores0 = conf.psms["mokapot q-value"]
+    scores0 = conf.results.psms.collect()["mokapot q-value"]
 
     # Set to 1 group.
     data = data.with_columns(pl.lit(0).alias("group"))
@@ -128,7 +127,7 @@ def test_groups(psm_df_1000):
         rng=rng,
     )
 
-    scores1 = conf.psms["mokapot q-value"]
+    scores1 = conf.results.psms.collect()["mokapot q-value"]
     assert_series_not_equal(scores0, scores1)
 
     # Remove gruops:
@@ -142,7 +141,7 @@ def test_groups(psm_df_1000):
         eval_fdr=0.01,
         rng=rng,
     )
-    scores2 = conf.psms["mokapot q-value"]
+    scores2 = conf.results.psms.collect()["mokapot q-value"]
     assert_series_equal(scores1, scores2)
 
 

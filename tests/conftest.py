@@ -1,4 +1,6 @@
-"""This file contains fixtures that are used at multiple points in the tests."""
+"""Fixtures that are used at multiple points in the tests."""
+import random
+
 import numpy as np
 import polars as pl
 import pytest
@@ -60,7 +62,7 @@ def psm_df_1000(tmp_path):
         "group": rng.choice(2, size=500),
         "peptide": peptides[:500],
         "score": np.concatenate(
-            [rng.normal(3, size=200), rng.normal(size=300)]
+            [rng.normal(2, size=200), rng.normal(size=300)]
         ),
         "score2": rng.normal(size=500),
         "filename": "test.mzML",
@@ -101,9 +103,9 @@ def psm_df_1000(tmp_path):
     }
 
     # The fasta for it:
-    fasta_data = "\n".join(_make_fasta(1000, peptides, 50, rng))
+    fasta_data = "\n".join(_make_fasta(peptides, 50, rng))
 
-    fasta = tmp_path / "test_1000.fasta"
+    fasta = tmp_path / "test.fasta"
     with open(fasta, "w+") as fasta_ref:
         fasta_ref.write(fasta_data)
 
@@ -117,15 +119,11 @@ def psms(psm_df_1000):
     return PsmDataset(data=df, schema=PsmSchema(**schema_kwargs))
 
 
-def _make_fasta(
-    num_proteins, peptides, peptides_per_protein, random_state, prefix=""
-):
+def _make_fasta(peptides, peptides_per_protein, random_state, prefix=""):
     """Create a FASTA string from a set of peptides.
 
     Parameters
     ----------
-    num_proteins : int
-        The number of proteins to generate.
     peptides : list of str
         A list of peptide sequences.
     peptides_per_protein: int
@@ -141,11 +139,22 @@ def _make_fasta(
         A list of lines in a FASTA file.
     """
     lines = []
-    for protein in range(num_proteins):
-        lines.append(f">{prefix}sp|test|test_{protein}")
-        lines.append(
-            "".join(list(random_state.choice(peptides, peptides_per_protein)))
-        )
+    random.seed(int(random_state.integers(0, 9999)))
+    random.shuffle(peptides)
+
+    protein = []
+    protein_number = 0
+    for peptide in peptides:
+        protein.append(peptide)
+        if len(protein) == peptides_per_protein:
+            lines.append(f">{prefix}sp|test|test_{protein_number}")
+            lines.append("".join(protein))
+            protein = []
+            protein_number += 1
+
+    if protein:
+        lines.append(f">{prefix}sp|test|test_{protein_number}")
+        lines.append("".join(protein))
 
     return lines
 
@@ -160,6 +169,8 @@ def _random_peptide(length, random_state):
 
 @pytest.fixture
 def mock_proteins():
+    """Create a mock proteins object."""
+
     class Proteins:
         def __init__(self):
             self.peptide_map = {"ABCDXYZ": "X|Y|Z"}
@@ -171,9 +182,9 @@ def mock_proteins():
 
 @pytest.fixture
 def mock_conf():
-    "Create a mock-up of a LinearConfidence object."
+    """Create a mock-up of a LinearConfidence object."""
 
-    class conf:
+    class Conf:
         def __init__(self):
             self._optional_columns = {
                 "filename": "filename",
@@ -203,4 +214,4 @@ def mock_conf():
             self.confidence_estimates = {"peptides": self.peptides}
             self.decoy_confidence_estimates = {"peptides": self.peptides}
 
-    return conf()
+    return Conf()

@@ -1,18 +1,17 @@
-"""One of the primary purposes of mokapot is to assign confidence estimates to
+"""Confidence estimation in mokapot.
+
+One of the primary purposes of mokapot is to assign confidence estimates to
 PSMs. This task is accomplished by ranking PSMs according to a score and using
 an appropriate confidence estimation procedure for the type of data. Mokapot
 can provide confidence estimates based any score, regardless of whether it was
-the result of a learned :py:func:`~mokapot.model.Model` instance or provided
+the result of a learned :py:func:`~mokapot.model.Model` object or provided
 independently.
 
 The following classes store the confidence estimates for a dataset based on the
 provided score. They provide utilities to access, save, and plot these
 estimates for the various relevant levels (i.e. PSMs, peptides, and proteins).
 The :py:class:`~mokapot.confidence.PsmConfidence` class is appropriate for most
-data-dependent acquisition proteomics datasets. In contrast, the
-:py:class:`~mokapot.confidence.PeptideConfidence` class uses peptide-level
-competition to assign confidence to peptides, which is particularly relevant
-for data-independent acquisition proteomics datasets.
+data-dependent acquisition proteomics datasets.
 
 We recommend using the :py:func:`~mokapot.brew()` function or the
 :py:meth:`~mokapot.PsmDataset.assign_confidence()` method to obtain these
@@ -20,6 +19,8 @@ confidence estimates, rather than initializing the classes below directly.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import logging
 from dataclasses import dataclass
 
@@ -31,7 +32,7 @@ from . import qvalues, utils
 from .base import BaseData
 from .proteins import Proteins
 from .schema import PsmSchema
-from .writers import to_flashlfq, to_txt
+from .writers import to_flashlfq
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +73,8 @@ class Confidence(BaseData):
     targets : numpy.ndarray
     proteins : mokapot.Proteins
     rng : numpy.random.Generator
+    results : ConfidenceEstimates
+    decoy_results : ConfidenceEstimates
 
     :meta private:
     """
@@ -140,23 +143,38 @@ class Confidence(BaseData):
         # Also sort for TDC.
         # The '__rand__' column is used to ensure ties are broken
         # randomly.
-        n_rows = self.data.select(pl.count()).collect(streaming=True).item()
-        self._data = (
-            self.data.with_columns(
-                pl.lit(self.targets).alias(schema.target),
-                pl.lit(self.rng.random(n_rows, dtype=np.float32)).alias(
-                    "__rand__"
-                ),
+        with pl.StringCache():
+            n_rows = (
+                self.data.select(pl.count()).collect(streaming=True).item()
             )
-            .sort(by=[schema.score, "__rand__"], descending=schema.desc)
-            .drop("__rand__")
-        )
 
-        # These attribute holds the results as DataFrames:
-        self.confidence_estimates = {}
-        self.decoy_confidence_estimates = {}
-        self.num_accepted = {}
-        self._assign_confidence()
+            self._data = (
+                self.data.with_columns(
+                    pl.lit(self.targets).alias(schema.target),
+                    pl.lit(self.rng.random(n_rows, dtype=np.float32)).alias(
+                        "__rand__"
+                    ),
+                )
+                .sort(by=[schema.score, "__rand__"], descending=schema.desc)
+                .drop("__rand__")
+            )
+
+            # These attribute holds the results as DataFrames:
+            self._results, self._decoy_results = self._assign_confidence()
+
+    def __repr__(self) -> str:
+        """The string representation for these objects."""
+        return str(self.results)
+
+    @property
+    def results(self) -> ConfidenceEstimates:
+        """The confidence estimates for target examples."""
+        return self._results
+
+    @property
+    def decoy_results(self) -> ConfidenceEstimates:
+        """The confidence estimates for decoy examples."""
+        return self._decoy_results
 
     @property
     def desc(self) -> bool:
@@ -168,70 +186,26 @@ class Confidence(BaseData):
         """The available levels for confidence estimates."""
         return [x.name for x in self._levels]
 
-    def __getattr__(self, attr):
-        """Add confidence estimates as attributes."""
-        if "confidence_estimates" not in vars(self):
-            raise AttributeError
-
-        try:
-            return self.confidence_estimates[attr].collect(streaming=True)
-        except KeyError as exc:
-            raise AttributeError from exc
-
-    def to_txt(self, dest_dir=None, file_root=None, sep="\t", decoys=False):
-        """Save confidence estimates to delimited text files.
-
-        Parameters
-        ----------
-        dest_dir : str or None, optional
-            The directory in which to save the files. `None` will use the
-            current working directory.
-        file_root : str or None, optional
-            An optional prefix for the confidence estimate files. The suffix
-            will always be "mokapot.{level}.txt", where "{level}" indicates the
-            level at which confidence estimation was performed (i.e. PSMs,
-            peptides, proteins).
-        sep : str, optional
-            The delimiter to use.
-        decoys : bool, optional
-            Save decoys confidence estimates as well?
-
-        Returns
-        -------
-        list of str
-            The paths to the saved files.
-
-        """
-        return to_txt(
-            self,
-            dest_dir=dest_dir,
-            file_root=file_root,
-            sep=sep,
-            decoys=decoys,
-        )
-
     def _assign_confidence(self) -> None:
         """Assign confidence estimates for the various levels."""
         data = self._data
+        targets = {}
+        decoys = {}
+        tgt_expr = pl.col(self.schema.target)  # Bool, True if target
         filter_expr = pl.col("mokapot q-value") <= self.eval_fdr
+
         for level in self._levels:
             data = level.assign_confidence(data)
-            self.confidence_estimates[level.name] = data.filter(
-                pl.col(self.schema.target)
-            ).drop([self.schema.target])
-
-            self.decoy_confidence_estimates[level.name] = data.filter(
-                ~pl.col(self.schema.target)
-            ).drop([self.schema.target])
+            targets[level] = data.filter(tgt_expr).drop([self.schema.target])
+            decoys[level] = data.filter(~tgt_expr).drop([self.schema.target])
 
             n_accepted = (
-                data.filter(pl.col(self.schema.target) & filter_expr)
+                data.filter(tgt_expr & filter_expr)
                 .select(pl.count())
                 .collect(streaming=True)
                 .item()
             )
 
-            self.num_accepted[level.name] = n_accepted
             LOGGER.info(
                 "  - Found %i %s with q<=%g",
                 n_accepted,
@@ -239,6 +213,11 @@ class Confidence(BaseData):
                 self.eval_fdr,
             )
             data = data.clone().drop(["mokapot q-value", "mokapot PEP"])
+
+        return (
+            ConfidenceEstimates(self.eval_fdr, targets),
+            ConfidenceEstimates(self.eval_fdr, decoys),
+        )
 
 
 class PsmConfidence(Confidence):
@@ -262,8 +241,7 @@ class PsmConfidence(Confidence):
         The proteins to use for protein-level confidence estimation. This
         may be created with :py:func:`mokapot.read_fasta()`.
     eval_fdr : float
-        The false discovery rate threshold for choosing the best feature and
-        creating positive labels during the trainging procedure.
+        The false discovery rate at which to summarize results.
     rng : int or np.random.Generator
         A seed or generator used for cross-validation split creation and to
         break ties, or :code:`None` to use the default random number
@@ -272,11 +250,7 @@ class PsmConfidence(Confidence):
     Attributes
     ----------
     levels : list of str
-    psms : pandas.DataFrame
-        Confidence estimates for PSMs in the dataset.
-    peptides : pandas.DataFrame
-        Confidence estimates for peptides in the dataset.
-    proteins : pandas.DataFrame or None
+    proteins : mokapot.Proteins
         Confidence estimates for proteins in the dataset.
     confidence_estimates : Dict[str, pandas.DataFrame]
         A dictionary of confidence estimates at each level.
@@ -323,24 +297,7 @@ class PsmConfidence(Confidence):
             ],
         )
 
-    def __repr__(self) -> str:
-        """How to print the class."""
-        base = (
-            "A mokapot.PsmConfidence object:\n"
-            f"  - PSMs at q<={self.eval_fdr:g}: {self.num_accepted['psms']}\n"
-            f"  - Peptides at q<={self.eval_fdr:g}: "
-            f"{self.num_accepted['peptides']}\n"
-        )
-
-        if self.proteins is not None:
-            base += (
-                f"  - Protein groups at q<={self.eval_fdr:g}: "
-                f"{self.num_accepted['proteins']}\n"
-            )
-
-        return base
-
-    def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
+    def to_flashlfq(self, out_file: str = "mokapot.flashlfq.txt") -> str:
         """Save confidenct peptides for quantification with FlashLFQ.
 
         `FlashLFQ <https://github.com/smith-chem-wisc/FlashLFQ>`_ is an
@@ -392,9 +349,13 @@ class TdcLevel:
     schema: PsmSchema
     rng: np.random.Generator
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Make sure columns are a list."""
         self.columns = utils.listify(self.columns)
+
+    def __hash__(self) -> int:
+        """Make TdcLevels hashable."""
+        return hash(self.name)
 
     def assign_confidence(
         self,
@@ -417,7 +378,6 @@ class TdcLevel:
 
         :meta private:
         """
-        print(data.collect()["mokapot protein group"].unique())
         # Define some shorhand:
         score = self.schema.score
         target = self.schema.target
@@ -425,9 +385,8 @@ class TdcLevel:
         if self.schema.group is not None:
             keep += self.schema.group
 
-        print(keep)
         tdc_df = (
-            data.groupby(self.columns)
+            data.group_by(self.columns)
             .first()
             .sort(by=self.schema.score, descending=self.schema.desc)
             .select(keep)
@@ -437,7 +396,7 @@ class TdcLevel:
         # Compute q-values
         conf_out = []
         if self.schema.group is not None:
-            group_iter = tdc_df.groupby(self.schema.group)
+            group_iter = tdc_df.group_by(self.schema.group)
         else:
             group_iter = [(None, tdc_df)]
 
@@ -466,11 +425,18 @@ class TdcLevel:
             # Calculate PEPs
             LOGGER.info("Assiging PEPs to %s...", self.unit)
             try:
-                _, peps = qvality.getQvaluesFromScores(
-                    grp_df.filter(pl.col(target))[score],
-                    grp_df.filter(~pl.col(target))[score],
-                    includeDecoys=True,
-                )
+                # We need to capture stdout here:
+                msg = io.StringIO()
+                with contextlib.redirect_stdout(msg):
+                    _, peps = qvality.getQvaluesFromScores(
+                        grp_df.filter(pl.col(target))[score],
+                        grp_df.filter(~pl.col(target))[score],
+                        includeDecoys=True,
+                    )
+
+                if msg.getvalue().startswith("Warning: IRLS did not converge"):
+                    LOGGER.warning("PEP calculation did not converge.")
+
             except SystemExit as msg:
                 if "no decoy hits available for PEP calculation" in str(msg):
                     peps = 0
@@ -494,3 +460,55 @@ class TdcLevel:
         )
 
         return data
+
+
+class ConfidenceEstimates:
+    """Store the confidence estimate result tables.
+
+    Parameters
+    ----------
+    eval_fdr: float
+        The FDR threshold to use for printing.
+    levels: dict of TdcLevel, pl.LazyFrame
+        The level and result table for each level.
+
+    Attributes
+    ----------
+    eval_fdr : float
+       The FDR threshold to use for printing.
+    """
+
+    def __init__(
+        self,
+        eval_fdr: float,
+        levels: dict[TdcLevel, pl.LazyFrame],
+    ) -> None:
+        """Initialize the object."""
+        self.eval_fdr = eval_fdr
+        for level, table in levels.items():
+            setattr(self, level.name, table)
+
+        self._levels = tuple(levels.keys())
+
+    def __iter__(self) -> tuple[TdcLevel, pl.LazyFrame]:
+        """Iterate over the result tables."""
+        for level in self._levels:
+            yield (level, getattr(self, level.name))
+
+    def __repr__(self) -> str:
+        """How to print the class."""
+        lines = ["Confidence estimates for:"]
+        with pl.StringCache():
+            for level, table in self:
+                num = (
+                    table.select(
+                        (pl.col("mokapot q-value") <= self.eval_fdr).sum()
+                    )
+                    .collect(streaming=True)
+                    .item()
+                )
+
+                summary = f"({num} {level.unit} at q<={self.eval_fdr})"
+                lines.append(f"  - {level.name} {summary}")
+
+        return "\n".join(lines)
