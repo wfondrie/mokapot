@@ -106,9 +106,10 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
     LOGGER.info("Splitting PSMs into %i folds...", folds)
     test_idx = [p._split(folds) for p in psms]
     train_sets = _make_train_sets(psms, test_idx)
+
     if max_workers != 1:
         # train_sets can't be a generator for joblib :(
-        train_sets = list(train_sets)
+        train_sets = [copy.copy(d) for d in train_sets]
 
     # If trained models are provided, use the them as-is.
     try:
@@ -181,13 +182,13 @@ def brew(psms, model=None, test_fdr=0.01, folds=3, max_workers=1, rng=None):
         descs = [True] * len(psms)
 
     if using_best_feat:
-        logging.warning(
+        LOGGER.warning(
             "Learned model did not improve over the best feature. "
             "Now scoring by the best feature for each collection "
             "of PSMs."
         )
     elif reset:
-        logging.warning(
+        LOGGER.warning(
             "Learned model did not improve upon the pretrained "
             "input model. Now re-scoring each collection of PSMs "
             "using the original model."

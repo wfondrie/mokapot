@@ -39,7 +39,6 @@ def test_psm_dataset_init(psm_df_6):
     dset = PsmDataset(data, schema)
 
 
-@pytest.mark.skip()
 def test_assign_confidence(psm_df_1000):
     """Test that assign_confidence() methods run."""
     data, fasta, schema_kwargs = psm_df_1000
@@ -65,8 +64,6 @@ def test_assign_confidence(psm_df_1000):
     proteins = mokapot.read_fasta(
         fasta,
         missed_cleavages=0,
-        min_length=5,
-        max_length=5,
         rng=1,
     )
     dset.proteins = proteins
@@ -78,7 +75,7 @@ def test_assign_confidence(psm_df_1000):
     dset = PsmDataset(
         data=data, schema=PsmSchema(**schema_kwargs), eval_fdr=0.05
     )
-    dset.assign_confidence(eval_fdr=0.05)
+    dset.assign_confidence()
 
 
 def test_update_labels(psm_df_6):
@@ -115,11 +112,7 @@ def test_proteins(psm_df_6, mock_proteins):
         dset.proteins = "blah"
 
     dset.proteins = Proteins(
-        "blah",
-        mock_proteins.peptide_map,
-        mock_proteins.protein_map,
-        mock_proteins.shared_peptides,
-        True,
+        {"a": "A", "b": "B", "c": "B", "d": "A", "e": "B"},
         rng=1,
     )
     assert dset.proteins is not None

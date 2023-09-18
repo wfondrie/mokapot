@@ -4,6 +4,7 @@ import pytest
 
 from mokapot import PsmSchema
 from mokapot.proteins import Proteins
+from polars.testing import assert_series_equal, assert_frame_equal
 
 
 @pytest.fixture
@@ -34,35 +35,49 @@ def schema():
     )
 
 
-@pytest.fixture
-def proteins_with_decoys():
+def test_proteins(data, schema):
     """The proteins with decoy present."""
     peptide_map = {
-        "ABC": "T_A",
-        "BCD": "T_A",
-        "HIJ": "T_B",
-        "KLM": "T_C",
-        "CBA": "D_A",
-        "DCB": "D_A",
-        "JIH": "D_B",
-        "MLK": "D_C",
+        "ABC": ["T_A"],
+        "BCD": ["T_A", "T_B"],
+        "EFG": ["T_B"],
+        "HIJ": ["T_B"],
+        "KLM": ["T_C"],
     }
 
-    protein_map = {f"D_{x}": f"T_{x}" for x in "ABC"}
-    shared = {"EFG": "T_B", "GFE": "D_B"}
+    with pl.StringCache():
+        picked = (
+            Proteins(peptides=peptide_map, rng=42)
+            .pick(data=data, schema=schema)
+            .with_columns(
+                pl.col("stripped sequence").cast(pl.Utf8),
+                pl.col("mokapot protein group").cast(pl.Utf8),
+                pl.col("# mokapot protein groups").cast(pl.Int64)
+            )
+            .collect()
+        )
 
-    return Proteins(
-        decoy_prefix="D_",
-        peptide_map=peptide_map,
-        protein_map=protein_map,
-        shared_peptides=shared,
-        has_decoys=True,
-        rng=42,
-    )
+    # Expected:
+    cols = [
+        "target",
+        "peptide",
+        "stripped sequence",
+        "mokapot protein group",
+        "# mokapot protein groups",
+    ]
 
+    data = [
+        [True, "BLAH.A[+1]BC", "ABC", "T_A", 1],
+        [True, "BCD", "BCD", "T_A;T_B", 2],
+        [False, "CBA", "CBA", "T_A", 1],
+        [False, "DCB", "DCB", "T_A;T_B", 2],
+        [True, "EFG", "EFG", "T_B", 1],
+        [False, "GFE", "GFE", "T_B", 1],
+        [True, "HIJ", "HIJ", "T_B", 1],
+        [False, "MLK", "MLK", "T_C", 1],
+    ]
 
-def test_with_decoys(data, schema, proteins_with_decoys):
-    """Test our mapping."""
-    picked = proteins_with_decoys.pick(data=data, schema=schema)
-    print(picked.collect())
-    raise
+    expected = pl.DataFrame(data, schema=cols)
+    print(picked)
+    print(expected)
+    assert_frame_equal(picked, expected)

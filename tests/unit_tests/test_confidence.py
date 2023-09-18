@@ -204,7 +204,7 @@ def test_to_parquet(mock_confidence, tmp_path, decoys, stem, ext, kwargs):
 
     if decoys:
         assert_frame_equal(
-            pl.read_parquet(out[2]),
+            pl.read_parquet(out[3]),
             mock_confidence.decoy_results.z.collect(),
         )
 
@@ -243,7 +243,7 @@ def test_to_txt(mock_confidence, tmp_path, decoys, stem, ext, separator):
 
     if decoys:
         assert_frame_equal(
-            pl.read_csv(out[2], separator=separator),
+            pl.read_csv(out[3], separator=separator),
             mock_confidence.decoy_results.z.collect(),
         )
 
@@ -282,6 +282,6 @@ def test_to_csv(mock_confidence, tmp_path, decoys, stem, ext, kwargs):
 
     if decoys:
         assert_frame_equal(
-            pl.read_csv(out[2], **kwargs),
+            pl.read_csv(out[3], **kwargs),
             mock_confidence.decoy_results.z.collect(),
         )

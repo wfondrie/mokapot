@@ -1,4 +1,5 @@
 """Fixtures that are used at multiple points in the tests."""
+import logging
 import random
 
 import numpy as np
@@ -27,6 +28,12 @@ def psm_df_easy():
         "peptide": "peptide",
     }
     return pl.DataFrame(data), schema
+
+
+@pytest.fixture(autouse=True)
+def set_logging(caplog):
+    """Add logging to everything."""
+    caplog.set_level(level=logging.INFO, logger="mokapot")
 
 
 @pytest.fixture(scope="session")

@@ -16,7 +16,6 @@ want to emulate the behavior of Percolator.
 import copy
 import logging
 import pickle
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -541,7 +540,7 @@ def load_model(model_file):
     # Try a percolator model first:
     try:
         weights = pd.read_csv(model_file, sep="\t", nrows=2).loc[1, :]
-        logging.info("Loading the Percolator model.")
+        LOGGER.info("Loading the Percolator model.")
 
         weight_cols = [c for c in weights.index if c != "m0"]
         model = Model(estimator=LinearSVC(), scaler="as-is")
@@ -554,7 +553,7 @@ def load_model(model_file):
 
     # Then try loading it with pickle:
     except (KeyError, UnicodeDecodeError):
-        logging.info("Loading mokapot model.")
+        LOGGER.info("Loading mokapot model.")
         with open(model_file, "rb") as mod_in:
             model = pickle.load(mod_in)
 

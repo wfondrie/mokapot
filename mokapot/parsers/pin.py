@@ -175,6 +175,70 @@ def read_pin(
     )
 
 
+def read_percolator(perc_file):
+    """
+    Read a Percolator tab-delimited file.
+
+    Percolator input format (PIN) files and the Percolator result files
+    are tab-delimited, but also have a tab-delimited protein list as the
+    final column. This function parses the file and returns a DataFrame.
+
+    Parameters
+    ----------
+    perc_file : str
+        The file to parse.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame of the parsed data.
+    """
+    LOGGER.info("Reading %s...", perc_file)
+    if str(perc_file).endswith(".gz"):
+        fopen = gzip.open
+    else:
+        fopen = open
+
+    with fopen(perc_file) as perc:
+        cols = perc.readline().rstrip().split("\t")
+        dir_line = perc.readline().rstrip().split("\t")[0]
+        if dir_line.lower() != "defaultdirection":
+            perc.seek(0)
+            _ = perc.readline()
+
+        psms = pd.concat((c for c in _parse_in_chunks(perc, cols)), copy=False)
+
+    return psms
+
+
+def _parse_in_chunks(file_obj, columns, chunk_size=int(1e8)):
+    """
+    Parse a file in chunks
+
+    Parameters
+    ----------
+    file_obj : file object
+        The file to read lines from.
+    columns : list of str
+        The columns for each DataFrame.
+    chunk_size : int
+        The chunk size in bytes.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The chunk of PSMs
+    """
+    while True:
+        psms = file_obj.readlines(chunk_size)
+        if not psms:
+            break
+
+        psms = [p.rstrip().split("\t", len(columns) - 1) for p in psms]
+        psms = pd.DataFrame.from_records(psms, columns=columns)
+        yield psms.apply(pd.to_numeric, errors="ignore")
+
+
 def _check_column(col, df, default):
     """Check that a column exists in the dataframe."""
     if col is None:

@@ -2,7 +2,6 @@
 import pytest
 import mokapot
 import numpy as np
-from lxml import etree
 
 
 @pytest.fixture
@@ -36,8 +35,6 @@ def test_pepxml_success(small_pepxml):
 def test_pepxml2df(small_pepxml):
     """Test that we can create a dataframe"""
     single = mokapot.read_pepxml(small_pepxml, decoy_prefix="rev_", to_df=True)
-
-    print(single)
     assert len(single) == 4
     assert len(single["scan"].unique()) == 2
     np.testing.assert_array_equal(single["charge_2"], np.array([1, 1, 1, 0]))

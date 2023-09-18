@@ -83,7 +83,6 @@ line-length = 79
 [tool.ruff.pydocstyle]
 convention = "numpy"
 
-
 [tool.black]
 line-length = 79
 target-version = ['py310']
