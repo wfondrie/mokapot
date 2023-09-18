@@ -5,6 +5,8 @@ from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import polars as pl
+
 if TYPE_CHECKING:
     from ..confidence import Confidence
 
@@ -53,15 +55,16 @@ def to_parquet(
         The paths to the saved files.
 
     """
-    return _to_tabular(
-        conf=conf,
-        dest_dir=dest_dir,
-        stem=stem,
-        decoys=decoys,
-        ext=ext,
-        write_fn="sink_parquet",
-        **kwargs,
-    )
+    with pl.StringCache():
+        return _to_tabular(
+            conf=conf,
+            dest_dir=dest_dir,
+            stem=stem,
+            decoys=decoys,
+            ext=ext,
+            write_fn="sink_parquet",
+            **kwargs,
+        )
 
 
 def to_txt(
@@ -104,15 +107,16 @@ def to_txt(
         The paths to the saved files.
 
     """
-    return _to_tabular(
-        conf=conf,
-        dest_dir=dest_dir,
-        stem=stem,
-        decoys=decoys,
-        ext=ext,
-        write_fn="sink_csv",
-        separator=separator,
-    )
+    with pl.StringCache():
+        return _to_tabular(
+            conf=conf,
+            dest_dir=dest_dir,
+            stem=stem,
+            decoys=decoys,
+            ext=ext,
+            write_fn="sink_csv",
+            separator=separator,
+        )
 
 
 def to_csv(
@@ -154,15 +158,16 @@ def to_csv(
     list of Path
         The paths to the saved files.
     """
-    return _to_tabular(
-        conf=conf,
-        dest_dir=dest_dir,
-        stem=stem,
-        decoys=decoys,
-        ext=ext,
-        write_fn="sink_csv",
-        **kwargs,
-    )
+    with pl.StringCache():
+        return _to_tabular(
+            conf=conf,
+            dest_dir=dest_dir,
+            stem=stem,
+            decoys=decoys,
+            ext=ext,
+            write_fn="sink_csv",
+            **kwargs,
+        )
 
 
 def _to_tabular(

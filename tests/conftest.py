@@ -5,6 +5,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+import mokapot
 from mokapot import PsmDataset, PsmSchema
 from mokapot.confidence import Confidence, ConfidenceEstimates, TdcLevel
 
@@ -117,7 +118,23 @@ def psm_df_1000(tmp_path):
 def psms(psm_df_1000):
     """A small PsmDataset."""
     df, _, schema_kwargs = psm_df_1000
-    return PsmDataset(data=df, schema=PsmSchema(**schema_kwargs))
+    return PsmDataset(
+        data=df,
+        schema=PsmSchema(**schema_kwargs),
+        eval_fdr=0.05,
+    )
+
+
+@pytest.fixture
+def psms_with_proteins(psm_df_1000):
+    """A small PsmDataset."""
+    df, fasta, schema_kwargs = psm_df_1000
+    return PsmDataset(
+        data=df,
+        schema=PsmSchema(**schema_kwargs),
+        proteins=mokapot.read_fasta(fasta, missed_cleavages=0),
+        eval_fdr=0.05,
+    )
 
 
 def _make_fasta(peptides, peptides_per_protein, random_state, prefix=""):
@@ -188,9 +205,38 @@ def mock_confidence():
     ydf = pl.DataFrame({"x": [4, 5, 6, 7], "y": list("defg")}).lazy()
     zdf = pl.DataFrame({"z": [1, 2, 3], "y": list("abc")}).lazy()
 
+    peptides = pl.DataFrame(
+        {
+            "fname": ["x/y/c.mzML"] * 2,
+            "seq": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
+            "calcmass": [1, 2],
+            "rt": [60.0, 120.0],
+            "charge": [2, 3],
+            "mokapot protein group": ["A|B|C; B|C|A", "A|B|C"],
+            "mokapot q-value": [0.01, 0.001],
+        }
+    ).lazy()
+
+    schema = PsmSchema(
+        target="foo",
+        spectrum="foo",
+        peptide="seq",
+        file="fname",
+        calcmass="calcmass",
+        ret_time="rt",
+        charge="charge",
+    )
+
     results = {
         TdcLevel(name="x", columns="x", unit="xs", schema=None, rng=None): xdf,
         TdcLevel(name="y", columns="y", unit="ys", schema=None, rng=None): ydf,
+        TdcLevel(
+            name="peptides",
+            columns="seq",
+            unit="peptides",
+            schema=None,
+            rng=None,
+        ): peptides,
     }
 
     decoy_results = {
@@ -199,6 +245,9 @@ def mock_confidence():
 
     class MockConfidence(Confidence):
         def __init__(self):
+            self.eval_fdr = 0.01
+            self._proteins = True
+            self.schema = schema
             self._results = ConfidenceEstimates(0.01, results)
             self._decoy_results = ConfidenceEstimates(0.01, decoy_results)
 
