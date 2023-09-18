@@ -51,8 +51,10 @@ def to_flashlfq(
         iter(conf)
     except TypeError:
         conf = [conf]
-    except AssertionError:
-        raise ValueError("'conf' should be a Confidence object, not a string.")
+    except AssertionError as exc:
+        raise ValueError(
+            "'conf' should be a Confidence object, not a string."
+        ) from exc
 
     with pl.StringCache():
         (
