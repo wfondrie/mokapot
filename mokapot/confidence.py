@@ -346,11 +346,9 @@ class Confidence(BaseData):
             # This is kind of hacky, but I haven't figured out a better way to
             # do this yet.
             if level.name == "proteins":
-                data = (
-                    data
-                    .filter(pl.col("# mokapot protein groups") == 1)
-                    .drop("# mokapot protein groups")
-                )
+                data = data.filter(
+                    pl.col("# mokapot protein groups") == 1
+                ).drop("# mokapot protein groups")
 
             data = level.assign_confidence(data)
             targets[level] = data.filter(tgt_expr).drop([self.schema.target])
