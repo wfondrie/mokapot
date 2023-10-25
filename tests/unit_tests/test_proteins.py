@@ -1,10 +1,10 @@
 """Test that our picked protein appraoch is work as we expect."""
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 
 from mokapot import PsmSchema
 from mokapot.proteins import Proteins
-from polars.testing import assert_series_equal, assert_frame_equal
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def test_proteins(data, schema):
             .with_columns(
                 pl.col("stripped sequence").cast(pl.Utf8),
                 pl.col("mokapot protein group").cast(pl.Utf8),
-                pl.col("# mokapot protein groups").cast(pl.Int64)
+                pl.col("# mokapot protein groups").cast(pl.Int64),
             )
             .collect()
         )
@@ -78,6 +78,4 @@ def test_proteins(data, schema):
     ]
 
     expected = pl.DataFrame(data, schema=cols)
-    print(picked)
-    print(expected)
     assert_frame_equal(picked, expected)
