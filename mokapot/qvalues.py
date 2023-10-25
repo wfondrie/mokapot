@@ -113,7 +113,7 @@ def tdc(
 
 @nb.njit
 def _fdr2qvalue(
-    fdr: np.ndarry,
+    fdr: np.ndarray,
     num_total: np.ndarray,
     met: np.ndarray,
     indices: tuple[np.ndarray],
