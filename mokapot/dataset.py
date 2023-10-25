@@ -1,20 +1,8 @@
-"""The :py:class:`PsmDataset` class is used to define a collection
+"""Store and use peptide detections.
+
+The :py:class:`PsmDataset` class is used to define a collection
 peptide-spectrum matches. The :py:class:`PsmDataset` class is suitable for
 most types of data-dependent acquisition proteomics experiments.
-
-Although the class can be constructed from a :py:class:`pandas.DataFrame`, it
-is often easier to load the PSMs directly from a file in the `Percolator
-tab-delimited format
-<https://github.com/percolator/percolator/wiki/Interface#tab-delimited-file-format>`_
-(also known as the Percolator input format, or "PIN") using the
-:py:func:`~mokapot.read_pin()` function or from a PepXML file using the
-:py:func:`~mokapot.read_pepxml()` function. If protein-level confidence
-estimates are desired, make sure to use the
-:py:meth:`~LinearPsmDataset.add_proteins()` method.
-
-One of more instance of this class are required to use the
-:py:func:`~mokapot.brew()` function.
-
 """
 from __future__ import annotations
 
@@ -58,10 +46,12 @@ class _BaseDataset(BaseData):
         generator state.
     unit : str
         The unit to use in logging messages.
-    startification : list[str]
+    straification : list[str]
         Columns in the data to use for grouping into cross-validation folds.
         examples in the same group are always assigned to the same
         cross-validation fold.
+    subset: int or None
+        The maximum number of examples to use for training.
 
     Attributes
     ----------
@@ -72,6 +62,8 @@ class _BaseDataset(BaseData):
     proteins : mokapot.Proteins
     best_feature : tuple of (str, bool)
     rng : numpy.random.Generator
+    subset : int or None
+        The maximum number of examples to use for training.
 
     :meta private:
     """
@@ -85,6 +77,7 @@ class _BaseDataset(BaseData):
         rng: int | np.random.Generator | None,
         unit: str,
         stratification: list[str],
+        subset: int | None,
     ) -> None:
         """Initialize an object."""
         super().__init__(
@@ -96,6 +89,7 @@ class _BaseDataset(BaseData):
             unit=unit,
         )
 
+        self.subset = subset
         self._stratification = stratification
 
         # Added later:
@@ -181,7 +175,8 @@ class _BaseDataset(BaseData):
         return new_labels
 
     def _find_best_feature(self) -> None:
-        """
+        """Get the best feature.
+
         Find the best feature to separate targets from decoys at the
         specified false-discovery rate threshold.
 
@@ -256,7 +251,7 @@ class _BaseDataset(BaseData):
 
         return (scores - target_score) / (target_score - decoy_score)
 
-    def _create_folds(self, folds) -> None:
+    def _create_folds(self, folds: int) -> None:
         """Create the data splits for cross-validation.
 
         Each fold contains examples that are stratified by specific columns.
@@ -313,6 +308,9 @@ class _BaseDataset(BaseData):
             how="anti" if train else "inner",
         )
 
+        if train and self.subset is not None:
+            fold_data = fold_data.head(self.subset)
+
         new_dset = copy.copy(self)
         new_dset._data = fold_data
         new_dset._best_feature = None
@@ -346,16 +344,15 @@ class _BaseDataset(BaseData):
             feat, desc = self.best_feature
             scores = self.data.select(feat).collect(streaming=True).to_series()
 
-        if isinstance(self.schema, PsmSchema):
-            return PsmConfidence(
-                data=self.data,
-                schema=self.schema,
-                scores=scores,
-                desc=desc,
-                proteins=self.proteins,
-                eval_fdr=self.eval_fdr,
-                rng=self.rng,
-            )
+        return PsmConfidence(
+            data=self.data,
+            schema=self.schema,
+            scores=scores,
+            desc=desc,
+            proteins=self.proteins,
+            eval_fdr=self.eval_fdr,
+            rng=self.rng,
+        )
 
 
 class PsmDataset(_BaseDataset):
@@ -377,6 +374,8 @@ class PsmDataset(_BaseDataset):
     eval_fdr : float, optional
         The false discovery rate threshold for choosing the best feature and
         creating positive labels during the trainging procedure.
+    subset: int, optional
+        The maximum number of examples to use for training.
     rng : int or np.random.Generator, optional
         A seed or generator used for cross-validation split creation and to
         break ties, or :code:`None` to use the default random number
@@ -392,6 +391,8 @@ class PsmDataset(_BaseDataset):
     features : numpy.ndarray
     proteins : mokapot.Proteins
     best_feature : mokapot.dataset.BestFeature
+    subset : int or None
+        The maximum number of PSMs to use for training.
     rng : numpy.random.Generator
     """
 
@@ -401,6 +402,7 @@ class PsmDataset(_BaseDataset):
         schema: PsmSchema,
         proteins: Proteins | None = None,
         eval_fdr: float = 0.01,
+        subset: int | None = None,
         rng: int | np.random.Generator | None = None,
     ) -> None:
         """Initialize a PsmDataset object."""
@@ -412,6 +414,7 @@ class PsmDataset(_BaseDataset):
             rng=rng,
             unit="PSMs",
             stratification=schema.spectrum,
+            subset=subset,
         )
 
     def __repr__(self) -> str:

@@ -2,7 +2,7 @@
 import numpy as np
 import polars as pl
 import pytest
-from polars.testing import assert_frame_equal
+from polars.testing import assert_frame_equal, assert_frame_not_equal
 
 import mokapot
 from mokapot import PsmDataset, PsmSchema
@@ -116,3 +116,44 @@ def test_proteins(psm_df_6, mock_proteins):
         rng=1,
     )
     assert dset.proteins is not None
+
+
+@pytest.mark.parametrize(
+    ("idx", "train", "n_folds", "subset", "expected"),
+    [
+        (0, True, 4, None, 6),
+        (2, True, 4, None, 6),
+        (0, False, 4, None, 2),
+        (2, False, 4, None, 2),
+        (0, True, 2, None, 4),
+        (0, True, 4, 4, 4),
+    ],
+)
+def test_split(idx, train, n_folds, subset, expected):
+    """Test splitting the data."""
+    df = pl.DataFrame(
+        {
+            "target": [True, True, True, True, False, False, False, False],
+            "spectrum": [1, 2, 3, 4, 1, 2, 3, 4],
+            "peptide": ["a", "b", "a", "c", "d", "e", "f", "g"],
+            "feature_1": [4, 3, 2, 1, 1, 0, 0, 0],
+        }
+    )
+
+    schema = PsmSchema(
+        target="target",
+        spectrum="spectrum",
+        peptide="peptide",
+    )
+
+    dset = PsmDataset(df, schema, subset=subset)
+    assert len(dset) == 8
+
+    fold = dset.fold(idx, train=train, folds=n_folds)
+    assert len(fold) == expected
+
+    next_fold = dset.fold(idx + 1, train=train, folds=n_folds)
+    assert_frame_not_equal(fold.data, next_fold.data)
+
+    fold_again = dset.fold(idx, train=train, folds=n_folds)
+    assert_frame_equal(fold.data, fold_again.data)
