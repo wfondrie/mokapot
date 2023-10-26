@@ -26,7 +26,7 @@ class _SchemaValidatorMixin:
     def __init__(
         self, required: list[str], single: list[str], variadic: list[str]
     ) -> None:
-        """Initialize the ColumnValidator"""
+        """Initialize the ColumnValidator."""
         self._required = required
         self._single = single
         self._variadic = variadic
@@ -209,7 +209,7 @@ class PsmSchema(_SchemaValidatorMixin):
         The column to use as the default score for ranking PSMs.
     desc : bool, optional
         Indicates that higher scores in the score column are better. This is
-        omly relevant if a score column is specified.
+        only relevant if a score column is specified.
     """
 
     target: str
@@ -227,7 +227,7 @@ class PsmSchema(_SchemaValidatorMixin):
     score: str | None = None
     desc: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Perform initial validation."""
         super().__init__(
             required=["target", "spectrum", "peptide"],

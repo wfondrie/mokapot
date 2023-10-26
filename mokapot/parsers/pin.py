@@ -1,183 +1,149 @@
-"""
-This module contains the parsers for reading in PSMs
-"""
+"""Parsers for reading in PSMs."""
+import gzip
 import logging
+from io import StringIO
+from os import PathLike
+from typing import IO, Iterable
 
-import pandas as pd
+import numpy as np
 import polars as pl
 
 from .. import utils
-from ..dataset import LinearPsmDataset
+from ..dataset import PsmDataset
+from ..proteins import Proteins
+from ..schema import PsmSchema
 
 LOGGER = logging.getLogger(__name__)
 
 
 def read_pin(
-    pin_files: str | tuple[str] | pl.DataFrame | pd.DataFrame,
-    group_column: str = None,
-    filename_column: str = None,
-    calcmass_column: str = None,
-    expmass_column: str = None,
-    rt_column: str = None,
-    charge_column: str = None,
-    to_df: bool = False,
-) -> LinearPsmDataset | pl.LazyFrame:
+    pin_files: PathLike | pl.DataFrame | Iterable[PathLike | pl.DataFrame],
+    group: str = None,
+    file: str = None,
+    calcmass: str = None,
+    expmass: str = None,
+    ret_time: str = None,
+    charge: str = None,
+    proteins: Proteins | None = None,
+    eval_fdr: float = 0.01,
+    subset: int | None = None,
+    rng: int | np.random.Generator | None = None,
+    strict_parsing: bool = False,
+) -> PsmDataset:
     """Read Percolator input (PIN) tab-delimited files.
 
     Read PSMs from one or more Percolator input (PIN) tab-delmited files,
     aggregating them into a single
-    :py:class:`~mokapot.dataset.LinearPsmDataset`. For more details about the
+    :py:class:`~mokapot.dataset.PsmDataset`. For more details about the
     PIN file format, see the `Percolator documentation
     <https://github.com/percolator/percolator/
     wiki/Interface#tab-delimited-file-format>`_.
+    This function also works on Parquet versions of PIN files.
 
-    Specifically, mokapot requires specific columns in the tab-delmited files:
-    `specid`, `scannr`, `peptide`, and `label`. Note that these
-    column names are case insensitive. In addition to these special columns
-    defined for the PIN format, mokapot also looks for additional columns that
-    specify the MS data file names, theoretical monoisotopic peptide masses,
-    the measured mass, retention times, and charge states, which are necessary
-    to create specific output formats for downstream tools, such as FlashLFQ.
+    Specifically, mokapot requires the following columns in the PIN files:
+    `specid`, `scannr`, `peptide`, and `label`. Note that these column names
+    are case-insensitive. In addition to these special columns that are defined
+    for the PIN format, mokapot also looks for additional columns that specify
+    the MS data file names, theoretical monoisotopic peptide masses, the
+    measured mass, retention times, and charge states, which are necessary to
+    create specific output formats for downstream tools, such as FlashLFQ.
 
     In addition to PIN tab-delimited files, the `pin_files` argument can be a
-    :py:class:`pl.DataFrame` :py:class:`pandas.DataFrame` containing the above
-    columns.
+    :py:class:`pl.DataFrame` or :py:class:`pandas.DataFrame` containing the
+    above columns.
 
     Finally, mokapot does not currently support specifying a default direction
     or feature weights in the PIN file itself. If these are present, they
     will be ignored.
 
+    Warning
+    -------
+    The final column in the PIN format is a tab-delimited list of proteins. For
+    efficiency and because mokapot does not use this column for protein
+    inference, the default behavior is to truncate this column to the first
+    protein in each row. If this is not desired, use the `strict_parsing`
+    parameter. Note that parsing data in this manner will not allow for
+    memory-efficient data streaming that is normally used.
+
     Parameters
     ----------
-    pin_files : str, tuple of str, polars.DataFrame, or pandas.DataFrame
+    pin_files : PathLike, polars.DataFrame, iterable of either
         One or more PIN files or data frames to be read. Multiple files can be
         specified using globs, such as ``"psms_*.pin"`` or separately.
-    group_column : str, optional
+    group : str, optional
         A factor to by which to group PSMs for grouped confidence
         estimation.
-    filename_column : str, optional
+    file : str, optional
         The column specifying the MS data file. If :code:`None`, mokapot will
         look for a column called "filename" (case insensitive). This is
         required for some output formats, such as FlashLFQ.
-    calcmass_column : str, optional
-        The column specifying the theoretical monoisotopic mass of the peptide
-        including modifications. If :code:`None`, mokapot will look for a
-        column called "calcmass" (case insensitive). This is required for some
-        output formats, such as FlashLFQ.
-    expmass_column : str, optional
-        The column specifying the measured neutral precursor mass. If
-        :code:`None`, mokapot will look for a column call "expmass" (case
-        insensitive). This is required for some output formats.
-    rt_column : str, optional
+    ret_time : str, optional
         The column specifying the retention time in seconds. If :code:`None`,
         mokapot will look for a column called "ret_time" (case insensitive).
         This is required for some output formats, such as FlashLFQ.
-    charge_column : str, optional
+    charge : str, optional
         The column specifying the charge state of each peptide. If
         :code:`None`, mokapot will look for a column called "charge" (case
         insensitive). This is required for some output formats, such as
         FlashLFQ.
-    to_df : bool, optional
-        Return a :py:class:`pandas.DataFrame` instead of a
-        :py:class:`~mokapot.dataset.LinearPsmDataset`.
+    proteins : mokapot.Proteins, optional
+        The proteins to use for protein-level confidence estimation. This
+        may be created with :py:func:`mokapot.read_fasta()`.
+    eval_fdr : float, optional
+        The false discovery rate threshold for choosing the best feature and
+        creating positive labels during the trainging procedure.
+    subset: int, optional
+        The maximum number of examples to use for training.
+    rng : int or np.random.Generator, optional
+        A seed or generator used for cross-validation split creation and to
+        break ties, or :code:`None` to use the default random number
+        generator state.
+    strict_parsing : bool, optional
+        If `True`, the fast, memory-efficient parser is replaced by a slower
+        less efficient parser that correctly captures the PIN file protein
+        column. This is generally not recommended.
 
     Returns
     -------
-    LinearPsmDataset or polars.LazyFrame
-        A :py:class:`~mokapot.dataset.LinearPsmDataset` object containing the
-        PSMs from all of the PIN files.
+    PsmDataset
+        The PSMs from all of the PIN files.
 
     """
     logging.info("Parsing PSMs...")
+    data = build_df(pin_files)
+    prot_col = find_column(None, data, "proteins", False)
 
-    # Figure out the type of the input...
-    if isinstance(pin_files, pd.DataFrame):
-        pin_df = pl.from_pandas(pin_files).lazy()
-    elif isinstance(pin_files, pl.DataFrame):
-        pin_df = pin_files.lazy()
-    elif isinstance(pin_files, pl.LazyFrame):
-        pin_df = pin_files
-    else:
-        [pl.scan_csv(f, sep="\t") for f in utils.tuplize(pin_files)]
-        pin_df = pl.concat(pin_files, how="diagonal")
-
-    # Find all of the necessary columns, case-insensitive:
-    specid = [c for c in pin_df.columns if c.lower() == "specid"]
-    peptides = [c for c in pin_df.columns if c.lower() == "peptide"][0]
-    labels = [c for c in pin_df.columns if c.lower() == "label"][0]
-    scan = [c for c in pin_df.columns if c.lower() == "scannr"][0]
-
-    # Optional columns
-    filename = _check_column(filename_column, pin_df, "filename")
-    calcmass = _check_column(calcmass_column, pin_df, "calcmass")
-    expmass = _check_column(expmass_column, pin_df, "expmass")
-    ret_time = _check_column(rt_column, pin_df, "ret_time")
-    charge = _check_column(charge_column, pin_df, "charge_column")
-    spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
-
-    try:
-        proteins = [c for c in pin_df.columns if c.lower() == "proteins"][0]
-    except IndexError:
-        proteins = None
-
-    nonfeat = [*specid, scan, peptides, proteins, labels]
-
-    # Only add charge to features if there aren't other charge columns:
-    alt_charge = [c for c in pin_df.columns if c.lower().startswith("charge")]
-    if charge is not None and len(alt_charge) > 1:
-        nonfeat.append(charge)
-
-    # Add the grouping column
-    if group_column is not None:
-        nonfeat += [group_column]
-        if group_column not in pin_df.columns:
-            raise ValueError(f"The '{group_column} column was not found.")
-
-    for col in [filename, calcmass, expmass, ret_time]:
-        if col is not None:
-            nonfeat.append(col)
-
-    features = [c for c in pin_df.columns if c not in nonfeat]
-
-    # Check for errors:
-    if not all([specid, peptides, labels, spectra]):
-        raise ValueError(
-            "This PIN format is incompatible with mokapot. Please"
-            " verify that the required columns are present."
-        )
-
-    # Convert labels to the correct format.
-    pin_df = pin_df.with_columns(
-        pl.when(pl.col("Label") == 1)
-        .then(True)
-        .otherwise(False)
-        .alias("Label")
+    schema = PsmSchema(
+        target=find_column(None, data, "label", True),
+        spectrum=[
+            find_column(None, data, "specid", True),
+            find_column(None, data, "scannr", True),
+        ],
+        peptide=find_column(None, data, "peptide", True),
+        file=find_column(file, data, "filename", False),
+        expmass=find_column(expmass, data, "expmass", False),
+        calcmass=find_column(calcmass, data, "calcmass", False),
+        ret_time=find_column(ret_time, data, "ret_time", False),
+        charge=find_column(charge, data, "charge", False),
+        group=find_column(group, data, None, False),
+        metadata=prot_col,
     )
 
-    if to_df:
-        return pin_df
+    if schema.expmass is not None:
+        schema.spectrum.append(schema.expmass)
 
-    return LinearPsmDataset(
-        psms=pin_df,
-        target_column=labels,
-        spectrum_columns=spectra,
-        peptide_column=peptides,
-        protein_column=proteins,
-        group_column=group_column,
-        feature_columns=features,
-        filename_column=filename,
-        scan_column=scan,
-        calcmass_column=calcmass,
-        expmass_column=expmass,
-        rt_column=ret_time,
-        charge_column=charge,
-        copy_data=False,
+    return PsmDataset(
+        data=data,
+        schema=schema,
+        eval_fdr=eval_fdr,
+        proteins=proteins,
+        subset=subset,
+        rng=rng,
     )
 
 
-def read_percolator(perc_file):
-    """
-    Read a Percolator tab-delimited file.
+def percolator_to_df(perc_file: PathLike) -> pl.DataFrame:
+    """Read a Percolator tab-delimited file.
 
     Percolator input format (PIN) files and the Percolator result files
     are tab-delimited, but also have a tab-delimited protein list as the
@@ -185,7 +151,7 @@ def read_percolator(perc_file):
 
     Parameters
     ----------
-    perc_file : str
+    perc_file : PathLike
         The file to parse.
 
     Returns
@@ -206,14 +172,16 @@ def read_percolator(perc_file):
             perc.seek(0)
             _ = perc.readline()
 
-        psms = pd.concat((c for c in _parse_in_chunks(perc, cols)), copy=False)
+        psms = pl.concat(_parse_in_chunks(perc, cols), how="vertical")
 
     return psms
 
 
-def _parse_in_chunks(file_obj, columns, chunk_size=int(1e8)):
+def _parse_in_chunks(
+    file_obj: IO, columns: list[str], chunk_size: int = int(1e8)
+) -> pl.DataFrame:
     """
-    Parse a file in chunks
+    Parse a file in chunks.
 
     Parameters
     ----------
@@ -234,20 +202,88 @@ def _parse_in_chunks(file_obj, columns, chunk_size=int(1e8)):
         if not psms:
             break
 
-        psms = [p.rstrip().split("\t", len(columns) - 1) for p in psms]
-        psms = pd.DataFrame.from_records(psms, columns=columns)
-        yield psms.apply(pd.to_numeric, errors="ignore")
+        psms = [
+            ",".join(p.rstrip().split("\t", len(columns) - 1)) for p in psms
+        ]
+
+        psms = [",".join(columns)] + psms
+
+        yield pl.read_csv(StringIO("\n".join(psms)))
 
 
-def _check_column(col, df, default):
-    """Check that a column exists in the dataframe."""
+def find_column(
+    col: str | None,
+    df: pl.LazyFrame,
+    default: str | None,
+    required: bool,
+) -> str:
+    """Check that a column exists in the dataframe.
+
+    Parameters
+    ----------
+    col : str
+        The specified column that should be int he dataframe.
+    df : polars.DataFrame
+        The dataframe.
+    default : str
+        A case-insensitive fall-back option for the column.
+    required : bool
+        Is this column required?
+    """
     if col is None:
         try:
             return [c for c in df.columns if c.lower() == default][0]
-        except IndexError:
-            return None
+        except (IndexError, TypeError):
+            if not required:
+                return None
 
-    if col not in df.columns:
+    if col not in df.columns and required:
         raise ValueError(f"The '{col}' column was not found.")
 
     return col
+
+
+def build_df(
+    pin_files: str | pl.DataFrame | Iterable[str | pl.DataFrame],
+) -> pl.LazyFrame:
+    """Build the PIN DataFrame.
+
+    Parameters
+    ----------
+    pin_files : str, polars.DataFrame, iterable of str or polars.DataFrame
+        One or more PIN files or data frames to be read.
+
+    Returns
+    -------
+    polars.LazyFrame
+        The parsed data.
+    """
+    dfs = []
+    for pin_file in utils.listify(pin_files):
+        # Figure out the type of the input
+        try:
+            pin_file = pl.from_pandas(pin_file)
+        except TypeError:
+            pass
+
+        try:
+            dfs.append(pin_file.lazy())
+        except AttributeError:
+            try:
+                dfs.append(pl.scan_parquet(pin_file))
+            except pl.ArrowError:
+                dfs.append(
+                    pl.scan_csv(
+                        pin_file,
+                        separator="\t",
+                        truncate_ragged_lines=True,
+                    )
+                )
+
+    # Verify columns are identical:
+    first_cols = set(dfs[0].columns)
+    for df in dfs:
+        if set(df.columns) != first_cols:
+            raise ValueError("All pin_files must have the same columns")
+
+    return pl.concat(dfs, how="vertical")

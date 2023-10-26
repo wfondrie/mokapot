@@ -1,54 +1,29 @@
 """Utility functions."""
-import itertools
+from typing import Any
 
-import numpy as np
 import polars as pl
 
 
-def flatten(split):
-    """Get the indices from split."""
-    return list(itertools.chain.from_iterable(split))
+def listify(obj: Any) -> list[Any]:
+    """Convert obj to a list, without splitting strings or dataframes.
 
+    Parameters
+    ----------
+    obj : anything
+        The object to turn into a list.
 
-def safe_divide(numerator, denominator, ones=False):
-    """Divide ignoring div by zero warnings."""
-    if isinstance(numerator, pl.Series):
-        numerator = numerator.values
-
-    if isinstance(denominator, pl.Series):
-        denominator = denominator.values
-
-    numerator = numerator.astype(float)
-    denominator = denominator.astype(float)
-    if ones:
-        out = np.ones_like(numerator)
-    else:
-        out = np.zeros_like(numerator)
-
-    return np.divide(numerator, denominator, out=out, where=(denominator != 0))
-
-
-def tuplize(obj):
-    """Convert obj to a tuple, without splitting strings."""
-    try:
-        _ = iter(obj)
-    except TypeError:
-        obj = (obj,)
-    else:
-        if isinstance(obj, str):
-            obj = (obj,)
-
-    return tuple(obj)
-
-
-def listify(obj):
-    """Convert obj to a list, without splitting strings."""
+    Returns
+    -------
+    list
+        The list representation of th object.
+    """
     try:
         _ = iter(obj)
     except TypeError:
         obj = [obj]
     else:
-        if isinstance(obj, str):
+        # Don't listify strings or DataFrames.
+        if isinstance(obj, str) or hasattr(obj, "columns"):
             obj = [obj]
 
     return list(obj)
