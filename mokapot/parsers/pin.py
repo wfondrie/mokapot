@@ -110,7 +110,7 @@ def read_pin(
 
     """
     logging.info("Parsing PSMs...")
-    data = build_df(pin_files)
+    data = build_df(pin_files, strict_parsing=strict_parsing)
     prot_col = find_column(None, data, "proteins", False)
 
     schema = PsmSchema(
@@ -245,6 +245,7 @@ def find_column(
 
 def build_df(
     pin_files: str | pl.DataFrame | Iterable[str | pl.DataFrame],
+    strict_parsing: bool,
 ) -> pl.LazyFrame:
     """Build the PIN DataFrame.
 
@@ -252,6 +253,8 @@ def build_df(
     ----------
     pin_files : str, polars.DataFrame, iterable of str or polars.DataFrame
         One or more PIN files or data frames to be read.
+    strict_parsing : bool
+        Use our custom parser instead of the fast one build into polars.
 
     Returns
     -------
@@ -272,13 +275,16 @@ def build_df(
             try:
                 dfs.append(pl.scan_parquet(pin_file))
             except pl.ArrowError:
-                dfs.append(
-                    pl.scan_csv(
+                if not strict_parsing:
+                    df = pl.scan_csv(
                         pin_file,
                         separator="\t",
                         truncate_ragged_lines=True,
                     )
-                )
+                else:
+                    df = percolator_to_df(pin_file).lazy()
+
+                dfs.append(df)
 
     # Verify columns are identical:
     first_cols = set(dfs[0].columns)

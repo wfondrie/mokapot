@@ -41,12 +41,18 @@ def test_perc_parsing(dir_pin):
     assert len(df) == 2
     assert df["pRoteins"][0] == "protein1\tprotein2"
 
+    dset = mokapot.read_pin(dir_pin, strict_parsing=True)
+    assert len(dset) == 2
+    assert dset.schema.features == ["sCore"]
+    assert dset.data.collect()["pRoteins"][0] == "protein1\tprotein2"
+
 
 def test_std_pin(std_pin):
     """Test a PIN file without a DefaultDirection line."""
     dset = mokapot.read_pin(std_pin, group="group")
     assert len(dset) == 2
     assert dset.schema.features == ["sCore"]
+    assert dset.data.collect()["pRoteins"][0] == "protein1"
 
     df = mokapot.percolator_to_df(std_pin)
     assert len(df) == 2

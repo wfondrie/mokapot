@@ -13,22 +13,25 @@ typical use cases. For example, use :py:class:`PercolatorModel` if you
 want to emulate the behavior of Percolator.
 
 """
-import copy
+from __future__ import annotations
+
 import logging
 import pickle
+from os import PathLike
+from pathlib import Path
+from typing import Literal
 
 import numpy as np
-import pandas as pd
-from sklearn.base import clone
-from sklearn.svm import LinearSVC
+from sklearn.base import ClassifierMixin, TransformerMixin, clone
+from sklearn.exceptions import NotFittedError
 from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.exceptions import NotFittedError
+from sklearn.svm import LinearSVC
+
+from .dataset import PsmDataset
 
 LOGGER = logging.getLogger(__name__)
-
-# Constants -------------------------------------------------------------------
 PERC_GRID = {
     "class_weight": [
         {0: neg, 1: pos} for neg in (0.1, 1, 10) for pos in (0.1, 1, 10)
@@ -36,10 +39,8 @@ PERC_GRID = {
 }
 
 
-# Classes ---------------------------------------------------------------------
 class Model:
-    """
-    A machine learning model to re-score PSMs.
+    """A machine learning model to re-score PSMs.
 
     Any classifier with a `scikit-learn estimator interface
     <https://scikit-learn.org/stable/developers/develop.html#estimators>`_
@@ -79,11 +80,6 @@ class Model:
     override : bool, optional
         If the learned model performs worse than the best feature, should
         the model still be used?
-    subset_max_train : int or None, optional
-        Use only a random subset of the PSMs for training. This is useful
-        for very large datasets or models that scale poorly with the
-        number of PSMs. The default, :code:`None` will use all of the
-        PSMs.
     shuffle : bool, optional
         Should the order of PSMs be randomized for training? For deterministic
         algorithms, this will have no effect.
@@ -112,8 +108,6 @@ class Model:
     override : bool
         If the learned model performs worse than the best feature, should
         the model still be used?
-    subset_max_train : int
-        The number of PSMs for training.
     shuffle : bool
         Is the order of PSMs shuffled for training?
     fold : int or None
@@ -124,21 +118,19 @@ class Model:
 
     def __init__(
         self,
-        estimator,
-        scaler=None,
-        train_fdr=0.01,
-        max_iter=10,
-        direction=None,
-        override=False,
-        subset_max_train=None,
-        shuffle=True,
-        rng=None,
-    ):
-        """Initialize a Model object"""
+        estimator: ClassifierMixin,
+        scaler: TransformerMixin | Literal["as-is"] | None = None,
+        train_fdr: float = 0.01,
+        max_iter: int = 10,
+        direction: str = None,
+        override: bool = False,
+        shuffle: bool = True,
+        rng: np.random.Generator | int | None = None,
+    ) -> None:
+        """Initialize a Model object."""
         self.estimator = clone(estimator)
         self.features = None
         self.is_trained = False
-        self.subset_max_train = subset_max_train
 
         if scaler == "as-is":
             self.scaler = DummyScaler()
@@ -165,38 +157,37 @@ class Model:
         else:
             self._needs_cv = False
 
-    def __repr__(self):
-        """How to print the class"""
+    def __repr__(self) -> str:
+        """How to print the class."""
         trained = {True: "A trained", False: "An untrained"}
         return (
             f"{trained[self.is_trained]} mokapot.model.Model object:\n"
-            f"\testimator: {self.estimator}\n"
-            f"\tscaler: {self.scaler}\n"
-            f"\tfeatures: {self.features}"
+            f"  estimator: {self.estimator}\n"
+            f"  scaler: {self.scaler}\n"
+            f"  features: {self.features}"
         )
 
     @property
-    def rng(self):
+    def rng(self) -> np.random.Generator:
         """The random number generator for model training."""
         return self._rng
 
     @rng.setter
-    def rng(self, rng):
-        """Set the random number generator"""
+    def rng(self, rng: np.random.Generator | int | None) -> None:
+        """Set the random number generator."""
         self._rng = np.random.default_rng(rng)
 
-    def save(self, out_file):
-        """
-        Save the model to a file.
+    def save(self, out_file: PathLike) -> Path:
+        """Save the model to a file.
 
         Parameters
         ----------
-        out_file : str
+        out_file : PathLike
             The name of the file for the saved model.
 
         Returns
         -------
-        str
+        Path
             The output file name.
 
         Notes
@@ -205,107 +196,89 @@ class Model:
         versions, a saved model may not work when either is changed
         from the version that created the model.
         """
-        with open(out_file, "wb+") as out:
+        out_file = Path(out_file)
+        with out_file.open("wb+") as out:
             pickle.dump(self, out)
 
         return out_file
 
-    def decision_function(self, psms):
-        """
-        Score a collection of PSMs
+    def decision_function(self, dataset: PsmDataset) -> np.ndarray:
+        """Score examples from a dataset.
 
         Parameters
         ----------
-        psms : PsmDataset object
-            :doc:`A collection of PSMs <dataset>` to score.
+        dataset : PsmDataset object
+            The dataset to score.
 
         Returns
         -------
         numpy.ndarray
-            A :py:class:`numpy.ndarray` containing the score for each PSM.
+            A :py:class:`numpy.ndarray` containing the score for each example.
         """
         if not self.is_trained:
             raise NotFittedError("This model is untrained. Run fit() first.")
 
-        feat_names = psms.features.columns.tolist()
-        if set(feat_names) != set(self.features):
+        if set(dataset.schema.features) != set(self.features):
             raise ValueError(
-                "Features of the input data do not match the "
+                "Features of the datset do not match the "
                 "features of this Model."
             )
 
-        feat = self.scaler.transform(
-            psms.features.loc[:, self.features].values
+        # Verifies that the columns are in the correct order:
+        data = (
+            dataset.data.select(self.features)
+            .collect(streaming=True)
+            .to_numpy()
         )
 
-        return _get_scores(self.estimator, feat)
+        feat = self.scaler.transform(data)
+        return self._compute_scores(feat)
 
-    def predict(self, psms):
+    def predict(self, dataset: PsmDataset) -> np.ndarray:
         """Alias for :py:meth:`decision_function`."""
-        return self.decision_function(psms)
+        return self.decision_function(dataset)
 
-    def fit(self, psms):
-        """
-        Fit the model using the Percolator algorithm.
+    def fit(self, dataset: PsmDataset) -> Model:
+        """Fit the model using the Percolator algorithm.
 
         The model if trained by iteratively learning to separate decoy
-        PSMs from high-scoring target PSMs. By default, an initial
+        PSMs from high-scoring target examples. By default, an initial
         direction is chosen as the feature that best separates target
-        from decoy PSMs. A false discovery rate threshold is used to
+        from decoy examples. A false discovery rate threshold is used to
         define how high a target must score to be used as a positive
         example in the next training iteration.
 
         Parameters
         ----------
-        psms : PsmDataset object
-            :doc:`A collection of PSMs <dataset>` from which to train
-            the model.
+        dataset : PsmDataset object
+            The dataset from which to train the model.
 
         Returns
         -------
         self
         """
-        if not (psms.targets).sum():
-            raise ValueError("No target PSMs were available for training.")
-
-        if not (~psms.targets).sum():
-            raise ValueError("No decoy PSMs were available for training.")
-
-        if len(psms.data) <= 200:
-            LOGGER.warning(
-                "Few PSMs are available for model training (%i). "
-                "The learned models may be unstable.",
-                len(psms.data),
+        if not dataset.targets.sum():
+            raise ValueError(
+                f"No target {dataset.unit} were available for training."
             )
 
-        if self.subset_max_train is not None:
-            if self.subset_max_train > len(psms):
-                LOGGER.warning(
-                    "The provided subset value (%i) is larger than the number "
-                    "of psms in the training split (%i), so it will be "
-                    "ignored.",
-                    self.subset_max_train,
-                    len(psms),
-                )
-            else:
-                LOGGER.info(
-                    "Subsetting PSMs (%i) to (%i).",
-                    len(psms),
-                    self.subset_max_train,
-                )
-                subset_idx = self.rng.choice(
-                    len(psms), self.subset_max_train, replace=False
-                )
+        if dataset.targets.sum() == len(dataset):
+            raise ValueError(
+                f"No decoy {dataset.unit} were available for training."
+            )
 
-                psms = copy.copy(psms)
-                psms._data = psms._data.iloc[subset_idx, :]
+        if len(dataset) <= 200:
+            LOGGER.warning(
+                "Few %s are available for model training (%i). "
+                "The learned models may be unstable.",
+                dataset.unit,
+                len(dataset.data),
+            )
 
-        # Choose the initial direction
-        start_labels, feat_pass = _get_starting_labels(psms, self)
-
-        # Normalize Features
-        self.features = psms.features.columns.tolist()
-        norm_feat = self.scaler.fit_transform(psms.features.values)
+        # Scale features and choose the initial direction
+        self.features = dataset.schema.features
+        norm_feat = self.scaler.fit_transform(dataset.features)
+        start_labels = self.starting_labels(dataset, norm_feat)
 
         # Shuffle order
         shuffled_idx = self.rng.permutation(np.arange(len(start_labels)))
@@ -328,23 +301,20 @@ class Model:
             model.fit(samples, iter_targ)
 
             # Update scores
-            scores = _get_scores(model, norm_feat)
+            scores = self._compute_scores(norm_feat)
             scores = scores[original_idx]
 
             # Update target
-            target = psms._update_labels(scores, eval_fdr=self.train_fdr)
+            target = dataset.update_labels(scores, desc=True)
             target = target[shuffled_idx]
             num_passed.append((target == 1).sum())
 
             LOGGER.info(
-                "\t- Iteration %i: %i training PSMs passed.", i, num_passed[i]
+                "  - Iteration %i: %i training PSMs passed.", i, num_passed[i]
             )
 
         # If the model performs worse than what was initialized:
-        if (
-            num_passed[-1] < (start_labels == 1).sum()
-            or num_passed[-1] < feat_pass
-        ):
+        if num_passed[-1] < (start_labels == 1).sum():
             if self.override:
                 LOGGER.warning("Model performs worse after training.")
             else:
@@ -361,10 +331,141 @@ class Model:
         LOGGER.info("Done training.")
         return self
 
+    def starting_labels(
+        self,
+        dataset: PsmDataset,
+        features: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Find the labels to use for the initial direction.
+
+        If the model hasn't been trained and no direction was provided, the
+        feature with the most examples at the dataset's :code:`eval_fdr` will
+        be used. If the model has been trained, then the output of the model is
+        used for further model fitting. Finally, if a direction is provided,
+        then that feature is used compute the starting labels for model
+        training.
+
+        Parameters
+        ----------
+        dataset : PsmDataset
+            The examples to get labels from.
+        features : np.ndarray
+            The scaled features to be used as model input.
+
+        Returns
+        -------
+        np.ndarray
+            The starting labels for model training.
+
+        """
+        LOGGER.info("Finding initial direction...")
+        if self.is_trained:
+            prefix = "The pretrained model"
+            scores = self._compute_scores(features)
+            start_labels = dataset.update_labels(scores)
+        elif self.direction is None:
+            best_feat, desc = dataset.best_feature
+            prefix = f"Selected feature '{best_feat}'"
+            score = (
+                dataset.data.select(best_feat)
+                .collect(streaming=True)
+                .to_numpy()
+            )
+            start_labels = dataset.update_labels(score, desc)
+        else:
+            prefix = f"Provided feature '{self.direction}'"
+            score = (
+                dataset.data.select(self.direction)
+                .collect(streaming=True)
+                .to_numpy()
+            )
+            start_labels = dataset.update_labels(score, desc=True)
+            asc_labels = dataset.update_labels(score, desc=False)
+            if (asc_labels == 1).sum() > (start_labels == 1).sum():
+                start_labels = asc_labels
+
+        LOGGER.info(
+            "  - %s yielded %i %s at q<=%g.",
+            prefix,
+            (start_labels == 1).sum(),
+            dataset.unit,
+            self.train_fdr,
+        )
+
+        if not (start_labels == 1).sum():
+            raise RuntimeError(
+                f"No PSMs accepted at train_fdr={self.train_fdr}. "
+                "Consider changing it to a higher value."
+            )
+
+        return start_labels
+
+    def _compute_scores(self, features: np.ndarray) -> np.ndarry:
+        """Compute the scores with the model.
+
+        We want to use the `predict_proba` method if it is available, but fall
+        back to the `decision_function` method if it isn't. In sklearn,
+        `predict_proba` for a binary classifier returns a two-column numpy
+        array, where the second column is the probability we want. However,
+        skorch (and other tools) sometime do this differently, returning only a
+        single column. This function makes it so mokapot can work with either.
+
+        Parameters
+        ----------
+        features : np.ndarray
+            The normalized features
+
+        Returns
+        -------
+        np.ndarray
+            A :py:class:`numpy.ndarray` containing the score for each row.
+
+        """
+        try:
+            scores = self.estimator.predict_proba(features).squeeze()
+            if len(scores.shape) == 2:
+                return scores[:, 1]
+
+            if len(scores.shape) == 1:
+                return scores
+
+            raise RuntimeError("'predict_proba' returned too many dimensions.")
+        except AttributeError:
+            return self.estimator.decision_function(features)
+
+    @classmethod
+    def load(cls, model_file: PathLike) -> Model:
+        """
+        Load a saved model for mokapot.
+
+        Parameters
+        ----------
+        model_file : PathLike
+            The name of file from which to load the model.
+
+        Returns
+        -------
+        mokapot.model.Model
+            The loaded mokapot model.
+
+        Warnings
+        --------
+        Unpickling data in Python is unsafe. Make sure that the model is from
+        a source that you trust.
+        """
+        LOGGER.info("Loading mokapot model...")
+        with open(model_file, "rb") as mod_in:
+            model = pickle.load(mod_in)
+
+        if isinstance(model, Model):
+            return model
+
+        raise TypeError("This file did not contain a mokapot Model.")
+
 
 class PercolatorModel(Model):
-    """
-    A model that emulates Percolator.
+    """A model that emulates Percolator.
+
     Create linear support vector machine (SVM) model that is similar
     to the one used by Percolator. This is the default model used by
     mokapot.
@@ -396,11 +497,6 @@ class PercolatorModel(Model):
     override : bool, optional
         If the learned model performs worse than the best feature, should
         the model still be used?
-    subset_max_train : int or None, optional
-        Use only a random subset of the PSMs for training. This is useful
-        for very large datasets or models that scale poorly with the
-        number of PSMs. The default, :code:`None` will use all of the
-        PSMs.
     n_jobs : int, optional
         The number of jobs used to parallelize the hyperparameter grid search.
     rng : int or numpy.random.Generator, optional
@@ -428,8 +524,6 @@ class PercolatorModel(Model):
     override : bool
         If the learned model performs worse than the best feature, should
         the model still be used?
-    subset_max_train : int or None
-        The number of PSMs for training.
     n_jobs : int
         The number of jobs to use for parallizing the hyperparameter
         grid search.
@@ -439,16 +533,15 @@ class PercolatorModel(Model):
 
     def __init__(
         self,
-        scaler=None,
-        train_fdr=0.01,
-        max_iter=10,
-        direction=None,
-        override=False,
-        subset_max_train=None,
-        n_jobs=-1,
-        rng=None,
-    ):
-        """Initialize a PercolatorModel"""
+        scaler: TransformerMixin | Literal["as-is"] | None = None,
+        train_fdr: float = 0.01,
+        max_iter: int = 10,
+        direction: str = None,
+        override: bool = False,
+        n_jobs: int = -1,
+        rng: np.random.Generator | int | None = None,
+    ) -> None:
+        """Initialize a PercolatorModel."""
         self.n_jobs = n_jobs
         rng = np.random.default_rng(rng)
         svm_model = LinearSVC(dual=False, random_state=7)
@@ -467,7 +560,6 @@ class PercolatorModel(Model):
             max_iter=max_iter,
             direction=direction,
             override=override,
-            subset_max_train=subset_max_train,
             rng=rng,
         )
 
@@ -480,29 +572,33 @@ class DummyScaler:
     :meta private:
     """
 
-    def fit(self, x):
-        pass
+    def fit(self, x: np.ndarray) -> DummyScaler:
+        """Does nothing."""
+        return self
 
-    def fit_transform(self, x):
+    def fit_transform(self, x: np.ndarray) -> np.ndarray:
+        """Does nothing."""
         return x
 
-    def transform(self, x):
+    def transform(self, x: np.ndarray) -> np.ndarray:
+        """Does nothing."""
         return x
 
 
-# Functions -------------------------------------------------------------------
-def save_model(model, out_file):
+def save_model(model: Model, out_file: PathLike):
     """
     Save a :py:class:`mokapot.model.Model` object to a file.
 
     Parameters
     ----------
-    out_file : str
-        The name of the file for the saved model.
+    model : mokapot.Model
+        The model to save.
+    out_file : PathLike
+        The path at which to the saved model.
 
     Returns
     -------
-    str
+    Path
         The output file name.
 
     Notes
@@ -512,125 +608,6 @@ def save_model(model, out_file):
     that created the model.
     """
     return model.save(out_file)
-
-
-def load_model(model_file):
-    """
-    Load a saved model for mokapot.
-
-    The saved model can either be a saved :py:class:`~mokapot.model.Model`
-    object or the output model weights from Percolator. In Percolator,
-    these can be obtained using the :code:`--weights` argument.
-
-    Parameters
-    ----------
-    model_file : str
-        The name of file from which to load the model.
-
-    Returns
-    -------
-    mokapot.model.Model
-        The loaded :py:class:`mokapot.model.Model` object.
-
-    Warnings
-    --------
-    Unpickling data in Python is unsafe. Make sure that the model is from
-    a source that you trust.
-    """
-    # Try a percolator model first:
-    try:
-        weights = pd.read_csv(model_file, sep="\t", nrows=2).loc[1, :]
-        LOGGER.info("Loading the Percolator model.")
-
-        weight_cols = [c for c in weights.index if c != "m0"]
-        model = Model(estimator=LinearSVC(), scaler="as-is")
-        weight_vals = weights.loc[weight_cols]
-        weight_vals = weight_vals[np.newaxis, :]
-        model.estimator.coef_ = weight_vals
-        model.estimator.intercept_ = weights.loc["m0"]
-        model.features = weight_cols
-        model.is_trained = True
-
-    # Then try loading it with pickle:
-    except (KeyError, UnicodeDecodeError):
-        LOGGER.info("Loading mokapot model.")
-        with open(model_file, "rb") as mod_in:
-            model = pickle.load(mod_in)
-
-    return model
-
-
-# Private Functions -----------------------------------------------------------
-def _get_starting_labels(psms, model):
-    """
-    Get labels using the initial direction.
-
-    Parameters
-    ----------
-    psms : a collection of PSMs
-        The PsmDataset object
-    model : mokapot.Model
-        A model object (this is likely `self`)
-
-    Returns
-    -------
-    start_labels : np.array
-        The starting labels for model training.
-    feat_pass : int
-        The number of passing PSMs with the best feature.
-    """
-    LOGGER.info("Finding initial direction...")
-    if model.direction is None and not model.is_trained:
-        feat_res = psms._find_best_feature(model.train_fdr)
-        best_feat, feat_pass, start_labels, _ = feat_res
-        LOGGER.info(
-            "\t- Selected feature %s with %i PSMs at q<=%g.",
-            best_feat,
-            feat_pass,
-            model.train_fdr,
-        )
-
-    elif model.is_trained:
-        try:
-            scores = model.estimator.decision_function(psms.features)
-        except AttributeError:
-            scores = model.estimator.predict_proba(psms.features).flatten()
-
-        start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
-        LOGGER.info(
-            "\t- The pretrained model found %i PSMs at q<=%g.",
-            (start_labels == 1).sum(),
-            model.train_fdr,
-        )
-
-    else:
-        feat = psms.features[model.direction].values
-        desc_labels = psms._update_labels(feat, model.train_fdr, desc=True)
-        asc_labels = psms._update_labels(feat, model.train_fdr, desc=False)
-
-        desc_pass = (desc_labels == 1).sum()
-        asc_pass = (asc_labels == 1).sum()
-        if desc_pass >= asc_pass:
-            start_labels = desc_labels
-            feat_pass = desc_pass
-        else:
-            start_labels = asc_labels
-            feat_pass = asc_pass
-
-        LOGGER.info(
-            "  - Selected feature %s with %i PSMs at q<=%g.",
-            model.direction,
-            (start_labels == 1).sum(),
-            model.train_fdr,
-        )
-
-    if not (start_labels == 1).sum():
-        raise RuntimeError(
-            f"No PSMs accepted at train_fdr={model.train_fdr}. "
-            "Consider changing it to a higher value."
-        )
-
-    return start_labels, feat_pass
 
 
 def _find_hyperparameters(model, features, labels):
@@ -705,37 +682,3 @@ def _get_weights(model, features):
 
     txt_out.append("intercept" + " " * (col_width - 9) + str(intercept[0]))
     return txt_out
-
-
-def _get_scores(model, feat):
-    """Get the scores from a model
-
-    We want to use the `decision_function` method if it is available,
-    but fall back to the `predict_proba` method if it isn't. In sklearn,
-    `predict_proba` for a binary classifier returns a two-column numpy array,
-    where the second column is the probability we want. However,
-    skorch (and other tools) sometime do this differently, returning only
-    a single column. This function makes it so mokapot can work with either.
-
-    Parameters
-    ----------
-    model : an estimator object
-        The model to score the PSMs.
-    feat : np.ndarray
-        The normalized features
-
-    Returns
-    -------
-    np.ndarray
-        A :py:class:`numpy.ndarray` containing the score for each PSM in feat.
-    """
-    try:
-        return model.decision_function(feat)
-    except AttributeError:
-        scores = model.predict_proba(feat).squeeze()
-        if len(scores.shape) == 2:
-            return model.predict_proba(feat)[:, 1]
-        elif len(scores.shape) == 1:
-            return scores
-        else:
-            raise RuntimeError("'predict_proba' returned too many dimensions.")
