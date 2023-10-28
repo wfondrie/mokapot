@@ -108,18 +108,18 @@ class _BaseDataset(BaseData):
         LOGGER.info(
             "  - %i target %s and %i decoy %s detected.",
             num_targets,
-            self._unit,
+            self.unit,
             num_decoys,
-            self._unit,
+            self.unit,
         )
 
         # Validate the target column.
         if not num_targets:
-            raise ValueError(f"No target {self._unit} were detected.")
+            raise ValueError(f"No target {self.unit} were detected.")
         if not num_decoys:
-            raise ValueError(f"No decoy {self._unit} were detected.")
+            raise ValueError(f"No decoy {self.unit} were detected.")
         if not len(self):
-            raise ValueError(f"No {self._unit} were detected.")
+            raise ValueError(f"No {self.unit} were detected.")
 
     @property
     def features(self) -> np.ndarray:
@@ -164,8 +164,9 @@ class _BaseDataset(BaseData):
             training.
 
         """
-        if len(scores.shape) > 1 and sum(np.array(scores.shape) > 0) == 1:
-            scores = scores.flatten()
+        scores = np.array(scores).squeeze()
+        if len(scores.shape) > 1:
+            raise ValueError("scores must be one dimensional.")
 
         qvals = qvalues.tdc(scores, target=self.targets, desc=desc)
         unlabeled = np.logical_and(qvals > self.eval_fdr, self.targets)

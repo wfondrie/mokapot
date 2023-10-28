@@ -1,17 +1,18 @@
-"""Test that models work as expected"""
-import pytest
-import mokapot
+"""Test that models work as expected."""
 import numpy as np
-import pandas as pd
-from sklearn.svm import LinearSVC
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.model_selection import GridSearchCV
+import polars as pl
+import pytest
 from sklearn.exceptions import NotFittedError
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.svm import LinearSVC
+
+import mokapot
 
 
 def test_model_init():
-    """Test that a model initializes correctly"""
+    """Test that a model initializes correctly."""
     model = mokapot.Model(
         LogisticRegression(),
         scaler=MinMaxScaler(),
@@ -19,7 +20,6 @@ def test_model_init():
         max_iter=1,
         direction="score",
         override=True,
-        subset_max_train=500,
         shuffle=False,
     )
 
@@ -29,7 +29,6 @@ def test_model_init():
     assert model.max_iter == 1
     assert model.direction == "score"
     assert model.override
-    assert model.subset_max_train == 500
     assert not model.shuffle
     assert not model.is_trained
 
@@ -41,14 +40,13 @@ def test_model_init():
 
 
 def test_perc_init():
-    """Test the initialization of a PercolatorModel"""
+    """Test the initialization of a PercolatorModel."""
     model = mokapot.PercolatorModel(
         scaler="as-is",
         train_fdr=0.05,
         max_iter=1,
         direction="score",
         override=True,
-        subset_max_train=500,
     )
     assert isinstance(model.estimator, GridSearchCV)
     assert isinstance(model.estimator.estimator, LinearSVC)
@@ -57,11 +55,10 @@ def test_perc_init():
     assert model.max_iter == 1
     assert model.direction == "score"
     assert model.override
-    assert model.subset_max_train == 500
 
 
 def test_model_fit(psms):
-    """Test that model fitting works"""
+    """Test that model fitting works."""
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
     model.fit(psms)
 
@@ -73,29 +70,25 @@ def test_model_fit(psms):
     assert isinstance(model.estimator, LogisticRegression)
     assert model.is_trained
 
-    no_targets = pd.DataFrame({"targets": [False] * 100})
+    class DummyData:
+        def __init__(self, tgt):
+            self.targets = np.array(tgt)
+            self.unit = "blah"
+
+        def __len__(self):
+            return len(self.targets)
+
+    no_targets = DummyData([False] * 100)
     with pytest.raises(ValueError):
         model.fit(no_targets)
 
-    no_decoys = pd.DataFrame({"targets": [True] * 100})
+    no_decoys = DummyData([True] * 100)
     with pytest.raises(ValueError):
         model.fit(no_decoys)
 
 
-def test_model_fit_large_subset(psms):
-    model = mokapot.Model(
-        LogisticRegression(),
-        train_fdr=0.05,
-        max_iter=1,
-        subset_max_train=2_000_000_000,
-    )
-    model.fit(psms)
-
-    assert model.is_trained
-
-
 def test_model_predict(psms):
-    """Test predictions"""
+    """Test predictions."""
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
 
     try:
@@ -109,14 +102,16 @@ def test_model_predict(psms):
     assert len(scores) == len(psms)
 
     # The case where a model is trained on a dataset with different features:
-    psms._data["blah"] = np.random.randn(len(psms))
-    psms._feature_columns = ("score", "blah")
+    psms._data = psms.data.with_columns(
+        pl.Series(np.random.randn(len(psms))).alias("blah")
+    )
+    psms.schema.features = ["score", "blah"]
     with pytest.raises(ValueError):
         model.predict(psms)
 
 
 def test_model_persistance(tmp_path):
-    """test that we can save and load a model"""
+    """Test that we can save and load a model."""
     model_file = str(tmp_path / "model.pkl")
 
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
@@ -127,7 +122,7 @@ def test_model_persistance(tmp_path):
 
 
 def test_dummy_scaler():
-    """Test the DummyScaler class"""
+    """Test the DummyScaler class."""
     data = np.random.default_rng(42).normal(0, 1, (20, 10))
     scaler = mokapot.model.DummyScaler()
     assert (data == scaler.fit_transform(data)).all()

@@ -59,9 +59,7 @@ class BaseData(RngMixin):
         self.schema = schema
         self.eval_fdr = eval_fdr
         self.proteins = proteins
-
-        # Private:
-        self._unit = unit
+        self.unit = unit
         self._len = None  # We cache this for speed.
 
         # Try and read data.
