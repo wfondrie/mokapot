@@ -1,4 +1,5 @@
 """Initialize the mokapot package."""
+from .brew import Barista, brew
 from .confidence import PsmConfidence
 from .dataset import PsmDataset
 from .model import Model, PercolatorModel, load_model, save_model
@@ -8,7 +9,6 @@ from .schema import PsmSchema
 from .version import _get_version
 from .writers import to_csv, to_flashlfq, to_parquet, to_txt
 
-# from .brew import brew
 # from .parsers.pepxml import read_pepxml
 
 

@@ -117,7 +117,7 @@ class Confidence(BaseData):
         self.schema.desc = bool(desc)
         self._levels = levels
         self._data = self.data.select(keep_cols).with_columns(
-            pl.lit(scores).alias(self.schema.score)
+            pl.Series(scores).alias(self.schema.score)
         )
 
         # Add proteins if necessary

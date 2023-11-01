@@ -18,7 +18,6 @@ def test_model_init():
         scaler=MinMaxScaler(),
         train_fdr=0.05,
         max_iter=1,
-        direction="score",
         override=True,
         shuffle=False,
     )
@@ -27,7 +26,6 @@ def test_model_init():
     assert isinstance(model.scaler, MinMaxScaler)
     assert model.train_fdr == 0.05
     assert model.max_iter == 1
-    assert model.direction == "score"
     assert model.override
     assert not model.shuffle
     assert not model.is_trained
@@ -45,7 +43,6 @@ def test_perc_init():
         scaler="as-is",
         train_fdr=0.05,
         max_iter=1,
-        direction="score",
         override=True,
     )
     assert isinstance(model.estimator, GridSearchCV)
@@ -53,7 +50,6 @@ def test_perc_init():
     assert isinstance(model.scaler, mokapot.model.DummyScaler)
     assert model.train_fdr == 0.05
     assert model.max_iter == 1
-    assert model.direction == "score"
     assert model.override
 
 

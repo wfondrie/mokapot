@@ -71,9 +71,11 @@ def psm_df_1000(tmp_path):
         "group": rng.choice(2, size=500),
         "peptide": peptides[:500],
         "score": np.concatenate(
-            [rng.normal(2, size=200), rng.normal(size=300)]
+            [rng.normal(2.5, size=300), rng.normal(size=200)]
         ),
-        "score2": rng.normal(size=500),
+        "score2": np.concatenate(
+            [rng.normal(2.5, size=300), rng.normal(size=200)]
+        ),
         "filename": "test.mzML",
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
@@ -128,7 +130,7 @@ def psms(psm_df_1000):
     return PsmDataset(
         data=df,
         schema=PsmSchema(**schema_kwargs),
-        eval_fdr=0.05,
+        eval_fdr=0.1,
     )
 
 

@@ -73,12 +73,6 @@ class Model:
         positive example.
     max_iter : int, optional
         The number of iterations to perform.
-    direction : str or None, optional
-        The name of the feature to use as the initial direction for ranking
-        PSMs. The default, :code:`None`, automatically
-        selects the feature that finds the most PSMs below the
-        `train_fdr`. This
-        will be ignored in the case the model is already trained.
     override : bool, optional
         If the learned model performs worse than the best feature, should
         the model still be used?
@@ -104,9 +98,6 @@ class Model:
         positive example.
     max_iter : int
         The number of iterations to perform.
-    direction : str or None
-        The name of the feature to use as the initial direction for ranking
-        PSMs.
     override : bool
         If the learned model performs worse than the best feature, should
         the model still be used?
@@ -124,7 +115,6 @@ class Model:
         scaler: TransformerMixin | Literal["as-is"] | None = None,
         train_fdr: float = 0.01,
         max_iter: int = 10,
-        direction: str = None,
         override: bool = False,
         shuffle: bool = True,
         rng: np.random.Generator | int | None = None,
@@ -143,7 +133,6 @@ class Model:
 
         self.train_fdr = train_fdr
         self.max_iter = max_iter
-        self.direction = direction
         self.override = override
         self.shuffle = shuffle
         self.rng = rng
@@ -198,7 +187,7 @@ class Model:
 
         return out_file
 
-    def decision_function(self, dataset: PsmDataset) -> np.ndarray:
+    def predict(self, dataset: PsmDataset) -> np.ndarray:
         """Score examples from a dataset.
 
         Parameters
@@ -216,7 +205,7 @@ class Model:
 
         if set(dataset.schema.features) != set(self.features):
             raise ValueError(
-                "Features of the datset do not match the "
+                "Features of the dataset do not match the "
                 "features of this Model."
             )
 
@@ -230,8 +219,8 @@ class Model:
         feat = self.scaler.transform(data)
         return self._compute_scores(feat)
 
-    def predict(self, dataset: PsmDataset) -> np.ndarray:
-        """Alias for :py:meth:`decision_function`."""
+    def decision_function(self, dataset: PsmDataset) -> np.ndarray:
+        """Alias for :py:meth:`predict`."""
         return self.decision_function(dataset)
 
     def fit(self, dataset: PsmDataset) -> Model:
@@ -297,7 +286,7 @@ class Model:
             model.fit(samples, iter_targ)
 
             # Update scores
-            scores = self._compute_scores(norm_feat)
+            scores = self._compute_scores(norm_feat, model)
             scores = scores[original_idx]
 
             # Update target
@@ -357,7 +346,7 @@ class Model:
             prefix = "The pretrained model"
             scores = self._compute_scores(features)
             start_labels = dataset.update_labels(scores)
-        elif self.direction is None:
+        else:
             best_feat, desc = dataset.best_feature
             prefix = f"Selected feature '{best_feat}'"
             score = (
@@ -366,17 +355,6 @@ class Model:
                 .to_numpy()
             )
             start_labels = dataset.update_labels(score, desc)
-        else:
-            prefix = f"Provided feature '{self.direction}'"
-            score = (
-                dataset.data.select(self.direction)
-                .collect(streaming=True)
-                .to_numpy()
-            )
-            start_labels = dataset.update_labels(score, desc=True)
-            asc_labels = dataset.update_labels(score, desc=False)
-            if (asc_labels == 1).sum() > (start_labels == 1).sum():
-                start_labels = asc_labels
 
         LOGGER.info(
             "  - %s yielded %i %s at q<=%g.",
@@ -394,7 +372,11 @@ class Model:
 
         return start_labels
 
-    def _compute_scores(self, features: np.ndarray) -> np.ndarry:
+    def _compute_scores(
+        self,
+        features: np.ndarray,
+        model: ClassifierMixin = None,
+    ) -> np.ndarry:
         """Compute the scores with the model.
 
         We want to use the `predict_proba` method if it is available, but fall
@@ -408,6 +390,8 @@ class Model:
         ----------
         features : np.ndarray
             The normalized features
+        model : ClassifierMixin
+            An optional sklearn classifier.
 
         Returns
         -------
@@ -415,8 +399,11 @@ class Model:
             A :py:class:`numpy.ndarray` containing the score for each row.
 
         """
+        if model is None:
+            model = self.estimator
+
         try:
-            scores = self.estimator.predict_proba(features).squeeze()
+            scores = model.predict_proba(features).squeeze()
             if len(scores.shape) == 2:
                 return scores[:, 1]
 
@@ -425,7 +412,7 @@ class Model:
 
             raise RuntimeError("'predict_proba' returned too many dimensions.")
         except AttributeError:
-            return self.estimator.decision_function(features)
+            return model.decision_function(features)
 
     @classmethod
     def load(cls, model_file: PathLike) -> Model:
@@ -487,7 +474,7 @@ class Model:
             new_est = self.estimator.estimator
             new_est.set_params(**best_params)
             for param, value in best_params.items():
-                LOGGER.info("\t- %s = %s", param, value)
+                LOGGER.info("  - %s = %s", param, value)
 
             return new_est
 
@@ -506,18 +493,18 @@ class Model:
             if not all(criteria):
                 raise ValueError
 
-            weights = list(weights.flatten())
-        except (AttributeError, ValueError):
-            LOGGER.info("Normalized feature weights in the learned model:")
-            col_width = max(len(f) for f in self.features) + 2
-            LOGGER.info("Feature %s Weight", " " * (col_width - 8))
-            for weight, feature in zip(weights, self.features):
-                space = " " * (col_width - len(feature))
-                LOGGER.info("    %s", feature + space + str(weight))
+            weights = list(weights.flatten()) + list(intercept)
+            features = self.features + ["intercept"]
 
-            LOGGER.info(
-                "    intercept%s", " " * (col_width - 9) + str(intercept[0])
-            )
+            LOGGER.info("Normalized feature weights in the learned model:")
+            col_width = max(len(f) for f in features) + 2
+            LOGGER.info("  Feature %s Weight", " " * (col_width - 9))
+            for weight, feature in zip(weights, features):
+                space = " " * (col_width - len(feature))
+                LOGGER.info("  %s", feature + space + str(weight))
+
+        except (AttributeError, ValueError):
+            pass
 
 
 class PercolatorModel(Model):
@@ -574,9 +561,6 @@ class PercolatorModel(Model):
         positive example.
     max_iter : int
         The number of iterations to perform.
-    direction : str or None
-        The name of the feature to use as the initial direction for ranking
-        PSMs.
     override : bool
         If the learned model performs worse than the best feature, should
         the model still be used?
@@ -593,7 +577,6 @@ class PercolatorModel(Model):
         scaler: TransformerMixin | Literal["as-is"] | None = None,
         train_fdr: float = 0.01,
         max_iter: int = 10,
-        direction: str = None,
         override: bool = False,
         n_jobs: int = -1,
         rng: np.random.Generator | int | None = None,
@@ -615,10 +598,43 @@ class PercolatorModel(Model):
             scaler=scaler,
             train_fdr=train_fdr,
             max_iter=max_iter,
-            direction=direction,
             override=override,
             rng=rng,
         )
+
+    def predict(self, dataset: PsmDataset) -> np.ndarray:
+        """Score examples from a dataset.
+
+        Additionally, calibrate the SVM score as described by
+        Granholm et al. [1]_
+
+        .. [1] Granholm V, Noble WS, Käll L. A cross-validation scheme
+           for machine learning algorithms in shotgun proteomics. BMC
+           Bioinformatics. 2012;13 Suppl 16(Suppl 16):S3.
+           doi:10.1186/1471-2105-13-S16-S3
+
+        Parameters
+        ----------
+        dataset : PsmDataset object
+            The dataset to score.
+
+        Returns
+        -------
+        numpy.ndarray
+            A :py:class:`numpy.ndarray` containing the score for each example.
+        """
+        scores = super().predict(dataset)
+        labels = dataset.update_labels(scores, desc=True)
+        pos = labels == 1
+        if not pos.sum():
+            raise RuntimeError(
+                "Failed to calibrate scores, because no target "
+                f"{dataset.unit} were below the 'eval_fdr' threshold."
+            )
+
+        target_score = np.min(scores[pos])
+        decoy_score = np.median(scores[labels == -1])
+        return (scores - target_score) / (target_score - decoy_score)
 
 
 class DummyScaler:

@@ -7,9 +7,11 @@ most types of data-dependent acquisition proteomics experiments.
 from __future__ import annotations
 
 import copy
+import itertools
 import logging
 import math
 from functools import partial
+from typing import Iterable, Iterator
 
 import numpy as np
 import polars as pl
@@ -118,7 +120,7 @@ class _BaseDataset(BaseData):
             raise ValueError(f"No target {self.unit} were detected.")
         if not num_decoys:
             raise ValueError(f"No decoy {self.unit} were detected.")
-        if not len(self):
+        if not self:
             raise ValueError(f"No {self.unit} were detected.")
 
     @property
@@ -140,7 +142,7 @@ class _BaseDataset(BaseData):
 
     def update_labels(
         self,
-        scores: np.ndarray,
+        scores: np.ndarray | str,
         desc: bool = True,
     ) -> np.ndarray:
         """Return the label for each example, given the scores.
@@ -151,8 +153,8 @@ class _BaseDataset(BaseData):
 
         Parameters
         ----------
-        scores : numpy.ndarray
-            The score used to rank the examples.
+        scores : numpy.ndarray or str
+            The score or feature used to rank the examples.
         desc : bool, default
             Are higher scores better?
 
@@ -164,6 +166,9 @@ class _BaseDataset(BaseData):
             training.
 
         """
+        if isinstance(scores, str):
+            scores = self.data.select(scores).collect(streaming=True)
+
         scores = np.array(scores).squeeze()
         if len(scores.shape) > 1:
             raise ValueError("scores must be one dimensional.")
@@ -192,7 +197,7 @@ class _BaseDataset(BaseData):
             update = partial(self.update_labels, desc=desc)
             labs = self.data.select(
                 pl.col(*self.schema.features).map_batches(update).explode()
-            ).collect()
+            ).collect(streaming=True)
 
             num_passing = labs.select((pl.all() == 1).sum())
             best_feat = (
@@ -212,45 +217,6 @@ class _BaseDataset(BaseData):
 
         if self.schema.score is None:
             raise RuntimeError("No PSMs found below the 'eval_fdr'.")
-
-    def calibrate_scores(
-        self,
-        scores: np.ndarray,
-        desc: bool = True,
-    ) -> np.ndarray:
-        """
-        Calibrate scores as described in Granholm et al. [1]_.
-
-        .. [1] Granholm V, Noble WS, Käll L. A cross-validation scheme
-           for machine learning algorithms in shotgun proteomics. BMC
-           Bioinformatics. 2012;13 Suppl 16(Suppl 16):S3.
-           doi:10.1186/1471-2105-13-S16-S3
-
-        Parameters
-        ----------
-        scores : numpy.ndarray
-            The scores for each PSM.
-        eval_fdr: float, optional
-            The FDR threshold to use for calibration
-        desc: bool, optional
-            Are higher scores better?
-
-        Returns
-        -------
-        numpy.ndarray
-            An array of calibrated scores.
-        """
-        labels = self.update_labels(scores, desc)
-        pos = labels == 1
-        if not pos.sum():
-            raise RuntimeError(
-                "No target PSMs were below the 'eval_fdr' threshold."
-            )
-
-        target_score = np.min(scores[pos])
-        decoy_score = np.median(scores[labels == -1])
-
-        return (scores - target_score) / (target_score - decoy_score)
 
     def _create_folds(self, folds: int) -> None:
         """Create the data splits for cross-validation.
@@ -312,12 +278,16 @@ class _BaseDataset(BaseData):
         if train and self.subset is not None:
             fold_data = fold_data.head(self.subset)
 
-        new_dset = copy.copy(self)
+        new_dset = copy.deepcopy(self)
         new_dset._data = fold_data
-        new_dset._best_feature = None
-        new_dset._folds = None
-        new_dset._len = None
+        new_dset._clear_cache()
+        new_dset.schema.score = None
         return new_dset
+
+    def _clear_cache(self) -> None:
+        """Reset cached values."""
+        self._folds = None
+        self._len = None
 
     def assign_confidence(
         self,
@@ -449,3 +419,53 @@ class PsmDataset(_BaseDataset):
             f"  - Unique peptides: {n_peptides}\n"
             f"  - Features:\n      {features}"
         )
+
+
+def merge_datasets(datasets: Iterable[PsmDataset]) -> PsmDataset:
+    """Merge multiple datasets of the same type and schema.
+
+    Parameters
+    ----------
+    datasets : iterable of PsmDataset
+        The datasets to merge.
+
+    Returns
+    -------
+    PsmDataset
+        The merged dataset.
+    """
+    datasets, base = itertools.tee(_dataset_iter(datasets), 2)
+    merged = copy.copy(next(base))
+    del base
+
+    merged._clear_cache()
+    merged._data = pl.concat(
+        # We shouldn't need to collect here. Potentially related to:
+        # https://github.com/pola-rs/polars/issues/10971
+        (d.data.collect(streaming=True).lazy() for d in datasets),
+        how="vertical",
+    )
+    return merged
+
+
+def _dataset_iter(datasets: Iterable[PsmDataset]) -> Iterator[PsmDataset]:
+    """Iterate over PsmDatasets, providing validation.
+
+    Parameters
+    ----------
+    datasets : iterable of PsmDataset
+        The datsets to merge.
+
+    Yields
+    ------
+    PsmDataset
+        The dataset.
+    """
+    schema = None
+    for dataset in datasets:
+        if schema is None:
+            schema = dataset.schema
+        elif dataset.schema != schema:
+            raise ValueError("All datasets must use the same schema.")
+
+        yield dataset

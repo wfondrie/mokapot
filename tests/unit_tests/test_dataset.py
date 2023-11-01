@@ -1,4 +1,6 @@
 """These tests verify that the dataset classes are functioning properly."""
+import pickle
+
 import numpy as np
 import polars as pl
 import pytest
@@ -89,6 +91,9 @@ def test_update_labels(psm_df_6):
     new_labs = dset.update_labels(scores)
     assert np.array_equal(real_labs, new_labs)
 
+    # This should use the feature:
+    new_labs = dset.update_labels("feature_1")
+
 
 def test_best_feature(psm_df_6):
     """Test finding the best feature."""
@@ -157,3 +162,17 @@ def test_split(idx, train, n_folds, subset, expected):
 
     fold_again = dset.fold(idx, train=train, folds=n_folds)
     assert_frame_equal(fold.data, fold_again.data)
+
+
+def test_pickle(psms, tmp_path):
+    """Test that a dataset is picklable (needed for multiprocessing)."""
+    pkl_file = tmp_path / "dset.pkl"
+
+    split = psms.fold(1, train=True)
+    with pkl_file.open("wb+") as pkl:
+        pickle.dump(split, pkl)
+
+    with pkl_file.open("rb") as pkl:
+        dset = pickle.load(pkl)
+
+    assert_frame_equal(dset.data, split.data)

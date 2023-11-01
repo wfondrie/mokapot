@@ -1,98 +1,85 @@
-"""Tests that the brew function works"""
-import pytest
+"""Tests that the brew function works."""
+import copy
+
 import numpy as np
-import mokapot
-from mokapot import PercolatorModel, Model
+import pytest
+from polars.testing import assert_frame_equal, assert_frame_not_equal
 from sklearn.ensemble import RandomForestClassifier
+
+import mokapot
+from mokapot import Model, PercolatorModel, PsmConfidence
 
 np.random.seed(42)
 
 
 @pytest.fixture
 def svm():
-    """A simple Percolator model"""
+    """A simple Percolator model."""
+    return svm_model()
+
+
+def svm_model():
+    """The percolator model."""
     return PercolatorModel(train_fdr=0.05, max_iter=10)
 
 
-def test_brew_simple(psms, svm):
-    """Test with mostly default parameters of brew"""
-    results, models = mokapot.brew(psms, svm, test_fdr=0.05)
-    assert isinstance(results, mokapot.confidence.LinearConfidence)
-    assert len(models) == 3
-    assert isinstance(models[0], PercolatorModel)
+def rfm_model():
+    """A random forest model."""
+    return Model(RandomForestClassifier(), train_fdr=0.1)
 
 
-def test_brew_random_forest(psms):
-    """Verify there are no dependencies on the SVM."""
-    rfm = Model(
-        RandomForestClassifier(),
-        train_fdr=0.1,
-    )
-    results, models = mokapot.brew(psms, model=rfm, test_fdr=0.1)
-    assert isinstance(results, mokapot.confidence.LinearConfidence)
-    assert len(models) == 3
-    assert isinstance(models[0], Model)
+@pytest.mark.parametrize(
+    ("num", "model", "folds"),
+    [
+        (1, svm_model(), 3),
+        (3, svm_model(), 3),
+        (1, rfm_model(), 3),
+        (1, svm_model(), 4),
+    ],
+)
+def test_basic_params(psms, num, model, folds):
+    """Test with mostly default parameters of brew."""
+    psms = [copy.deepcopy(psms) for _ in range(num)]
+    results, models = mokapot.brew(psms, model=model, folds=folds, rng=42)
+
+    if num == 1:
+        assert isinstance(results, PsmConfidence)
+    else:
+        assert isinstance(results, list)
+        assert len(results) == num, f"Expected {num} confidence objects."
+
+    assert len(models) == folds
+    assert type(models[0]) is type(model)
 
 
-def test_brew_joint(psms, svm):
-    """Test that the multiple input PSM collections yield multiple out"""
-    collections = [psms, psms, psms]
-    results, models = mokapot.brew(collections, svm, test_fdr=0.05)
-    assert len(results) == 3
-    assert len(models) == 3
-
-
-def test_brew_folds(psms, svm):
-    """Test that changing the number of folds works"""
-    results, models = mokapot.brew(psms, svm, test_fdr=0.1, folds=4)
-    assert isinstance(results, mokapot.confidence.LinearConfidence)
-    assert len(models) == 4
-
-
-def test_brew_seed(psms, svm):
-    """Test that (not) changing the split selection seed works"""
+def test_seed(psms, svm):
+    """Test that (not) changing the split selection seed works."""
     folds = 3
-    seed = 0
+    results_a, _ = mokapot.brew(psms, svm, folds=folds, rng=42)
+    results_b, _ = mokapot.brew(psms, svm, folds=folds, rng=42)
 
-    results_a, models_a = mokapot.brew(
-        psms, svm, test_fdr=0.05, folds=folds, rng=seed
-    )
-    assert isinstance(results_a, mokapot.confidence.LinearConfidence)
-    assert len(models_a) == folds
+    assert_frame_equal(results_a.results.psms, results_b.results.psms)
 
-    results_b, models_b = mokapot.brew(
-        psms, svm, test_fdr=0.05, folds=folds, rng=seed
-    )
-    assert isinstance(results_b, mokapot.confidence.LinearConfidence)
-    assert len(models_b) == folds
-
-    assert (
-        results_a.accepted == results_b.accepted
-    ), "Results differed with same seed"
-
-    results_c, models_c = mokapot.brew(
-        psms, svm, test_fdr=0.05, folds=folds, rng=seed + 2
-    )
-    assert isinstance(results_c, mokapot.confidence.LinearConfidence)
-    assert len(models_c) == folds
-
-    assert (
-        results_a.accepted != results_c.accepted
-    ), "Results were identical with different seed!"
+    psms.rng = 1
+    results_c, _ = mokapot.brew(psms, svm, folds=folds, rng=1)
+    assert_frame_not_equal(results_a.results.psms, results_c.results.psms)
 
 
-def test_brew_test_fdr_error(psms, svm):
-    """Test that we get a sensible error message"""
+def test_fdr_error(psms, svm):
+    """Test that we get a sensible error message."""
+    psms.rng = 1
     with pytest.raises(RuntimeError) as err:
-        results, models = mokapot.brew(psms, svm)
+        # This threshold is was determined by trial and error.
+        psms.eval_fdr = 0.015
+        mokapot.brew(psms, svm, rng=1)
 
     assert "Failed to calibrate" in str(err)
 
 
 # @pytest.mark.skip(reason="Not currently working, at least on MacOS.")
-def test_brew_multiprocess(psms, svm):
-    """Test that multiprocessing doesn't yield an error"""
-    _, models = mokapot.brew(psms, svm, test_fdr=0.05, max_workers=2)
+def test_multiprocess(psms, svm):
+    """Test that multiprocessing doesn't yield an error."""
+    _, models = mokapot.brew(psms, svm, max_workers=2)
 
     # The models should not be the same:
     assert_not_close(models[0].estimator.coef_, models[1].estimator.coef_)
@@ -100,44 +87,44 @@ def test_brew_multiprocess(psms, svm):
     assert_not_close(models[2].estimator.coef_, models[0].estimator.coef_)
 
 
-def test_brew_trained_models(psms, svm):
-    """Test that using trained models reproduces same results"""
+def test_trained_models(psms, svm):
+    """Test that using trained models reproduces same results."""
     # fix a seed to have the same random split for each run
     results_with_training, models_with_training = mokapot.brew(
-        psms, svm, test_fdr=0.05, rng=3
+        psms, svm, rng=3
     )
     models = list(models_with_training)
     models.reverse()  # Change the model order
     results_without_training, models_without_training = mokapot.brew(
-        psms, models, test_fdr=0.05, rng=3
+        psms, models, rng=3
     )
     assert models_with_training == models_without_training
-    assert results_with_training.accepted == results_without_training.accepted
+    assert_frame_equal(
+        results_with_training.results.psms,
+        results_without_training.results.psms,
+    )
 
 
-def test_brew_using_few_models_error(psms, svm):
-    """Test that if the number of trained models less than the number of
-    folds we get the expected error message.
-    """
+def test_using_few_models_error(psms, svm):
+    """The number of trained models less than the number of folds."""
+    svm.is_trained = True
     with pytest.raises(ValueError) as err:
-        mokapot.brew(psms, [svm, svm], test_fdr=0.05)
+        mokapot.brew(psms, [svm, svm])
     assert (
-        "The number of trained models (2) must match the number of folds (3)."
+        "The number of trained models (2) must match the number of folds (3)"
         in str(err)
     )
 
 
-def test_brew_using_non_trained_models_error(psms, svm):
-    """Test that using non trained models gives the expected error message"""
+def test_using_untrained_models_error(psms, svm):
+    """Test that using untrained models gives the expected error message."""
     svm.is_trained = False
-    with pytest.raises(RuntimeError) as err:
-        mokapot.brew(psms, [svm, svm, svm], test_fdr=0.05)
-    assert (
-        "One or more of the provided models was not previously trained"
-        in str(err)
-    )
+    with pytest.raises(ValueError) as err:
+        mokapot.brew(psms, [svm, svm, svm])
+
+    assert "Only one untrained model is allowed" in str(err)
 
 
 def assert_not_close(x, y):
-    """Assert that two arrays are not equal"""
+    """Assert that two arrays are not equal."""
     np.testing.assert_raises(AssertionError, np.testing.assert_allclose, x, y)
