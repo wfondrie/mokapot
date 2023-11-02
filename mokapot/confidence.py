@@ -404,13 +404,13 @@ class PsmConfidence(Confidence):
 
     Attributes
     ----------
-    levels : list of str
+    data : polars.LazyFrame
+    columns : list of str
+    targets : numpy.ndarray
     proteins : mokapot.Proteins
-        Confidence estimates for proteins in the dataset.
-    confidence_estimates : Dict[str, pandas.DataFrame]
-        A dictionary of confidence estimates at each level.
-    decoy_confidence_estimates : Dict[str, pandas.DataFrame]
-        A dictionary of confidence estimates for the decoys at each level.
+    rng : numpy.random.Generator
+    results : ConfidenceEstimates
+    decoy_results : ConfidenceEstimates
     """
 
     def __init__(

@@ -16,7 +16,6 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "numpy>=1.18.1",
-    "pandas>=1.0.3",
     "polars>=0.19.0",
     "scikit-learn>=0.22.1",
     "numba>=0.48.0",
