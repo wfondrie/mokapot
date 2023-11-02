@@ -62,7 +62,7 @@ def to_parquet(
             stem=stem,
             decoys=decoys,
             ext=ext,
-            write_fn="sink_parquet",
+            write_fn="write_parquet",
             **kwargs,
         )
 
@@ -114,7 +114,7 @@ def to_txt(
             stem=stem,
             decoys=decoys,
             ext=ext,
-            write_fn="sink_csv",
+            write_fn="write_csv",
             separator=separator,
         )
 
@@ -165,7 +165,7 @@ def to_csv(
             stem=stem,
             decoys=decoys,
             ext=ext,
-            write_fn="sink_csv",
+            write_fn="write_csv",
             **kwargs,
         )
 
@@ -220,7 +220,7 @@ def _to_tabular(
     out_files = []
     for level, table in conf.results:
         fname = Path(dest_dir, ".".join(stem + ["mokapot", level.name, ext]))
-        getattr(table, write_fn)(fname, **kwargs)
+        getattr(table.collect(streaming=True), write_fn)(fname, **kwargs)
         out_files.append(fname)
 
     if decoys:
@@ -229,7 +229,7 @@ def _to_tabular(
                 dest_dir,
                 ".".join(stem + ["mokapot", "decoy", level.name, ext]),
             )
-            getattr(table, write_fn)(fname, **kwargs)
+            getattr(table.collect(streaming=True), write_fn)(fname, **kwargs)
             out_files.append(fname)
 
     return out_files

@@ -1,4 +1,5 @@
 """Test that we can parse a FASTA file correctly."""
+import polars as pl
 import pytest
 
 import mokapot
@@ -94,32 +95,26 @@ def test_target_fasta(target_fasta):
 
     # First the default parameters
     prot = read_fasta(target_fasta)
-    assert prot.decoy_prefix == "decoy_"
-    assert not prot.has_decoys
+    seqs = prot.data.collect()["target_seq"].to_list()
 
     # Check the peptide_map
     # 0 missed cleavages
-    assert "MABCDEFGHIJK" in prot.peptide_map.keys()
+    assert "MABCDEFGHIJK" in seqs
     # 1 missed cleavage
-    assert "MABCDEFGHIJKLMNOPQR" in prot.peptide_map.keys()
+    assert "MABCDEFGHIJKLMNOPQR" in seqs
     # 2 missed cleavages
-    assert "MABCDEFGHIJKLMNOPQRSTUVWXYZK" in prot.peptide_map.keys()
+    assert "MABCDEFGHIJKLMNOPQRSTUVWXYZK" in seqs
     # too short
-    assert short_pep not in prot.peptide_map.keys()
+    assert short_pep not in seqs
     # too long
-    assert long_pep not in prot.peptide_map.keys()
-
-    # Check the protein map:
-    protein_map = {
-        "wf|target1": "decoy_wf|target1",
-        "wf|target2": "decoy_wf|target2",
-        "wf|target4": "decoy_wf|target4",
-    }
-    assert prot.protein_map == protein_map
-
+    assert long_pep not in seqs
     # Check shared peptides:
-    expected = {"wf|target1, wf|target4", "wf|target2"}
-    assert set(prot.shared_peptides["AAAAABR"].split("; ")) == expected
+    assert 2 == (
+        prot.data.collect()
+        .filter(pl.col("target_seq") == "AAAAABR")
+        .select("# mokapot protein groups")
+        .item()
+    )
 
 
 def test_parameters(target_fasta):
@@ -135,40 +130,30 @@ def test_parameters(target_fasta):
         max_length=60,
         decoy_prefix="rev_",
     )
-    assert prot.decoy_prefix == "rev_"
-    assert not prot.has_decoys
+    seqs = prot.data.collect()["target_seq"].to_list()
+    groups = prot.data.collect()["mokapot protein group"].to_list()
 
     # Check the peptide_map
     # 0 missed cleavages
-    assert "MABCDEFGHIJK" in prot.peptide_map.keys()
-    assert "ABCDEFGHIJK" in prot.peptide_map.keys()
+    assert "MABCDEFGHIJK" in seqs
+    assert "ABCDEFGHIJK" in seqs
     # 1 missed cleavage
-    assert "ABCDEFGHIJKLMNOPQR" not in prot.peptide_map.keys()
+    assert "ABCDEFGHIJKLMNOPQR" not in seqs
     # 2 missed cleavages
-    assert "ABCDEFGHIJKLMNOPQRSTUVWXYZK" not in prot.peptide_map.keys()
+    assert "ABCDEFGHIJKLMNOPQRSTUVWXYZK" not in seqs
     # too short
-    assert short_pep in prot.peptide_map.keys()
+    assert short_pep in seqs
     # too long
-    assert long_pep in prot.peptide_map.keys()
+    assert long_pep in seqs
     # grouped protein:
-    assert "wf|target1, wf|target4" in prot.peptide_map.values()
-
-    # Check the protein map:
-    protein_map = {
-        "wf|target1": "rev_wf|target1",
-        "wf|target2": "rev_wf|target2",
-        "wf|target3": "rev_wf|target3",
-        "wf|target4": "rev_wf|target4",
-    }
-    assert prot.protein_map == protein_map
-
+    assert "wf|target1,wf|target4" in groups
     # Check shared peptides:
-    shared_peptides = {
-        "AAAAABR": {"wf|target1, wf|target4", "wf|target2"},
-        "AAB": {"wf|target1, wf|target4", "wf|target2"},
-    }
-    found = {k: set(v.split("; ")) for k, v in prot.shared_peptides.items()}
-    assert found == shared_peptides
+    assert 2 == (
+        prot.data.collect()
+        .filter(pl.col("target_seq") == "AAB")
+        .select("# mokapot protein groups")
+        .item()
+    )
 
 
 def test_decoy_fasta(target_fasta, decoy_fasta):
@@ -176,24 +161,15 @@ def test_decoy_fasta(target_fasta, decoy_fasta):
     # Try without targets:
     with pytest.raises(ValueError) as msg:
         read_fasta(decoy_fasta)
-        assert str(msg).startswith("Only decoy proteins were found")
+        assert str(msg).startswith("Only decoy sequences were found")
 
     # Now do with both:
     prot = read_fasta([target_fasta, decoy_fasta])
+    seqs = prot.data.collect()["target_seq"].to_list()
 
     # Check the peptide_map
     # A target sequence
-    assert "MABCDEFGHIJK" in prot.peptide_map.keys()
-    # A decoy sequence
-    assert "MZYSVUXWTRQMPOLNK" in prot.peptide_map.keys()
-
-    # Check the protein map:
-    protein_map = {
-        "wf|target1": "decoy_wf|target1",
-        "wf|target2": "decoy_wf|target2",
-        "wf|target4": "decoy_wf|target4",
-    }
-    assert prot.protein_map == protein_map
+    assert "MABCDEFGHIJK" in seqs
 
 
 def test_mc_digest(protein):
@@ -204,7 +180,7 @@ def test_mc_digest(protein):
 
 
 def test_no_mc_digest(protein):
-    "Test a tryptic digest without missed cleavages."
+    """Test a tryptic digest without missed cleavages."""
     prot, peps = protein
     no_mc = []
     for pep in peps:

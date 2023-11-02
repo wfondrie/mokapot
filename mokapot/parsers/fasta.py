@@ -101,6 +101,9 @@ def read_fasta(
             for pep in peps:
                 peptides[pep].add(prot)
 
+    if not proteins:
+        raise ValueError("Only decoy sequences were found.")
+
     total_prots = len(fasta)
     LOGGER.info("  - Parsed and digested %i proteins.", total_prots)
     LOGGER.info("  - %i had no peptides.", len(fasta) - len(proteins))
