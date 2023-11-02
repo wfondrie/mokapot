@@ -274,7 +274,7 @@ def build_df(
         except AttributeError:
             try:
                 dfs.append(pl.scan_parquet(pin_file))
-            except pl.ArrowError:
+            except pl.ComputeError:
                 if not strict_parsing:
                     df = pl.scan_csv(
                         pin_file,
