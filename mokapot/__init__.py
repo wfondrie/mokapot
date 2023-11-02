@@ -9,7 +9,4 @@ from .schema import PsmSchema
 from .version import _get_version
 from .writers import to_csv, to_flashlfq, to_parquet, to_txt
 
-# from .parsers.pepxml import read_pepxml
-
-
 __version__ = _get_version()
