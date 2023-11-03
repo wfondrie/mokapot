@@ -1,4 +1,4 @@
-"""Test column validation"""
+"""Test column validation."""
 import polars as pl
 import pytest
 
@@ -40,7 +40,7 @@ def test_init():
 
 
 def test_init_errors():
-    """Test initialization errors"""
+    """Test initialization errors."""
     with pytest.raises(ValueError):
         PsmSchema(
             target="x",

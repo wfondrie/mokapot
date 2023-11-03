@@ -1,15 +1,13 @@
-"""
-These tests verify that our q-value calculations are correct.
-"""
-import pytest
+"""Verify that our q-value calculations are correct."""
 import numpy as np
+import pytest
 
 from mokapot.qvalues import tdc
 
 
 @pytest.fixture
 def desc_scores():
-    """Create a series of descending scores and their q-values"""
+    """Create a series of descending scores and their q-values."""
     scores = np.array([10, 10, 9, 8, 7, 7, 6, 5, 4, 3, 2, 2, 1, 1, 1, 1])
     target = np.array([1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0])
     qvals = np.array(
@@ -37,7 +35,7 @@ def desc_scores():
 
 @pytest.fixture
 def asc_scores():
-    """Create a series of ascending scores and their q-values"""
+    """Create a series of ascending scores and their q-values."""
     scores = np.array([1, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9, 9, 10, 10, 10, 10])
     target = np.array([1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0])
     qvals = np.array(
@@ -64,7 +62,7 @@ def asc_scores():
 
 
 def test_tdc_descending(desc_scores):
-    """Test that q-values are correct for descending scores"""
+    """Test that q-values are correct for descending scores."""
     scores, target, true_qvals = desc_scores
     dtypes = [np.float64, np.uint8, np.int8, np.float32]
     for dtype in dtypes:
@@ -76,7 +74,7 @@ def test_tdc_descending(desc_scores):
 
 
 def test_tdc_ascending(asc_scores):
-    """Test that q-values are correct for ascending scores"""
+    """Test that q-values are correct for ascending scores."""
     scores, target, true_qvals = asc_scores
     dtypes = [np.float64, np.uint8, np.int8, np.float32]
     for dtype in dtypes:
@@ -88,7 +86,7 @@ def test_tdc_ascending(asc_scores):
 
 
 def test_tdc_non_bool():
-    """If targets is not boolean, should get a value errir"""
+    """If targets is not boolean, should get a value errir."""
     scores = np.array([1, 2, 3, 4, 5])
     targets = np.array(["1", "0", "1", "0", "blarg"])
     with pytest.raises(ValueError):
@@ -96,7 +94,7 @@ def test_tdc_non_bool():
 
 
 def test_tdc_diff_len():
-    """If the arrays are different lengths, should get a ValueError"""
+    """If the arrays are different lengths, should get a ValueError."""
     scores = np.array([1, 2, 3, 4, 5])
     targets = np.array([True] * 3 + [False] * 3)
     with pytest.raises(ValueError):

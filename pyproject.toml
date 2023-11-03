@@ -65,6 +65,7 @@ find = {namespaces = false}
 [tool.ruff]
 fix = true
 line-length = 79
+extend-exclude = ["docs", "tests/system_tests/sample_plugin"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C", "I", "D", "UP", "N", "ANN", "T20", "I001"]
