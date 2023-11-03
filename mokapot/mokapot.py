@@ -1,27 +1,23 @@
-"""
-This is the command line interface for mokapot
-"""
+"""The command line interface for mokapot."""
 import datetime
 import logging
 import sys
 import time
-from functools import partial
 from pathlib import Path
 
 import numpy as np
 
-from . import __version__
+from . import __version__, to_parquet, to_txt, utils
 from .brew import brew
 from .config import Config
 from .model import PercolatorModel, load_model
 from .parsers.fasta import read_fasta
-from .parsers.pepxml import read_pepxml
 from .parsers.pin import read_pin
 from .plugins import get_plugins
 
 
-def main():
-    """The CLI entry point"""
+def main() -> None:  # noqa: C901
+    """The CLI entry point."""
     start = time.time()
     plugins = get_plugins()
 
@@ -48,10 +44,6 @@ def main():
     )
 
     logging.info("mokapot version %s", str(__version__))
-    logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
-    logging.info(
-        "Department of Genome Sciences at the University of Washington."
-    )
     logging.info("Command issued:")
     logging.info("%s", " ".join(sys.argv))
     logging.info("")
@@ -59,21 +51,28 @@ def main():
     logging.info("=================")
     logging.debug("Loaded plugins: %s", plugins.keys())
 
-    np.random.seed(config.seed)
-
-    # Parse Datasets
-    parse = get_parser(config)
+    rng = np.random.default_rng(config.seed)
     enabled_plugins = {p: plugins[p]() for p in config.plugin}
 
+    # Parse Datasets
     if config.aggregate or len(config.psm_files) == 1:
-        datasets = parse(config.psm_files)
-        for plugin in enabled_plugins.values():
-            datasets = plugin.process_data(datasets, config)
+        prefixes = [""]
+        datasets = utils.listify(
+            read_pin(
+                config.psm_files,
+                rng=rng,
+                subset=config.subset_max_train,
+            )
+        )
     else:
-        datasets = [parse(f) for f in config.psm_files]
-        for plugin in enabled_plugins.values():
-            datasets = [plugin.process_data(ds, config) for ds in datasets]
+        datasets = [
+            read_pin(f, rng=rng, subset=config.subset_max_train)
+            for f in config.psm_files
+        ]
         prefixes = [Path(f).stem for f in config.psm_files]
+
+    for plugin in enabled_plugins.values():
+        datasets = [plugin.process_data(ds, config) for ds in datasets]
 
     # Parse FASTA, if required:
     if config.proteins is not None:
@@ -87,13 +86,10 @@ def main():
             max_length=config.max_length,
             semi=config.semi,
             decoy_prefix=config.decoy_prefix,
+            rng=rng,
         )
-
-        if config.aggregate or len(config.psm_files) == 1:
-            datasets.add_proteins(proteins)
-        else:
-            for dataset in datasets:
-                dataset.add_proteins(proteins)
+        for dataset in datasets:
+            dataset.proteins = proteins
 
     # Define a model:
     model = None
@@ -104,7 +100,7 @@ def main():
         for plugin_name, plugin in enabled_plugins.items():
             model = plugin.get_model(config)
             if model is not None:
-                logging.debug(f"Loaded model for {plugin_name}")
+                logging.debug("Loaded model for %s", plugin_name)
                 plugin_models[plugin_name] = model
 
         if not plugin_models:
@@ -123,22 +119,21 @@ def main():
             model = list(plugin_models.values())[0]
 
     if model is None:
-        logging.debug("Loading Percolator model.")
+        logging.debug("Using Percolator model.")
         model = PercolatorModel(
             train_fdr=config.train_fdr,
             max_iter=config.max_iter,
-            direction=config.direction,
             override=config.override,
-            subset_max_train=config.subset_max_train,
+            rng=rng,
         )
 
     # Fit the models:
     psms, models = brew(
         datasets,
         model=model,
-        test_fdr=config.test_fdr,
         folds=config.folds,
         max_workers=config.max_workers,
+        rng=rng,
     )
 
     if config.dest_dir is not None:
@@ -148,7 +143,6 @@ def main():
         logging.info("Saving models...")
         for i, trained_model in enumerate(models):
             out_file = f"mokapot.model_fold-{i+1}.pkl"
-
             if config.file_root is not None:
                 out_file = ".".join([config.file_root, out_file])
 
@@ -159,22 +153,20 @@ def main():
 
     # Determine how to write the results:
     logging.info("Writing results...")
-    if config.aggregate or len(config.psm_files) == 1:
-        psms.to_txt(
+    writer = to_parquet if config.parquet else to_txt
+    for dat, prefix in zip(utils.listify(psms), prefixes):
+        if config.file_root is not None:
+            if prefix:
+                prefix = ".".join([config.file_root, prefix])
+            else:
+                prefix = config.file_root
+
+        writer(
+            dat,
             dest_dir=config.dest_dir,
-            file_root=config.file_root,
+            stem=prefix,
             decoys=config.keep_decoys,
         )
-    else:
-        for dat, prefix in zip(psms, prefixes):
-            if config.file_root is not None:
-                prefix = ".".join([config.file_root, prefix])
-
-            dat.to_txt(
-                dest_dir=config.dest_dir,
-                file_root=prefix,
-                decoys=config.keep_decoys,
-            )
 
     total_time = round(time.time() - start)
     total_time = str(datetime.timedelta(seconds=total_time))
@@ -182,46 +174,6 @@ def main():
     logging.info("")
     logging.info("=== DONE! ===")
     logging.info("mokapot analysis completed in %s", total_time)
-
-
-def get_parser(config):
-    """Figure out which parser to use.
-
-    Note that this just looks at file extensions, but in the future it might be
-    good to check the contents of the file. I'm just not sure how to do this
-    in an efficient way, particularly for gzipped files.
-
-    Parameters
-    ----------
-    config : argparse object
-         The configuration details.
-
-    Returns
-    -------
-    callable
-         Returns the correct parser for the files.
-
-    """
-    pepxml_ext = {".pep.xml", ".pepxml", ".xml"}
-    num_pepxml = 0
-    for psm_file in config.psm_files:
-        ext = Path(psm_file).suffixes
-        if len(ext) > 2:
-            ext = "".join(ext[-2:])
-        else:
-            ext = "".join(ext)
-
-        if ext.lower() in pepxml_ext:
-            num_pepxml += 1
-
-    if num_pepxml == len(config.psm_files):
-        return partial(
-            read_pepxml,
-            open_modification_bin_size=config.open_modification_bin_size,
-            decoy_prefix=config.decoy_prefix,
-        )
-
-    return read_pin
 
 
 if __name__ == "__main__":

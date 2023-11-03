@@ -5,6 +5,7 @@ import warnings
 from collections.abc import Iterable, Iterator
 
 import numpy as np
+import polars as pl
 from joblib import Parallel, delayed
 
 from . import utils
@@ -119,7 +120,7 @@ class Barista:
         # Create the training splits.
         # Note that Joblib doesn't work with generators.
         LOGGER.info("Splitting %s into %i folds...", self.unit, self.folds)
-        train_sets = self.training_splits()
+        train_sets = list(self.training_splits())
         if self.max_workers != 1:
             train_sets = list(train_sets)
 
@@ -134,8 +135,11 @@ class Barista:
             fitted.sort(key=lambda x: x.fold)
             fitted = list(fitted)
             for test_sets in self.testing_splits():
-                scores = np.concatenate(
-                    [m.predict(d) for m, d in zip(fitted, test_sets)]
+                scores = pl.Series(
+                    "mokapot score",
+                    np.concatenate(
+                        [m.predict(d) for m, d in zip(fitted, test_sets)]
+                    ),
                 )
                 combined = merge_datasets(_drop_cols(test_sets))
                 results.append(combined.assign_confidence(scores, desc=True))
@@ -315,6 +319,7 @@ def _drop_cols(datasets: Iterable[PsmDataset]) -> Iterable[PsmDataset]:
             for c in dataset.columns
             if c not in dataset.schema.features or c in dataset.schema.metadata
         ]
+        dataset = copy.deepcopy(dataset)
         dataset._schema = copy.deepcopy(dataset.schema)
         dataset.schema.features = []
         dataset._data = dataset.data.select(keep_cols)

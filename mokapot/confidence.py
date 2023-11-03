@@ -602,8 +602,8 @@ class TdcLevel:
             conf_out.append(
                 grp_df.with_columns(
                     [
-                        pl.lit(qvals).alias("mokapot q-value"),
-                        pl.lit(peps).alias("mokapot PEP"),
+                        pl.Series(qvals).alias("mokapot q-value"),
+                        pl.Series(peps).alias("mokapot PEP"),
                     ]
                 )
             )
@@ -611,9 +611,8 @@ class TdcLevel:
         data = data.join(
             pl.concat(conf_out, how="vertical").lazy(),
             on=[*self.columns, target, score],
-            how="left",
+            how="inner",
         )
-
         return data
 
 
@@ -644,6 +643,13 @@ class ConfidenceEstimates:
             setattr(self, level.name, table)
 
         self._levels = tuple(levels.keys())
+
+    def __getitem__(self, level: str) -> pl.LazyFrame:
+        """Get the confidence estimates."""
+        if level in self._levels:
+            return getattr(self, level)
+
+        raise KeyError(f"{level} is not a valid level.")
 
     def __iter__(self) -> tuple[TdcLevel, pl.LazyFrame]:
         """Iterate over the result tables."""

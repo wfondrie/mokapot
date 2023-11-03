@@ -66,18 +66,23 @@ class BaseData(RngMixin):
         # This should work with pl.DataFrame, pl.LazyFrame,
         # pd.DataFrame, or dictionary.
         self._data = utils.make_lazy(data)
-        self._perc_style_targets = schema.validate(self._data)
+
+        # If percolator style targets, change them:
+        if schema.validate(self._data):
+            self._data = self._data.with_columns(
+                pl.col(self.schema.target) + 1
+            )
+
+        # Cast to Boolean, if not already.
+        self._data = self._data.with_columns(
+            pl.col(self.schema.target).cast(pl.Boolean)
+        )
 
     @property
     def targets(self) -> np.ndarray:
         """An array indicating whether each row is a target."""
-        if self._perc_style_targets:
-            expr = pl.col(self.schema.target) + 1
-        else:
-            expr = pl.col(self.schema.target)
-
         return (
-            self.data.select(expr.cast(pl.Boolean))
+            self.data.select(self.schema.target)
             .collect(streaming=True)
             .to_numpy()
             .flatten()

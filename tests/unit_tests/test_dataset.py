@@ -151,7 +151,7 @@ def test_split(idx, train, n_folds, subset, expected):
         peptide="peptide",
     )
 
-    dset = PsmDataset(df, schema, subset=subset)
+    dset = PsmDataset(df, schema, subset=subset, rng=42)
     assert len(dset) == 8
 
     fold = dset.fold(idx, train=train, folds=n_folds)
@@ -162,6 +162,11 @@ def test_split(idx, train, n_folds, subset, expected):
 
     fold_again = dset.fold(idx, train=train, folds=n_folds)
     assert_frame_equal(fold.data, fold_again.data)
+
+    # Test reproducibility:
+    new_dset = PsmDataset(df, schema, subset=subset, rng=42)
+    new_fold = new_dset.fold(idx, train=train, folds=n_folds)
+    assert_frame_equal(fold.data, new_fold.data)
 
 
 def test_pickle(psms, tmp_path):

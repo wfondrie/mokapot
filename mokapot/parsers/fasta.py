@@ -8,6 +8,7 @@ from textwrap import wrap
 from typing import Iterable
 
 import numpy as np
+import polars as pl
 
 from .. import utils
 from ..proteins import Proteins
@@ -123,7 +124,8 @@ def read_fasta(
         len(proteins),
     )
 
-    return Proteins(peptides, rng)
+    with pl.StringCache():
+        return Proteins(peptides, rng)
 
 
 def make_decoys(

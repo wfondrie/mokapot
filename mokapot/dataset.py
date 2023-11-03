@@ -232,8 +232,9 @@ class _BaseDataset(BaseData):
         """
         groups = (
             self.data.select(self._stratification)
-            .unique()
             .collect(streaming=True)
+            # Incompatible with streaming:
+            .unique(maintain_order=True)
             .sample(
                 fraction=1,
                 shuffle=True,
@@ -442,9 +443,9 @@ def merge_datasets(datasets: Iterable[PsmDataset]) -> PsmDataset:
     merged._data = pl.concat(
         # We shouldn't need to collect here. Potentially related to:
         # https://github.com/pola-rs/polars/issues/10971
-        (d.data.collect(streaming=True).lazy() for d in datasets),
+        (d.data.collect(streaming=True) for d in datasets),
         how="vertical",
-    )
+    ).lazy()
     return merged
 
 
