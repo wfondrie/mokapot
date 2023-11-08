@@ -84,8 +84,8 @@ class BaseData(RngMixin):
         return (
             self.data.select(self.schema.target)
             .collect(streaming=True)
+            .to_series()
             .to_numpy()
-            .flatten()
         )
 
     def __len__(self) -> int:
