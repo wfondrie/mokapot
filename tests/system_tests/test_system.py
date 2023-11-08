@@ -18,7 +18,6 @@ logging.basicConfig(level=logging.INFO)
 pytestmark = pytest.mark.filterwarnings("error")
 
 
-@pytest.mark.skip("memory blowup")
 def test_compare_to_percolator():
     """Test that mokapot get almost the same answer as Percolator."""
     rng = np.random.default_rng(42)
@@ -28,7 +27,7 @@ def test_compare_to_percolator():
     )
     res, _ = mokapot.brew(dat, rng=rng)
 
-    perc_path = Path("data", "percolator.{p}.txt")
+    perc_path = "data/percolator.{p}.txt"
     perc_res = {
         p: pl.read_csv(
             perc_path.format(p=p),

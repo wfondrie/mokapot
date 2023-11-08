@@ -152,7 +152,6 @@ def main() -> None:  # noqa: C901
             trained_model.save(str(out_file))
 
     # Determine how to write the results:
-    logging.info("Writing results...")
     writer = to_parquet if config.parquet else to_txt
     for dat, prefix in zip(utils.listify(psms), prefixes):
         if config.file_root is not None:

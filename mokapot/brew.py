@@ -120,12 +120,12 @@ class Barista:
         # Create the training splits.
         # Note that Joblib doesn't work with generators.
         LOGGER.info("Splitting %s into %i folds...", self.unit, self.folds)
-        train_sets = list(self.training_splits())
+        train_sets = self.training_splits()
         if self.max_workers != 1:
             train_sets = list(train_sets)
 
         fitted = Parallel(n_jobs=self.max_workers, require="sharedmem")(
-            delayed(_fit_model)(copy.deepcopy(d), m, f)
+            delayed(_fit_model)(copy.copy(d), m, f)
             for f, (d, m) in enumerate(zip(train_sets, self.model))
         )
 
@@ -134,6 +134,7 @@ class Barista:
             # Models were fit successfully.
             fitted.sort(key=lambda x: x.fold)
             fitted = list(fitted)
+            LOGGER.info("Re-scoring held-out %s...", self.unit)
             for test_sets in self.testing_splits():
                 scores = pl.Series(
                     "mokapot score",
@@ -143,6 +144,7 @@ class Barista:
                 )
                 combined = merge_datasets(_drop_cols(test_sets))
                 results.append(combined.assign_confidence(scores, desc=True))
+
         except AttributeError:
             # Fallback on best feature.
             warnings.warn(
@@ -319,8 +321,8 @@ def _drop_cols(datasets: Iterable[PsmDataset]) -> Iterable[PsmDataset]:
             for c in dataset.columns
             if c not in dataset.schema.features or c in dataset.schema.metadata
         ]
-        dataset = copy.deepcopy(dataset)
-        dataset._schema = copy.deepcopy(dataset.schema)
+        dataset = copy.copy(dataset)
+        dataset.schema = copy.deepcopy(dataset.schema)
         dataset.schema.features = []
         dataset._data = dataset.data.select(keep_cols)
         yield dataset

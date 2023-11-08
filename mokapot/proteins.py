@@ -51,7 +51,7 @@ class Proteins(RngMixin):
         """Initialize the Proteins object."""
         self.proteins = "mokapot protein group"
         self.protein_counts = "# mokapot protein groups"
-        self.seqs = "stripped sequence"
+        self.seqs = "__stripped_sequence__"  # A temporary column
 
         LOGGER.info("Ignoring shared peptides...")
         self.peptides = {k: (";".join(v), len(v)) for k, v in peptides.items()}
@@ -97,10 +97,10 @@ class Proteins(RngMixin):
             .select([schema.target, schema.peptide])
             .with_columns(
                 pl.col(schema.peptide)
-                .str.replace(r"[\[\(].*?[\]\)]", "")
+                .str.replace_all(r"[\[\(].*?[\]\)]", "")
                 .str.replace(r"^.*?\.", "")
                 .str.replace(r"\..*?$", "")
-                .str.replace(r"[a-z]", "")
+                .str.replace_all(r"[a-z]", "")
                 .cast(pl.Categorical)
                 .alias(self.seqs)
             )
@@ -108,10 +108,14 @@ class Proteins(RngMixin):
 
         # Add protein groups:
         with pl.StringCache():
-            data = data.join(
-                self._group(data, schema),
-                on=[self.seqs, schema.target],
-                how="left",
+            data = (
+                data.select(schema.peptide, self.seqs, schema.target)
+                .unique()
+                .join(
+                    self._group(data, schema),
+                    on=[self.seqs, schema.target],
+                    how="left",
+                )
             )
 
             # Verify that unmatched peptides are shared.
@@ -149,7 +153,14 @@ class Proteins(RngMixin):
                     "correct."
                 )
 
-        return data
+        return data.select(
+            [
+                schema.target,
+                schema.peptide,
+                self.proteins,
+                self.protein_counts,
+            ]
+        )
 
     def _group(self, seq_df: pl.DataFrame, schema: PsmSchema) -> pl.LazyFrame:
         """Get the protein groups for peptide sequences.

@@ -127,7 +127,7 @@ class Confidence(BaseData):
                 protein_groups,
                 on=[self.schema.target, self.schema.peptide],
                 how="left",
-            ).drop("stripped sequence")
+            )
 
             self._levels.append(
                 TdcLevel(
@@ -512,7 +512,7 @@ class TdcLevel:
         """Make TdcLevels hashable."""
         return hash(self.name)
 
-    def assign_confidence(
+    def assign_confidence(  # noqa: C901
         self,
         data: pl.LazyFrame,
     ) -> pl.DataFrame:
@@ -536,6 +536,8 @@ class TdcLevel:
         # Define some shorhand:
         score = self.schema.score
         target = self.schema.target
+        is_proteins = "mokapot protein group" in self.columns
+
         keep = [*self.columns, target, score]
         if self.schema.group is not None:
             keep += self.schema.group
@@ -547,6 +549,12 @@ class TdcLevel:
             .select(keep)
             .collect(streaming=True)
         )
+
+        if is_proteins:
+            # Due to string caching headaches...
+            tdc_df = tdc_df.with_columns(
+                pl.col("mokapot protein group").cast(pl.Utf8)
+            )
 
         # Compute q-values
         conf_out = []
@@ -580,6 +588,10 @@ class TdcLevel:
             # Calculate PEPs
             LOGGER.info("Assiging PEPs to %s...", self.unit)
             try:
+                # Handle the random state:
+                prev_state = np.random.get_state()
+                np.random.seed(self.rng.integers(1, 9999))
+
                 # We need to capture stdout here:
                 msg = io.StringIO()
                 with contextlib.redirect_stdout(msg):
@@ -592,6 +604,8 @@ class TdcLevel:
                 if msg.getvalue().startswith("Warning: IRLS did not converge"):
                     LOGGER.warning("PEP calculation did not converge.")
 
+                # Restore the random state:
+                np.random.set_state(prev_state)
             except SystemExit as msg:
                 if "no decoy hits available for PEP calculation" in str(msg):
                     peps = [0] * len(grp_df)
@@ -605,15 +619,20 @@ class TdcLevel:
                         pl.Series(qvals).alias("mokapot q-value"),
                         pl.Series(peps).alias("mokapot PEP"),
                     ]
-                )
+                ).lazy()
             )
 
-        data = data.join(
-            pl.concat(conf_out, how="vertical").lazy(),
+            # Cast back to categorical:
+            if is_proteins:
+                conf_out[-1] = conf_out[-1].with_columns(
+                    pl.col("mokapot protein group").cast(pl.Categorical)
+                )
+
+        return data.join(
+            pl.concat(conf_out, how="vertical"),
             on=[*self.columns, target, score],
             how="inner",
         )
-        return data
 
 
 class ConfidenceEstimates:

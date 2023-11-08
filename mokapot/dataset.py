@@ -279,10 +279,12 @@ class _BaseDataset(BaseData):
         if train and self.subset is not None:
             fold_data = fold_data.head(self.subset)
 
-        new_dset = copy.deepcopy(self)
+        new_dset = copy.copy(self)
+        new_dset.schema = copy.deepcopy(new_dset.schema)
         new_dset._data = fold_data
         new_dset._clear_cache()
         new_dset.schema.score = None
+
         return new_dset
 
     def _clear_cache(self) -> None:

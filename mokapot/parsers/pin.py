@@ -111,7 +111,10 @@ def read_pin(
     """
     logging.info("Parsing PSMs...")
     data = build_df(pin_files, strict_parsing=strict_parsing)
-    prot_col = find_column(None, data, "proteins", False)
+    if proteins is not None:
+        prot_col = None
+    else:
+        prot_col = find_column(None, data, "proteins", False)
 
     schema = PsmSchema(
         target=find_column(None, data, "label", True),

@@ -12,7 +12,7 @@ def data():
     """The data to work with."""
     cols = ["target", "peptide", "score"]
     df = [
-        [True, "BLAH.A[+1]BC", 10],
+        [True, "BLAH.A[+1]B[+3]C", 10],
         [True, "BCD", 9],
         [False, "CBA", 9],
         [False, "DCB", 10],
@@ -50,7 +50,6 @@ def test_proteins(data, schema):
             Proteins(peptides=peptide_map, rng=42)
             .pick(data=data, schema=schema)
             .with_columns(
-                pl.col("stripped sequence").cast(pl.Utf8),
                 pl.col("mokapot protein group").cast(pl.Utf8),
             )
             .collect()
@@ -60,21 +59,20 @@ def test_proteins(data, schema):
     cols = [
         "target",
         "peptide",
-        "stripped sequence",
         "mokapot protein group",
         "# mokapot protein groups",
     ]
 
     data = [
-        [True, "BLAH.A[+1]BC", "ABC", "T_A", 1],
-        [True, "BCD", "BCD", "T_A;T_B", 2],
-        [False, "CBA", "CBA", "T_A", 1],
-        [False, "DCB", "DCB", "T_A;T_B", 2],
-        [True, "EFG", "EFG", "T_B", 1],
-        [False, "GFE", "GFE", "T_B", 1],
-        [True, "HIJ", "HIJ", "T_B", 1],
-        [False, "MLK", "MLK", "T_C", 1],
+        [True, "BLAH.A[+1]B[+3]C", "T_A", 1],
+        [True, "BCD", "T_A;T_B", 2],
+        [False, "CBA", "T_A", 1],
+        [False, "DCB", "T_A;T_B", 2],
+        [True, "EFG", "T_B", 1],
+        [False, "GFE", "T_B", 1],
+        [True, "HIJ", "T_B", 1],
+        [False, "MLK", "T_C", 1],
     ]
 
     expected = pl.DataFrame(data, schema=cols)
-    assert_frame_equal(picked, expected)
+    assert_frame_equal(picked.sort("peptide"), expected.sort("peptide"))

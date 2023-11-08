@@ -82,9 +82,11 @@ def read_fasta(
     # Build the initial mapping
     proteins = {}
     peptides = defaultdict(set)
+    n_decoys = 0
     for entry in fasta:
         prot, seq = _parse_protein(entry)
         if prot.startswith(decoy_prefix):
+            n_decoys += 1
             continue
 
         peps = digest(
@@ -105,9 +107,9 @@ def read_fasta(
     if not proteins:
         raise ValueError("Only decoy sequences were found.")
 
-    total_prots = len(fasta)
+    total_prots = len(fasta) - n_decoys
     LOGGER.info("  - Parsed and digested %i proteins.", total_prots)
-    LOGGER.info("  - %i had no peptides.", len(fasta) - len(proteins))
+    LOGGER.info("  - %i had no peptides.", total_prots - len(proteins))
     LOGGER.info("  - Retained %i proteins.", len(proteins))
     del fasta
 

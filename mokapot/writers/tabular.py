@@ -1,6 +1,7 @@
 """Writer to save results in a tab-delmited format."""
 from __future__ import annotations
 
+import logging
 from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -9,6 +10,8 @@ import polars as pl
 
 if TYPE_CHECKING:
     from ..confidence import Confidence
+
+LOGGER = logging.getLogger(__name__)
 
 
 def to_parquet(
@@ -212,6 +215,8 @@ def _to_tabular(
         The paths to the saved files.
 
     """
+    logging.info("Writing confidence estimates...")
+    msg = "  - Wrote %s"
     if stem is None or not stem:
         stem = []
     else:
@@ -221,6 +226,7 @@ def _to_tabular(
     for level, table in conf.results:
         fname = Path(dest_dir, ".".join(stem + ["mokapot", level.name, ext]))
         getattr(table.collect(streaming=True), write_fn)(fname, **kwargs)
+        LOGGER.info(msg, fname)
         out_files.append(fname)
 
     if decoys:
@@ -230,6 +236,7 @@ def _to_tabular(
                 ".".join(stem + ["mokapot", "decoy", level.name, ext]),
             )
             getattr(table.collect(streaming=True), write_fn)(fname, **kwargs)
+            LOGGER.info(msg, fname)
             out_files.append(fname)
 
     return out_files

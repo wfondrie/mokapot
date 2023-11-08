@@ -1,5 +1,7 @@
 """Utility functions."""
-from typing import Any
+import functools
+import time
+from typing import Any, Callable
 
 import polars as pl
 
@@ -54,3 +56,22 @@ def make_lazy(data: pl.DataFrame | pl.LazyFrame | dict) -> pl.LazyFrame:
         last_exc = exc
 
     raise ValueError("Incompatible type for 'data'") from last_exc
+
+
+def timethis(label: str = "") -> Callable:
+    """A decorator for timing."""
+
+    def decorator(func: Callable) -> Callable:
+        """The decorator."""
+
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: dict) -> Any:
+            """The returned wrapper."""
+            start = time.time()
+            out = func(*args, **kwargs)
+            print(label, time.time() - start)  # noqa: T201
+            return out
+
+        return wrapper
+
+    return decorator

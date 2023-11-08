@@ -105,7 +105,7 @@ def test_cli_aggregate(tmp_path, scope_files):
     assert Path(tmp_path, "blah.mokapot.decoy.peptides.txt").exists()
 
 
-@pytest.mark.skip("memory blowup")
+# @pytest.mark.skip("memory blowup")
 def test_cli_fasta(tmp_path, phospho_files):
     """Test that proteins happen."""
     cmd = [
