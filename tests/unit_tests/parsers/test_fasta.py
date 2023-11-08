@@ -1,5 +1,4 @@
 """Test that we can parse a FASTA file correctly."""
-import polars as pl
 import pytest
 
 import mokapot
@@ -95,26 +94,20 @@ def test_target_fasta(target_fasta):
 
     # First the default parameters
     prot = read_fasta(target_fasta)
-    seqs = prot.data.collect()["target_seq"].to_list()
 
     # Check the peptide_map
     # 0 missed cleavages
-    assert "MABCDEFGHIJK" in seqs
+    assert "MABCDEFGHIJK" in prot.peptides
     # 1 missed cleavage
-    assert "MABCDEFGHIJKLMNOPQR" in seqs
+    assert "MABCDEFGHIJKLMNOPQR" in prot.peptides
     # 2 missed cleavages
-    assert "MABCDEFGHIJKLMNOPQRSTUVWXYZK" in seqs
+    assert "MABCDEFGHIJKLMNOPQRSTUVWXYZK" in prot.peptides
     # too short
-    assert short_pep not in seqs
+    assert short_pep not in prot.peptides
     # too long
-    assert long_pep not in seqs
+    assert long_pep not in prot.peptides
     # Check shared peptides:
-    assert 2 == (
-        prot.data.collect()
-        .filter(pl.col("target_seq") == "AAAAABR")
-        .select("# mokapot protein groups")
-        .item()
-    )
+    assert 2 == prot.peptides["AAAAABR"][1]
 
 
 def test_parameters(target_fasta):
@@ -130,30 +123,24 @@ def test_parameters(target_fasta):
         max_length=60,
         decoy_prefix="rev_",
     )
-    seqs = prot.data.collect()["target_seq"].to_list()
-    groups = prot.data.collect()["mokapot protein group"].to_list()
 
     # Check the peptide_map
     # 0 missed cleavages
-    assert "MABCDEFGHIJK" in seqs
-    assert "ABCDEFGHIJK" in seqs
+    assert "MABCDEFGHIJK" in prot.peptides
+    assert "ABCDEFGHIJK" in prot.peptides
     # 1 missed cleavage
-    assert "ABCDEFGHIJKLMNOPQR" not in seqs
+    assert "ABCDEFGHIJKLMNOPQR" not in prot.peptides
     # 2 missed cleavages
-    assert "ABCDEFGHIJKLMNOPQRSTUVWXYZK" not in seqs
+    assert "ABCDEFGHIJKLMNOPQRSTUVWXYZK" not in prot.peptides
     # too short
-    assert short_pep in seqs
+    assert short_pep in prot.peptides
     # too long
-    assert long_pep in seqs
+    assert long_pep in prot.peptides
     # grouped protein:
+    groups = [v[0] for v in prot.peptides.values()]
     assert "wf|target1,wf|target4" in groups
     # Check shared peptides:
-    assert 2 == (
-        prot.data.collect()
-        .filter(pl.col("target_seq") == "AAB")
-        .select("# mokapot protein groups")
-        .item()
-    )
+    assert 2 == prot.peptides["AAB"][1]
 
 
 def test_decoy_fasta(target_fasta, decoy_fasta):
@@ -165,11 +152,10 @@ def test_decoy_fasta(target_fasta, decoy_fasta):
 
     # Now do with both:
     prot = read_fasta([target_fasta, decoy_fasta])
-    seqs = prot.data.collect()["target_seq"].to_list()
 
     # Check the peptide_map
     # A target sequence
-    assert "MABCDEFGHIJK" in seqs
+    assert "MABCDEFGHIJK" in prot.peptides
 
 
 def test_mc_digest(protein):

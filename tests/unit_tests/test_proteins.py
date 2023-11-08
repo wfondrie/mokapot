@@ -52,7 +52,6 @@ def test_proteins(data, schema):
             .with_columns(
                 pl.col("stripped sequence").cast(pl.Utf8),
                 pl.col("mokapot protein group").cast(pl.Utf8),
-                pl.col("# mokapot protein groups").cast(pl.Int64),
             )
             .collect()
         )

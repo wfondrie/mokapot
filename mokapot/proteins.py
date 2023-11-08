@@ -1,6 +1,10 @@
 """Handle proteins for the picked protein FDR."""
+from __future__ import annotations
+
 import logging
+import random
 from collections import defaultdict
+from dataclasses import dataclass
 
 import numpy as np
 import polars as pl
@@ -32,7 +36,7 @@ class Proteins(RngMixin):
 
     Attributes
     ----------
-    peptides : polars.LazyFrame
+    peptides : dict
         A mapping of peptides to the proteins that may have
         generated them.
     rng : np.random.Generator
@@ -41,52 +45,28 @@ class Proteins(RngMixin):
 
     def __init__(
         self,
-        peptides: dict[str, list[str]],
+        peptides: dict[Peptide, list[str]],
         rng: int | np.random.Generator | None = None,
     ) -> None:
         """Initialize the Proteins object."""
         self.proteins = "mokapot protein group"
         self.protein_counts = "# mokapot protein groups"
         self.seqs = "stripped sequence"
-        self.target_seqs = "target_seq"
 
-        self.data = pl.DataFrame(
-            (
-                (pep, ";".join(prot), len(prot))
-                for pep, prot in peptides.items()
-            ),
-            schema={
-                self.target_seqs: pl.Utf8,
-                self.proteins: pl.Categorical,
-                self.protein_counts: pl.UInt16,
-            },
-        ).lazy()
-
+        LOGGER.info("Ignoring shared peptides...")
+        self.peptides = {k: (";".join(v), len(v)) for k, v in peptides.items()}
         self.rng = rng
 
-        # Unique peptides:
-        LOGGER.info("Ignoring shared peptides...")
-        counts = self.data.select(
-            [
-                pl.count().alias("total"),
-                (pl.col(self.protein_counts) > 1).sum().alias("is_shared"),
-                pl.col(self.proteins)
-                .filter(pl.col(self.protein_counts) == 1)
-                .unique()
-                .count()
-                .alias("proteins"),
-            ]
-        ).collect(streaming=True)
-
+        n_shared = sum(v[1] > 1 for v in self.peptides.values())
         LOGGER.info(
             "  - Ignored %i shared peptides for protein inference.",
-            counts["is_shared"].item(),
+            n_shared,
         )
 
         LOGGER.info(
             "  - Retained %i peptides from %i protein groups.",
-            counts["total"].item() - counts["is_shared"].item(),
-            counts["proteins"].item(),
+            len(self.peptides) - n_shared,
+            len({v[0] for v in self.peptides.values() if v[1] == 1}),
         )
 
     def pick(
@@ -129,32 +109,40 @@ class Proteins(RngMixin):
         # Add protein groups:
         with pl.StringCache():
             data = data.join(
-                self._group(data=data, schema=schema),
+                self._group(data, schema),
                 on=[self.seqs, schema.target],
                 how="left",
             )
 
             # Verify that unmatched peptides are shared.
-            n_total, n_missing = (
-                data.select(
-                    [
-                        pl.count().alias("total"),
-                        pl.col(self.proteins).is_null().sum().alias("missing"),
-                    ]
+            missing = (
+                data.filter(
+                    pl.col(schema.target) & pl.col(self.proteins).is_null()
                 )
+                .select(self.seqs)
+                .unique()
                 .collect(streaming=True)
-                .rows()[0]
+                .to_series()
+                .to_list()
             )
 
-        if n_missing:
+            n_total = (
+                data.select(self.seqs)
+                .unique()
+                .select(pl.count())
+                .collect(streaming=True)
+                .item()
+            )
+
+        if len(missing):
             LOGGER.warning(
                 "%i out of %i peptides could not be mapped. "
                 "Please check your digest settings.",
-                n_missing,
+                len(missing),
                 n_total,
             )
 
-            if n_missing / n_total > 0.10:
+            if len(missing) / n_total > 0.10:
                 raise ValueError(
                     "Fewer than 90% of all peptides could be matched to "
                     "proteins. Please verify that your digest settings are "
@@ -163,162 +151,130 @@ class Proteins(RngMixin):
 
         return data
 
-    def _group(
-        self,
-        data: pl.LazyFrame,
-        schema: PsmSchema,
-    ) -> dict[str, str]:
-        """Retrieve the protein groups.
-
-        Build a mapping of the decoy peptides to a plausible unique
-        target peptide. Then proceed to map to proteins as with the targets.
+    def _group(self, seq_df: pl.DataFrame, schema: PsmSchema) -> pl.LazyFrame:
+        """Get the protein groups for peptide sequences.
 
         Parameters
         ----------
-        data : polars.LazyFrame
-            A collection of examples, where the rows are an example and the
-            columns are features or metadata describing them. We expect this
-            dataframe to be sorted already.
-        schema : mokapot.PsmSchema
-            The meaning of the columns in the data.
-        rng : np.random.Generator
-            A seed or generator used for cross-validation split creation and to
-            break ties, or :code:`None` to use the default random number
-            generator state.
+        seq_df : polars.DataFrame
+            The DataFrame of peptide sequences.
+        schema : PsmSchema
+            The column meanings.
 
         Returns
         -------
-        polars.LazyFrame
-            The protein group for each peptide.
+        pl.LazyFrame
+            A mapping of peptides to protein groups.
         """
-        decoys = (
-            data.filter(~pl.col(schema.target))
-            .select(self.seqs)
+        seq_df = (
+            seq_df.select(self.seqs, schema.target)
             .unique()
-            .cast(pl.Utf8)
             .collect(streaming=True)
-            .to_series()
+            .group_by(schema.target)
         )
 
-        # All of the theoretical targets:
-        targets = (
-            self.data.select(self.target_seqs)
-            .collect(streaming=True)
-            .to_series()
-        )
+        groups = []
+        for label, seqs in seq_df:
+            seqs = seqs.select(self.seqs).to_series()
+            if label:
+                df = [(s, *self.peptides[s]) for s in seqs]
+                df = pl.DataFrame(
+                    df,
+                    schema=[seqs.name, self.proteins, self.protein_counts],
+                )
+            else:
+                df = self._match_decoys(seqs)
 
-        group_df = (
-            match_decoys(
-                decoys=decoys,
-                targets=targets,
-                rng=self.rng,
+            groups.append(
+                df.lazy().with_columns(
+                    [
+                        pl.lit(label).alias(schema.target),
+                        pl.col(seqs.name).cast(pl.Categorical),
+                        pl.col(self.proteins).cast(pl.Categorical),
+                    ]
+                )
             )
-            .lazy()
-            .join(self.data, how="left", on=self.target_seqs)
-            .drop(self.target_seqs)
-            .with_columns(pl.lit(False).alias(schema.target))
-            .join(
-                self.data.rename({self.target_seqs: self.seqs}).with_columns(
-                    pl.lit(True).alias(schema.target)
-                ),
-                how="outer",
-                on=[
-                    self.seqs,
-                    schema.target,
-                    self.proteins,
-                    self.protein_counts,
-                ],
-            )
-            .with_columns(pl.col(self.seqs).cast(pl.Categorical))
-        )
-        return group_df
+
+        return pl.concat(groups, how="vertical")
+
+    def _match_decoys(
+        self,
+        decoys: pl.LazyFrame,
+    ) -> pl.DataFrame:
+        """Find a corresponding target for each decoy.
+
+        Matches a decoy to a unique random target peptide that
+        has the same amino acid composition.
+
+        Parameters
+        ----------
+        decoys : polars.Series
+            A collection of stripped decoy peptide sequences
+        rng : np.random.Generator
+            The random number generator to use.
+
+        Returns
+        -------
+        polars.DataFrame
+            The corresponding target peptide for each
+            decoy peptide.
+        """
+        prev_rng_state = random.getstate()
+        random.seed(int(self.rng.integers(1, 9999)))
+        names = [decoys.name, self.proteins, self.protein_counts]
+        decoys = decoys.shuffle(self.rng.integers(1, 9999))
+
+        target_comps = defaultdict(list)
+        for target, prot in self.peptides.items():
+            target_comps["".join(sorted(str(target)))].append(prot)
+
+        # Shuffle them:
+        for val in target_comps.values():
+            random.shuffle(val)
+
+        # Find the first target that matches a decoy composition:
+        decoy_df = []
+        for decoy in decoys:
+            try:
+                decoy_df.append(
+                    (
+                        decoy,
+                        *target_comps["".join(sorted(str(decoy)))].pop(),
+                    )
+                )
+            except IndexError:
+                continue
+
+        random.setstate(prev_rng_state)
+        return pl.DataFrame(decoy_df, schema=names)
 
 
-def match_decoys(
-    decoys: pl.Series,
-    targets: pl.Series,
-    rng: np.random.Generator,
-) -> pl.DataFrame:
-    """Find a corresponding target for each decoy.
+@dataclass
+class Peptide:
+    """A peptide sequence.
 
-    Matches a decoy to a unique random target peptide that
-    has the same amino acid composition.
+    This class stores the peptide as a substring of the protein,
+    in an effort to reduce memory pressure.
 
     Parameters
     ----------
-    decoys : polars.Series
-        A collection of stripped decoy peptide sequences
-    targets : polars.Series
-        A collection of stripped target peptide sequences
-    rng : np.random.Generator
-        The random number generator to use.
-
-    Returns
-    -------
-    polars.DataFrame
-        The corresponding target peptide for each
-        decoy peptide.
+    protein : str
+        The sequence of the protein.
+    substr : clice
+        The subsequence defining the peptide.
     """
-    names = [decoys.name, targets.name]
-    targets = residue_sort(targets.shuffle(rng.integers(1, 9999)))
-    decoys = residue_sort(decoys.shuffle(rng.integers(1, 9999)))
 
-    # Check for overlaps with targets and decoys:
-    overlap = (
-        targets.join(decoys, on="peptide", how="inner")
-        .select("peptide")
-        .rename({"peptide": names[0]})
-    )
+    protein: str
+    substr: slice
 
-    if n_overlap := overlap.select(pl.count()).collect().item():
-        LOGGER.warning(
-            "%i decoy peptides are identical to target sequences.",
-            n_overlap,
-        )
+    def __str__(self) -> str:
+        """The peptide sequence."""
+        return self.protein[self.substr]
 
-    # Build a map of composition to lists of peptides:
-    targ_map = defaultdict(list)
-    for peptide, comp in targets.collect(streaming=True).iter_rows():
-        targ_map[comp].append(peptide)
+    def __hash__(self) -> str:
+        """Hash the peptide sequence."""
+        return hash(self.protein[self.substr])
 
-    # Find the first target peptide that matches the decoy composition
-    decoy_df = []
-    for peptide, comp in decoys.collect(streaming=True).iter_rows():
-        try:
-            decoy_df.append((peptide, targ_map[comp].pop()))
-        except IndexError:
-            continue
-
-    return pl.DataFrame(decoy_df, schema=names)
-
-
-def residue_sort(peptides: pl.Series) -> pl.DataFrame:
-    """Sort peptide sequences by amino acid.
-
-    This function also considers potential modifications
-
-    Parameters
-    ----------
-    peptides : polars.Series
-        A collection of peptides
-
-    Returns
-    -------
-    polars.LazyFrame
-        A lexographically sorted sequence that respects
-        modifications.
-    """
-    peptides = peptides.rename("peptide")
-    return (
-        peptides.to_frame()
-        .lazy()
-        .group_by("peptide")
-        .agg(
-            pl.col("peptide")
-            .cast(pl.Utf8)
-            .str.explode()
-            .sort()
-            .alias("sorted")
-        )
-        .with_columns(pl.col("sorted").list.join("").cast(pl.Categorical))
-    )
+    def __len__(self) -> int:
+        """Get the sequence length."""
+        return self.substr.stop - self.substr.start

@@ -594,7 +594,7 @@ class TdcLevel:
 
             except SystemExit as msg:
                 if "no decoy hits available for PEP calculation" in str(msg):
-                    peps = 0
+                    peps = [0] * len(grp_df)
                 else:
                     raise
 

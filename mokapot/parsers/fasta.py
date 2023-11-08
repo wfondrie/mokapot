@@ -11,7 +11,7 @@ import numpy as np
 import polars as pl
 
 from .. import utils
-from ..proteins import Proteins
+from ..proteins import Peptide, Proteins
 
 LOGGER = logging.getLogger(__name__)
 
@@ -247,8 +247,7 @@ def digest(
         semi=semi,
         clip_nterm_met=clip_nterm_methionine,
     )
-
-    return peptides
+    return {str(p) for p in peptides}
 
 
 def _parse_fasta_files(fasta_files: PathLike | list[PathLike]) -> list[str]:
@@ -397,7 +396,7 @@ def _cleave(  # noqa: C901
     max_length: int,
     semi: bool,
     clip_nterm_met: bool,
-) -> set[str]:
+) -> set[Peptide]:
     """Digest a protein sequence into its constituent peptides.
 
     Parameters
@@ -406,7 +405,7 @@ def _cleave(  # noqa: C901
         A protein sequence to digest.
     sites : list of int
         The cleavage sites.
-    missed_cleavages : int, optional
+    missed_cleavages : int, of optional
         The maximum number of allowed missed cleavages.
     min_length : int, optional
         The minimum peptide length.
@@ -419,7 +418,7 @@ def _cleave(  # noqa: C901
 
     Returns
     -------
-    peptides : set of str
+    peptides : set of Peptide
         The peptides resulting from the digested sequence.
     """
     peptides = set()
@@ -432,36 +431,43 @@ def _cleave(  # noqa: C901
                 continue
 
             end_site = sites[end_idx]
-            peptide = sequence[start_site:end_site]
-            if len(peptide) < min_length or len(peptide) > max_length:
-                continue
+            pep_len = end_site - start_site
+            if min_length <= pep_len <= max_length:
+                peptides.add(Peptide(sequence, slice(start_site, end_site)))
 
-            peptides.add(peptide)
-
-            if clip_nterm_met and not start_idx and peptide.startswith("M"):
-                if len(peptide[1:]) >= min_length:
-                    peptides.add(peptide[1:])
+            if clip_nterm_met and not start_idx:
+                if pep_len - 1 >= min_length and pep_len - 1 <= max_length:
+                    if sequence[start_site] == "M":
+                        peptides.add(
+                            Peptide(
+                                sequence,
+                                slice(start_site + 1, end_site),
+                            )
+                        )
 
             # Handle semi:
             if semi:
-                for idx in range(1, len(peptide)):
-                    sub_pep_len = len(peptide) - idx
+                for idx in range(1, pep_len):
+                    sub_pep_len = pep_len - idx
                     if sub_pep_len < min_length:
                         break
 
                     if sub_pep_len > max_length:
                         continue
 
-                    semi_pep = {peptide[idx:], peptide[:-idx]}
-                    peptides = peptides.union(semi_pep)
+                    semi_peps = {
+                        Peptide(sequence, slice(idx, pep_len)),
+                        Peptide(sequence, slice(0, pep_len - idx)),
+                    }
+                    peptides = peptides.union(semi_peps)
 
     return peptides
 
 
 def _group_proteins(
-    proteins: dict[str, set[str]],
-    peptides: dict[str, set[str]],
-) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    proteins: dict[str, set[Peptide]],
+    peptides: dict[Peptide, set[str]],
+) -> tuple[dict[str, set[Peptide]], dict[Peptide, set[str]]]:
     """Group proteins when one's peptides are a subset of another's.
 
     WARNING: This function directly modifies `peptides` for the sake of
@@ -476,7 +482,7 @@ def _group_proteins(
 
     Returns
     -------
-    protein groups : dict[str, set of str]
+    protein_groups : dict[str, set of str]
         A map of protein groups to their peptides
     peptides : dict[str, set of str]
         A map of peptides to their protein groups.

@@ -22,28 +22,29 @@ def test_with_proteins(psm_df_1000):
     proteins = mokapot.read_fasta(fasta, missed_cleavages=0)
 
     rng = np.random.default_rng(42)
-    conf = PsmConfidence(
-        data=data,
-        schema=PsmSchema(**schema_kwargs),
-        scores=data["score"],
-        eval_fdr=0.2,
-        rng=rng,
-        proteins=proteins,
-    )
 
-    prot1 = conf.results.proteins
-    rng = np.random.default_rng(42)
-    conf = PsmConfidence(
-        data=data,
-        schema=PsmSchema(**schema_kwargs),
-        scores=data["score"],
-        eval_fdr=0.2,
-        rng=rng,
-        proteins=proteins,
-    )
-
-    prot2 = conf.results.proteins
     with pl.StringCache():
+        conf = PsmConfidence(
+            data=data,
+            schema=PsmSchema(**schema_kwargs),
+            scores=data["score"],
+            eval_fdr=0.2,
+            rng=rng,
+            proteins=proteins,
+        )
+
+        prot1 = conf.results.proteins
+        rng = np.random.default_rng(42)
+        conf = PsmConfidence(
+            data=data,
+            schema=PsmSchema(**schema_kwargs),
+            scores=data["score"],
+            eval_fdr=0.2,
+            rng=rng,
+            proteins=proteins,
+        )
+
+        prot2 = conf.results.proteins
         assert_frame_equal(prot1, prot2)
 
 
