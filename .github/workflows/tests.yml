@@ -38,12 +38,9 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Run unit tests
       run: |
-        pytest -v --cov=mokapot tests/unit_tests
+        pytest -v --cov=mokapot tests/
     - name: Upload coverage to codecov
       uses: codecov/codecov-action@v3
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true
-    - name: Run system tests
-      run: |
-        pytest -v tests/system_tests
