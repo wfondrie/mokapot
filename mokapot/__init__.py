@@ -1,25 +1,12 @@
 """Initialize the mokapot package."""
-try:
-    from importlib.metadata import version, PackageNotFoundError
+from .brew import Barista, brew
+from .confidence import PsmConfidence
+from .dataset import PsmDataset
+from .model import Model, PercolatorModel, load_model, save_model
+from .parsers.fasta import digest, make_decoys, read_fasta
+from .parsers.pin import percolator_to_df, read_pin
+from .schema import PsmSchema
+from .version import _get_version
+from .writers import to_csv, to_flashlfq, to_parquet, to_txt
 
-    try:
-        __version__ = version(__name__)
-    except PackageNotFoundError:
-        pass
-
-except ImportError:
-    from pkg_resources import get_distribution, DistributionNotFound
-
-    try:
-        __version__ = get_distribution(__name__).version
-    except DistributionNotFound:
-        pass
-
-from .dataset import LinearPsmDataset
-from .model import Model, PercolatorModel, save_model, load_model
-from .brew import brew
-from .parsers.pin import read_pin, read_percolator
-from .parsers.pepxml import read_pepxml
-from .parsers.fasta import read_fasta, make_decoys, digest
-from .writers import to_flashlfq, to_txt
-from .confidence import LinearConfidence, plot_qvalues
+__version__ = _get_version()

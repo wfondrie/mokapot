@@ -1,29 +1,40 @@
-"""
+"""Configure the CLI.
+
 Contains all of the configuration details for running mokapot
 from the command line.
 """
 import argparse
 import textwrap
+from typing import Any
 
 from mokapot import __version__
 
 
 class MokapotHelpFormatter(argparse.HelpFormatter):
-    """Format help text to keep newlines and whitespace"""
+    """Format help text to keep newlines and whitespace."""
 
-    def _fill_text(self, text, width, indent):
-        lines = text.splitlines(keepends=True)
-        return "\n".join(_process_line(txt, width, indent) for txt in lines)
+    def _fill_text(self, text: str, width: int, indent: int) -> str:
+        lines = []
+        for line in text.splitlines(keepends=True):
+            line = textwrap.fill(
+                line,
+                width,
+                initial_indent=indent,
+                subsequent_indent=indent,
+                replace_whitespace=False,
+            )
+            lines.append(line.strip())
+
+        return "\n".join(lines)
 
 
 class Config:
-    """
-    The mokapot configuration options.
+    """The mokapot configuration options.
 
     Options can be specified as command-line arguments.
     """
 
-    def __init__(self, parser=None) -> None:
+    def __init__(self, parser: argparse.ArgumentParser | None = None) -> None:
         """Initialize configuration values."""
         self._namespace = None
         if parser is None:
@@ -32,23 +43,22 @@ class Config:
             self.parser = parser
 
     @property
-    def args(self):
+    def args(self) -> dict:
         """Collect args lazily."""
         if self._namespace is None:
             self._namespace = vars(self.parser.parse_args())
 
         return self._namespace
 
-    def __getattr__(self, option):
+    def __getattr__(self, option: str) -> Any:
+        """Get an option."""
         return self.args[option]
 
 
-def _parser():
-    """The parser"""
+def _parser() -> None:
+    """The parser."""
     desc = (
-        f"mokapot version {__version__}.\n"
-        "Written by William E. Fondrie (wfondrie@talus.bio) while in the \n"
-        "Department of Genome Sciences at the University of Washington.\n\n"
+        f"mokapot version {__version__}\n"
         "Official code website: https://github.com/wfondrie/mokapot\n\n"
         "More documentation and examples: https://mokapot.readthedocs.io"
     )
@@ -62,7 +72,7 @@ def _parser():
         type=str,
         nargs="+",
         help=(
-            "A collection of PSMs in the Percolator tab-delimited or PepXML "
+            "A collection of PSMs in the Percolator tab-delimited or Parquet "
             "format."
         ),
     )
@@ -75,6 +85,14 @@ def _parser():
             "The directory in which to write the result files. Defaults to "
             "the current working directory"
         ),
+    )
+
+    parser.add_argument(
+        "-p",
+        "--parquet",
+        default=False,
+        action="store_true",
+        help="Write results as Apache Parquet instead of tab-delimited text.",
     )
 
     parser.add_argument(
@@ -146,7 +164,9 @@ def _parser():
         "--clip_nterm_methionine",
         default=False,
         action="store_true",
-        help="Remove methionine residues that occur at the protein N-terminus.",
+        help=(
+            "Remove methionine residues that occur at the protein N-terminus."
+        ),
     )
 
     parser.add_argument(
@@ -329,14 +349,3 @@ def _parser():
     )
 
     return parser
-
-
-def _process_line(line, width, indent):
-    line = textwrap.fill(
-        line,
-        width,
-        initial_indent=indent,
-        subsequent_indent=indent,
-        replace_whitespace=False,
-    )
-    return line.strip()

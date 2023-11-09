@@ -1,37 +1,36 @@
-"""The code for parsing FASTA files"""
-import re
+"""The code for parsing FASTA files."""
 import logging
-from textwrap import wrap
+import re
 from collections import defaultdict
+from os import PathLike
+from pathlib import Path
+from textwrap import wrap
+from typing import Iterable
 
 import numpy as np
+import polars as pl
 
-from ..utils import tuplize
-from ..proteins import Proteins
+from .. import utils
+from ..proteins import Peptide, Proteins
 
 LOGGER = logging.getLogger(__name__)
 
 
 def read_fasta(
-    fasta_files,
-    enzyme="[KR]",
-    missed_cleavages=2,
-    clip_nterm_methionine=False,
-    min_length=6,
-    max_length=50,
-    semi=False,
-    decoy_prefix="decoy_",
-):
+    fasta_files: PathLike | Iterable[PathLike],
+    enzyme: str = "[KR]",
+    missed_cleavages: int = 2,
+    clip_nterm_methionine: bool = False,
+    min_length: int = 6,
+    max_length: int = 50,
+    semi: bool = False,
+    decoy_prefix: str = "decoy_",
+    rng: np.random.Generator | int | None = None,
+) -> Proteins:
     """Parse a FASTA file, storing a mapping of peptides and proteins.
 
     Protein sequence information from the FASTA file is required to compute
     protein-level confidence estimates using the picked-protein approach.
-    Decoys proteins must be included and must be of the have a description in
-    format of `<prefix><protein ID>` for valid confidence estimates to be
-    calculated.
-
-    If you need to generate an appropriate FASTA file with decoy sequences for
-    your database search, see :py:func:`mokapot.make_decoys()`.
 
     Importantly, the parameters below should match the conditions in which the
     PSMs were assigned as closely as possible. Enzyme specificity is provided
@@ -41,7 +40,7 @@ def read_fasta(
 
     Parameters
     ----------
-    fasta_files : str or tuple of str
+    fasta_files : PathLike or list of PathLike
         The FASTA file(s) used for assigning the PSMs
     decoy_prefix : str, optional
         The prefix used to indicate a decoy protein in the description
@@ -62,6 +61,8 @@ def read_fasta(
         Was a semi-enzymatic digest used to assign PSMs? If :code:`True`, the
         protein database will likely contain many shared peptides and yield
         unhelpful protein-level confidence estimates.
+    rng : int or np.random.Generator
+        The random number generator used to create decoy protein groups.
 
     Returns
     -------
@@ -81,8 +82,12 @@ def read_fasta(
     # Build the initial mapping
     proteins = {}
     peptides = defaultdict(set)
+    n_decoys = 0
     for entry in fasta:
         prot, seq = _parse_protein(entry)
+        if prot.startswith(decoy_prefix):
+            n_decoys += 1
+            continue
 
         peps = digest(
             seq,
@@ -99,101 +104,40 @@ def read_fasta(
             for pep in peps:
                 peptides[pep].add(prot)
 
-    total_prots = len(fasta)
+    if not proteins:
+        raise ValueError("Only decoy sequences were found.")
+
+    total_prots = len(fasta) - n_decoys
     LOGGER.info("  - Parsed and digested %i proteins.", total_prots)
-    LOGGER.info("  - %i had no peptides.", len(fasta) - len(proteins))
+    LOGGER.info("  - %i had no peptides.", total_prots - len(proteins))
     LOGGER.info("  - Retained %i proteins.", len(proteins))
     del fasta
 
     # Sort proteins by number of peptides:
-    proteins = {
-        k: v for k, v in sorted(proteins.items(), key=lambda i: len(i[1]))
-    }
+    proteins = dict(sorted(proteins.items(), key=lambda i: len(i[1])))
 
-    LOGGER.info("Matching target to decoy proteins...")
-    # Build the decoy map:
-    decoy_map = {}
-    no_decoys = 0
-    has_decoys = False
-    has_targets = False
-    for prot_name in proteins:
-        if not prot_name.startswith(decoy_prefix):
-            has_targets = True
-            decoy = decoy_prefix + prot_name
-            decoy_map[prot_name] = decoy
-            if decoy in proteins.keys():
-                has_decoys = True
-            else:
-                no_decoys += 1
-
-    if not has_targets:
-        raise ValueError("Only decoy proteins were found in the FASTA file.")
-
-    if no_decoys and no_decoys < len(decoy_map):
-        LOGGER.warning(
-            "Found %i target proteins without matching decoys.", no_decoys
-        )
-
-    LOGGER.info("Building protein groups...")
     # Group Proteins
+    LOGGER.info("Building protein groups...")
     num_before_group = len(proteins)
     proteins, peptides = _group_proteins(proteins, peptides)
     LOGGER.info(
-        "\t- Aggregated %i proteins into %i protein groups.",
+        "  - Aggregated %i proteins into %i protein groups.",
         num_before_group,
         len(proteins),
     )
 
-    if not has_decoys:
-        LOGGER.info("No decoy sequences were found in the FASTA file.")
-        LOGGER.info(
-            "  - Creating decoy protein groups that mirror the target "
-            "proteins."
-        )
-
-    # unique peptides:
-    LOGGER.info("Discarding shared peptides...")
-    shared_peptides = {}
-    unique_peptides = {}
-    for pep, prots in peptides.items():
-        if len(prots) == 1:
-            unique_peptides[pep] = next(iter(prots))
-        else:
-            shared_peptides[pep] = "; ".join(prots)
-
-    total_proteins = len(set(p for p in unique_peptides.values()))
-
-    LOGGER.info(
-        "  - Discarded %i peptides and %i proteins groups.",
-        len(peptides) - len(unique_peptides),
-        len(proteins) - total_proteins,
-    )
-
-    LOGGER.info(
-        "  - Retained %i peptides from %i protein groups.",
-        len(unique_peptides),
-        total_proteins,
-    )
-
-    parsed = Proteins(
-        decoy_prefix=decoy_prefix,
-        peptide_map=unique_peptides,
-        shared_peptides=shared_peptides,
-        protein_map=decoy_map,
-        has_decoys=has_decoys,
-    )
-
-    return parsed
+    with pl.StringCache():
+        return Proteins(peptides, rng)
 
 
 def make_decoys(
-    fasta,
-    out_file,
-    decoy_prefix="decoy_",
-    enzyme="[KR]",
-    reverse=False,
-    concatenate=True,
-):
+    fasta: PathLike | list[PathLike],
+    out_file: PathLike,
+    decoy_prefix: str = "decoy_",
+    enzyme: str = "[KR]",
+    reverse: bool = False,
+    concatenate: bool = True,
+) -> Path:
     """
     Create a FASTA file with decoy sequences.
 
@@ -203,7 +147,7 @@ def make_decoys(
 
     Parameters
     ----------
-    fasta : str or list of str
+    fasta : PathLike or list of PathLike
         One or more FASTA files containing target sequences.
     out_file : str
         The name of the output FASTA file.
@@ -225,7 +169,7 @@ def make_decoys(
 
     Returns
     -------
-    str
+    Path
         The output FASTA file.
     """
     LOGGER.info("Parsing FASTA file(s)...")
@@ -253,21 +197,22 @@ def make_decoys(
 
     fasta = "\n".join(fasta)
 
-    with open(out_file, "w+") as out:
+    out_file = Path(out_file)
+    with out_file.open("w+") as out:
         out.write(fasta)
 
     return out_file
 
 
 def digest(
-    sequence,
-    enzyme_regex="[KR]",
-    missed_cleavages=0,
-    clip_nterm_methionine=False,
-    min_length=6,
-    max_length=50,
-    semi=False,
-):
+    sequence: str,
+    enzyme_regex: str = "[KR]",
+    missed_cleavages: int = 0,
+    clip_nterm_methionine: bool = False,
+    min_length: int = 6,
+    max_length: int = 50,
+    semi: bool = False,
+) -> set[str]:
     """
     Digest a protein sequence into its constituent peptides.
 
@@ -304,17 +249,15 @@ def digest(
         semi=semi,
         clip_nterm_met=clip_nterm_methionine,
     )
+    return {str(p) for p in peptides}
 
-    return peptides
 
-
-# Private Functions -----------------------------------------------------------
-def _parse_fasta_files(fasta_files):
-    """Read a fasta file and divide into proteins
+def _parse_fasta_files(fasta_files: PathLike | list[PathLike]) -> list[str]:
+    """Read a fasta file and divide into proteins.
 
     Parameters
     ----------
-    fasta_files : str or list of str
+    fasta_files : PathLike or list of PathLike
         One or more FASTA files.
 
     Returns
@@ -322,7 +265,7 @@ def _parse_fasta_files(fasta_files):
     proteins : list of str
         The raw protein headers and sequences.
     """
-    fasta_files = tuplize(fasta_files)
+    fasta_files = utils.listify(fasta_files)
     fasta = []
     for fasta_file in fasta_files:
         with open(fasta_file) as fa:
@@ -331,7 +274,7 @@ def _parse_fasta_files(fasta_files):
     return "\n".join(fasta)[1:].split("\n>")
 
 
-def _parse_protein(raw_protein):
+def _parse_protein(raw_protein: str) -> tuple[str, str]:
     """Parse the raw string for a protein.
 
     Parameters
@@ -356,8 +299,13 @@ def _parse_protein(raw_protein):
     return prot, seq
 
 
-def _shuffle_proteins(proteins, decoy_prefix, enzyme, reverse):
-    """Shuffle protein sequences
+def _shuffle_proteins(
+    proteins: list[list[str]],
+    decoy_prefix: str,
+    enzyme: str,
+    reverse: bool,
+) -> list[list[str]]:
+    """Shuffle protein sequences.
 
     Parameters
     ----------
@@ -415,7 +363,7 @@ def _shuffle_proteins(proteins, decoy_prefix, enzyme, reverse):
     return decoys
 
 
-def _cleavage_sites(sequence, enzyme_regex):
+def _cleavage_sites(sequence: str, enzyme_regex: str) -> list[int]:
     """Find the cleavage sites in a sequence.
 
     Parameters
@@ -442,15 +390,15 @@ def _cleavage_sites(sequence, enzyme_regex):
     return sites
 
 
-def _cleave(
-    sequence,
-    sites,
-    missed_cleavages,
-    min_length,
-    max_length,
-    semi,
-    clip_nterm_met,
-):
+def _cleave(  # noqa: C901
+    sequence: str,
+    sites: list[int],
+    missed_cleavages: int,
+    min_length: int,
+    max_length: int,
+    semi: bool,
+    clip_nterm_met: bool,
+) -> set[Peptide]:
     """Digest a protein sequence into its constituent peptides.
 
     Parameters
@@ -459,7 +407,7 @@ def _cleave(
         A protein sequence to digest.
     sites : list of int
         The cleavage sites.
-    missed_cleavages : int, optional
+    missed_cleavages : int, of optional
         The maximum number of allowed missed cleavages.
     min_length : int, optional
         The minimum peptide length.
@@ -472,7 +420,7 @@ def _cleave(
 
     Returns
     -------
-    peptides : set of str
+    peptides : set of Peptide
         The peptides resulting from the digested sequence.
     """
     peptides = set()
@@ -485,33 +433,43 @@ def _cleave(
                 continue
 
             end_site = sites[end_idx]
-            peptide = sequence[start_site:end_site]
-            if len(peptide) < min_length or len(peptide) > max_length:
-                continue
+            pep_len = end_site - start_site
+            if min_length <= pep_len <= max_length:
+                peptides.add(Peptide(sequence, slice(start_site, end_site)))
 
-            peptides.add(peptide)
-
-            if clip_nterm_met and not start_idx and peptide.startswith("M"):
-                if len(peptide[1:]) >= min_length:
-                    peptides.add(peptide[1:])
+            if clip_nterm_met and not start_idx:
+                if pep_len - 1 >= min_length and pep_len - 1 <= max_length:
+                    if sequence[start_site] == "M":
+                        peptides.add(
+                            Peptide(
+                                sequence,
+                                slice(start_site + 1, end_site),
+                            )
+                        )
 
             # Handle semi:
             if semi:
-                for idx in range(1, len(peptide)):
-                    sub_pep_len = len(peptide) - idx
+                for idx in range(1, pep_len):
+                    sub_pep_len = pep_len - idx
                     if sub_pep_len < min_length:
                         break
 
                     if sub_pep_len > max_length:
                         continue
 
-                    semi_pep = {peptide[idx:], peptide[:-idx]}
-                    peptides = peptides.union(semi_pep)
+                    semi_peps = {
+                        Peptide(sequence, slice(idx, pep_len)),
+                        Peptide(sequence, slice(0, pep_len - idx)),
+                    }
+                    peptides = peptides.union(semi_peps)
 
     return peptides
 
 
-def _group_proteins(proteins, peptides):
+def _group_proteins(
+    proteins: dict[str, set[Peptide]],
+    peptides: dict[Peptide, set[str]],
+) -> tuple[dict[str, set[Peptide]], dict[Peptide, set[str]]]:
     """Group proteins when one's peptides are a subset of another's.
 
     WARNING: This function directly modifies `peptides` for the sake of
@@ -526,7 +484,7 @@ def _group_proteins(proteins, peptides):
 
     Returns
     -------
-    protein groups : dict[str, set of str]
+    protein_groups : dict[str, set of str]
         A map of protein groups to their peptides
     peptides : dict[str, set of str]
         A map of peptides to their protein groups.
@@ -547,7 +505,7 @@ def _group_proteins(proteins, peptides):
 
         # Create new entries from subsets:
         for match in matches:
-            new_prot = ", ".join([match, prot])
+            new_prot = ",".join([match, prot])
             # Update grouped proteins:
             grouped[new_prot] = grouped.pop(match)
 

@@ -1,56 +1,77 @@
-"""
-Utility functions
-"""
-import itertools
+"""Utility functions."""
+import functools
+import time
+from typing import Any, Callable
 
-import numpy as np
-import pandas as pd
-
-
-def groupby_max(df, by_cols, max_col, rng):
-    """Quickly get the indices for the maximum value of col"""
-    by_cols = tuplize(by_cols)
-    idx = (
-        df.sample(frac=1, random_state=rng)
-        .sort_values(list(by_cols) + [max_col], axis=0)
-        .drop_duplicates(list(by_cols), keep="last")
-        .index
-    )
-
-    return idx
+import polars as pl
 
 
-def flatten(split):
-    """Get the indices from split"""
-    return list(itertools.chain.from_iterable(split))
+def listify(obj: Any) -> list[Any]:
+    """Convert obj to a list, without splitting strings or dataframes.
 
+    Parameters
+    ----------
+    obj : anything
+        The object to turn into a list.
 
-def safe_divide(numerator, denominator, ones=False):
-    """Divide ignoring div by zero warnings"""
-    if isinstance(numerator, pd.Series):
-        numerator = numerator.values
-
-    if isinstance(denominator, pd.Series):
-        denominator = denominator.values
-
-    numerator = numerator.astype(float)
-    denominator = denominator.astype(float)
-    if ones:
-        out = np.ones_like(numerator)
-    else:
-        out = np.zeros_like(numerator)
-
-    return np.divide(numerator, denominator, out=out, where=(denominator != 0))
-
-
-def tuplize(obj):
-    """Convert obj to a tuple, without splitting strings"""
+    Returns
+    -------
+    list
+        The list representation of th object.
+    """
     try:
         _ = iter(obj)
     except TypeError:
-        obj = (obj,)
+        obj = [obj]
     else:
-        if isinstance(obj, str):
-            obj = (obj,)
+        # Don't listify strings or DataFrames.
+        if isinstance(obj, str) or hasattr(obj, "columns"):
+            obj = [obj]
 
-    return tuple(obj)
+    return list(obj)
+
+
+def make_lazy(data: pl.DataFrame | pl.LazyFrame | dict) -> pl.LazyFrame:
+    """Coerce data into a LazyFrame.
+
+    Parameters
+    ----------
+    data : DataFrame or dict
+        A polars or pandas DataFrame or a dictionary that can be coerced into
+        one containing the data.
+    """
+    try:
+        return data.lazy().clone()
+    except AttributeError as exc:
+        last_exc = exc
+
+    try:
+        return pl.from_pandas(data).lazy().clone()
+    except TypeError as exc:
+        last_exc = exc
+
+    try:
+        return pl.DataFrame(data).lazy().clone()
+    except ValueError as exc:
+        last_exc = exc
+
+    raise ValueError("Incompatible type for 'data'") from last_exc
+
+
+def timethis(label: str = "") -> Callable:
+    """A decorator for timing."""
+
+    def decorator(func: Callable) -> Callable:
+        """The decorator."""
+
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: dict) -> Any:
+            """The returned wrapper."""
+            start = time.time()
+            out = func(*args, **kwargs)
+            print(label, time.time() - start)  # noqa: T201
+            return out
+
+        return wrapper
+
+    return decorator

@@ -1,12 +1,14 @@
-"""
-This module estimates q-values.
-"""
-import numpy as np
+"""Estimate q-values."""
 import numba as nb
+import numpy as np
 
 
-def tdc(scores, target, desc=True):
-    """
+def tdc(
+    scores: np.ndarray,
+    target: np.ndarray,
+    desc: bool | None = True,
+) -> np.ndarray:
+    r"""
     Estimate q-values using target decoy competition.
 
     Estimates q-values using the simple target decoy competition method.
@@ -40,9 +42,10 @@ def tdc(scores, target, desc=True):
         `metric[i]`; thus `target` and `metric` should be of
         equal length.
 
-    desc : bool
+    desc : bool or None, optional
         Are higher scores better? `True` indicates that they are,
-        `False` indicates that they are not.
+        `False` indicates that they are not. `None` indicates that
+        the data are already sorted.
 
     Returns
     -------
@@ -65,14 +68,17 @@ def tdc(scores, target, desc=True):
     if np.issubdtype(scores.dtype, np.integer):
         scores = scores.astype(np.float_)
 
-    # Sort and estimate FDR
-    if desc:
-        srt_idx = np.argsort(-scores)
-    else:
-        srt_idx = np.argsort(scores)
+    # Sort only if required:
+    if desc is not None:
+        if desc:
+            srt_idx = np.argsort(-scores)
+        else:
+            srt_idx = np.argsort(scores)
 
-    scores = scores[srt_idx]
-    target = target[srt_idx]
+        scores = scores[srt_idx]
+        target = target[srt_idx]
+
+    # Compute FDR
     cum_targets = target.cumsum()
     cum_decoys = ((target - 1) ** 2).cumsum()
     num_total = cum_targets + cum_decoys
@@ -98,83 +104,20 @@ def tdc(scores, target, desc=True):
 
     qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
     qvals = np.flip(qvals)
-    qvals = qvals[np.argsort(srt_idx)]
 
-    return qvals
-
-
-def crosslink_tdc(scores, num_targets, desc=True):
-    """
-    Estimate q-values using the Walzthoeni et al method.
-
-    This q-value method is specifically for cross-linked peptides.
-
-    Parameters
-    ----------
-    num_targets : numpy.ndarray
-        The number of target sequences in the cross-linked pair.
-
-    metric : numpy.ndarray
-        The metric to used to rank elements.
-
-    desc : bool
-        Is a higher metric better?
-
-    Returns
-    -------
-    numpy.ndarray
-        A 1D array of q-values in the same order as `num_targets` and
-        `metric`.
-    """
-    scores = np.array(scores, dtype=np.float)
-    num_targets = np.array(num_targets, dtype=np.int)
-
-    if num_targets.max() > 2 or num_targets.min() < 0:
-        raise ValueError("'num_targets' must be 0, 1, or 2.")
-
-    if scores.shape[0] != num_targets.shape[0]:
-        raise ValueError("'scores' and 'num_targets' must be the same length.")
-
-    if desc:
-        srt_idx = np.argsort(-scores)
-    else:
-        srt_idx = np.argsort(scores)
-
-    scores = scores[srt_idx]
-    num_targets = num_targets[srt_idx]
-    num_total = np.ones(len(num_targets)).cumsum()
-    cum_targets = (num_targets == 2).astype(int).cumsum()
-    one_decoy = (num_targets == 1).astype(int).cumsum()
-    two_decoy = (num_targets == 0).astype(int).cumsum()
-
-    fdr = np.divide(
-        (one_decoy - two_decoy),
-        cum_targets,
-        out=np.ones_like(cum_targets, dtype=float),
-        where=(cum_targets != 0),
-    )
-
-    fdr[fdr < 0] = 0
-
-    # Calculate q-values
-    unique_metric, indices = np.unique(scores, return_counts=True)
-
-    # Flip arrays to loop from worst to best score
-    fdr = np.flip(fdr)
-    num_total = np.flip(num_total)
-    if not desc:
-        unique_metric = np.flip(unique_metric)
-        indices = np.flip(indices)
-
-    qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
-    qvals = np.flip(qvals)
-    qvals = qvals[np.argsort(srt_idx)]
+    if desc is not None:
+        qvals = qvals[np.argsort(srt_idx)]
 
     return qvals
 
 
 @nb.njit
-def _fdr2qvalue(fdr, num_total, met, indices):
+def _fdr2qvalue(
+    fdr: np.ndarray,
+    num_total: np.ndarray,
+    met: np.ndarray,
+    indices: tuple[np.ndarray],
+) -> np.ndarray:
     """
     Quickly turn a list of FDRs to q-values.
 

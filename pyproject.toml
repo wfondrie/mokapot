@@ -13,17 +13,16 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-requires-python = ">=3.6"
+requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.18.1",
-    "pandas>=1.0.3",
+    "polars[pyarrow,pandas]>=0.19.0",
     "scikit-learn>=0.22.1",
     "numba>=0.48.0",
-    "matplotlib>=3.1.3",
     "lxml>=4.6.2",
     "triqler>=0.6.2",
     "joblib>=1.1.0",
-    "importlib-metadata>=5.1.0",
+    "pyarrow>=12.0.0"
 ]
 dynamic = ["version"]
 
@@ -46,10 +45,7 @@ docs = [
     "ipykernel>=5.3.0",
     "recommonmark>=0.5.0",
 ]
-dev = [
-    "pre-commit>=2.7.1",
-    "black>=19.10b0",
-]
+dev = [ "pre-commit>=2.7.1" ]
 
 [project.scripts]
 mokapot = "mokapot.mokapot:main"
@@ -63,12 +59,28 @@ find = {namespaces = false}
 [tool.setuptools_scm]
 
 [tool.ruff]
-select = ["E", "F", "T20"]  # T20 is for print() statements.
-extend-exclude = ["docs/source/conf.py"]
+fix = true
+line-length = 79
+extend-exclude = ["docs", "tests/system_tests/sample_plugin"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C", "I", "D", "UP", "N", "ANN", "T20", "I001"]
+
+# ANN101 Missing type annotation for `self` in method
+# D213 Multi-line docstring summary should start at the second lin
+# D203 1 blank line required before class docstring
+# D100 Missing docstring in public module
+# ANN102 Missing type annotation for `cls` in classmethod
+# D401 First line of docstring should be in imperative mood
+# ANN401 Dynamically typed expressions (typing.Any) are disallowed
+ignore = ["D213", "ANN101", "D203", "D100", "ANN102", "D401", "ANN401"]
 
 [tool.ruff.per-file-ignores]
-"__init__.py" = ["F401"]
-"test_parser_pepxml.py" = ["E501"]
+"*tests/*.py" = ["ANN", "N806"]
+"__init__.py" = ["F401", "D104"]
+
+[tool.ruff.pydocstyle]
+convention = "numpy"
 
 [tool.black]
 line-length = 79

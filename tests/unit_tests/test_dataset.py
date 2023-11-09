@@ -1,106 +1,183 @@
-"""
-These tests verify that the dataset classes are functioning properly.
-"""
+"""These tests verify that the dataset classes are functioning properly."""
+import pickle
+
 import numpy as np
-import pandas as pd
-from mokapot import LinearPsmDataset
+import polars as pl
+import pytest
+from polars.testing import assert_frame_equal, assert_frame_not_equal
+
+import mokapot
+from mokapot import PsmDataset, PsmSchema
+from mokapot.proteins import Proteins
 
 
-def test_linear_init(psm_df_6):
-    """Test that a LinearPsm Dataset initializes correctly"""
-    dat = psm_df_6.copy()
-    dset = LinearPsmDataset(
-        psms=dat,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        protein_column="protein",
-        group_column="group",
-        feature_columns=None,
-        copy_data=True,
+def test_psm_dataset_init(psm_df_6):
+    """Test that a PsmDataset initializes correctly."""
+    df, schema_kwargs = psm_df_6
+    schema = PsmSchema(**schema_kwargs)
+    dset = PsmDataset(df, schema)
+
+    assert_frame_equal(dset.data.collect(), df)
+    np.testing.assert_allclose(
+        dset.features,
+        df.select(schema.features).to_numpy(),
+    )
+    np.testing.assert_allclose(
+        dset.targets,
+        df["target"].to_numpy(),
     )
 
-    pd.testing.assert_frame_equal(dset.data, psm_df_6)
+    assert dset.columns == df.columns
+    assert dset.proteins is None
+    assert dset.schema == schema
+    assert isinstance(dset.rng, np.random.Generator)
 
-    # Verify that changing the original dataframe does not change the
-    # the LinearPsmDataset object.
-    dat["target"] = [1, 0] * 3
-    pd.testing.assert_frame_equal(dset.data, psm_df_6)
+    # Verify this is unitialized:
+    assert dset.schema.score is None
 
-    # Check the public attributes
-    features = ["feature_1", "feature_2"]
-    metadata = ["target", "spectrum", "group", "peptide", "protein"]
-
-    pd.testing.assert_frame_equal(dset.spectra, psm_df_6.loc[:, ["spectrum"]])
-    pd.testing.assert_series_equal(dset.peptides, psm_df_6.loc[:, "peptide"])
-    pd.testing.assert_frame_equal(dset.features, psm_df_6.loc[:, features])
-    pd.testing.assert_frame_equal(dset.metadata, psm_df_6.loc[:, metadata])
-    pd.testing.assert_series_equal(dset.groups, psm_df_6.loc[:, "group"])
-    assert dset.columns == psm_df_6.columns.tolist()
-    assert np.array_equal(dset.targets, psm_df_6["target"].values)
-    assert not dset.has_proteins
+    # Also test dictionary init.
+    data = {"s": [1, 2], "p": ["a", "b"], "t": [True, False]}
+    schema = PsmSchema("t", "s", "p", score="s", desc=False)
+    dset = PsmDataset(data, schema)
 
 
 def test_assign_confidence(psm_df_1000):
-    """Test that assign_confidence() methods run"""
-    psms, fasta = psm_df_1000
-    dset = LinearPsmDataset(
-        psms=psms,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        copy_data=True,
+    """Test that assign_confidence() methods run."""
+    data, fasta, schema_kwargs = psm_df_1000
+    schema_kwargs["group"] = None
+    dset = PsmDataset(
+        data=data, schema=PsmSchema(**schema_kwargs), eval_fdr=0.05
     )
 
     # also try adding proteins:
-    assert not dset.has_proteins
-    dset.add_proteins(fasta, missed_cleavages=0, min_length=5, max_length=5)
-    assert dset.has_proteins
-
-    dset.assign_confidence(eval_fdr=0.05)
+    assert dset.proteins is None
+    dset.assign_confidence()
 
     # Make sure it works when lower scores are better:
-    data, _ = psm_df_1000
-    data["score"] = -data["score"]
-    dset = LinearPsmDataset(
-        psms=data,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        feature_columns="score",
-        copy_data=True,
+    data = data.with_columns(pl.col("score") * -1)
+    dset = PsmDataset(
+        data=data, schema=PsmSchema(**schema_kwargs), eval_fdr=0.05
     )
-    dset.assign_confidence(eval_fdr=0.05)
 
-    # Verify that the groups yields 2 results:
-    dset = LinearPsmDataset(
-        psms=psms,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        group_column="group",
-        feature_columns="score",
-        copy_data=True,
+    assert dset.proteins is None
+    dset.assign_confidence()
+
+    # also try adding proteins:
+    proteins = mokapot.read_fasta(
+        fasta,
+        missed_cleavages=0,
+        rng=1,
     )
-    res = dset.assign_confidence(eval_fdr=0.05)
-    assert len(res) == 2
+    dset.proteins = proteins
+    dset.assign_confidence()
+
+    # Verify that the group column works:
+    schema_kwargs["group"] = "group"
+    data = data.with_columns(pl.col("score") * -1)
+    dset = PsmDataset(
+        data=data, schema=PsmSchema(**schema_kwargs), eval_fdr=0.05
+    )
+    dset.assign_confidence()
 
 
 def test_update_labels(psm_df_6):
-    """Test that the _update_labels() methods are working"""
-    dset = LinearPsmDataset(
-        psm_df_6,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        protein_column="protein",
-        group_column="group",
-        feature_columns=None,
-        copy_data=True,
-    )
+    """Test that the _update_labels() methods are working."""
+    df, schema_kwargs = psm_df_6
+    schema = PsmSchema(**schema_kwargs)
+    dset = PsmDataset(df, schema, eval_fdr=0.5)
 
     scores = np.array([6, 5, 3, 3, 2, 1])
     real_labs = np.array([1, 1, 0, -1, -1, -1])
-    new_labs = dset._update_labels(scores, eval_fdr=0.5)
+    new_labs = dset.update_labels(scores)
     assert np.array_equal(real_labs, new_labs)
+
+    # This should use the feature:
+    new_labs = dset.update_labels("feature_1")
+
+
+def test_best_feature(psm_df_6):
+    """Test finding the best feature."""
+    df, schema_kwargs = psm_df_6
+    schema = PsmSchema(desc=False, **schema_kwargs)
+    dset = PsmDataset(df, schema, eval_fdr=0.5)
+
+    best_feat = dset.best_feature
+    assert best_feat[0] == "feature_1"
+    assert best_feat[1]
+
+
+def test_proteins(psm_df_6, mock_proteins):
+    """Test adding proteins."""
+    df, schema_kwargs = psm_df_6
+    schema = PsmSchema(**schema_kwargs)
+    dset = PsmDataset(df, schema, eval_fdr=0.5)
+
+    assert dset.proteins is None
+    with pytest.raises(ValueError):
+        dset.proteins = "blah"
+
+    dset.proteins = Proteins(
+        {"a": "A", "b": "B", "c": "B", "d": "A", "e": "B"},
+        rng=1,
+    )
+    assert dset.proteins is not None
+
+
+@pytest.mark.parametrize(
+    ("idx", "train", "n_folds", "subset", "expected"),
+    [
+        (0, True, 4, None, 6),
+        (2, True, 4, None, 6),
+        (0, False, 4, None, 2),
+        (2, False, 4, None, 2),
+        (0, True, 2, None, 4),
+        (0, True, 4, 4, 4),
+    ],
+)
+def test_split(idx, train, n_folds, subset, expected):
+    """Test splitting the data."""
+    df = pl.DataFrame(
+        {
+            "target": [True, True, True, True, False, False, False, False],
+            "spectrum": [1, 2, 3, 4, 1, 2, 3, 4],
+            "peptide": ["a", "b", "a", "c", "d", "e", "f", "g"],
+            "feature_1": [4, 3, 2, 1, 1, 0, 0, 0],
+        }
+    )
+
+    schema = PsmSchema(
+        target="target",
+        spectrum="spectrum",
+        peptide="peptide",
+    )
+
+    dset = PsmDataset(df, schema, subset=subset, rng=42)
+    assert len(dset) == 8
+
+    fold = dset.fold(idx, train=train, folds=n_folds)
+    assert len(fold) == expected
+
+    next_fold = dset.fold(idx + 1, train=train, folds=n_folds)
+    assert_frame_not_equal(fold.data, next_fold.data)
+
+    fold_again = dset.fold(idx, train=train, folds=n_folds)
+    assert_frame_equal(fold.data, fold_again.data)
+
+    # Test reproducibility:
+    new_dset = PsmDataset(df, schema, subset=subset, rng=42)
+    new_fold = new_dset.fold(idx, train=train, folds=n_folds)
+    assert_frame_equal(fold.data, new_fold.data)
+
+
+def test_pickle(psms, tmp_path):
+    """Test that a dataset is picklable (needed for multiprocessing)."""
+    pkl_file = tmp_path / "dset.pkl"
+
+    split = psms.fold(1, train=True)
+    with pkl_file.open("wb+") as pkl:
+        pickle.dump(split, pkl)
+
+    with pkl_file.open("rb") as pkl:
+        dset = pickle.load(pkl)
+
+    assert_frame_equal(dset.data, split.data)

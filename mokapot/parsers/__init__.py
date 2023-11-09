@@ -1,6 +1,3 @@
-"""
-Export parsers for various formats
-"""
-# from .pin import read_pin, read_percolator
-# from .pepxml import read_pepxml
-# from .fasta import read_fasta
+"""Export parsers for various formats."""
+from .fasta import read_fasta
+from .pin import percolator_to_df, read_pin
