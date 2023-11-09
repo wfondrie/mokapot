@@ -10,8 +10,8 @@ import copy
 import itertools
 import logging
 import math
+from collections.abc import Iterable, Iterator
 from functools import partial
-from typing import Iterable, Iterator
 
 import numpy as np
 import polars as pl
@@ -167,9 +167,13 @@ class _BaseDataset(BaseData):
 
         """
         if isinstance(scores, str):
-            scores = self.data.select(scores).collect(streaming=True)
+            scores = (
+                self.data.select(scores).collect(streaming=True).to_numpy()
+            )
+        if isinstance(scores, pl.Series):
+            scores = scores.to_numpy()
 
-        scores = np.array(scores).squeeze()
+        scores = scores.squeeze()
         if len(scores.shape) > 1:
             raise ValueError("scores must be one dimensional.")
 
@@ -238,7 +242,7 @@ class _BaseDataset(BaseData):
             .sample(
                 fraction=1,
                 shuffle=True,
-                seed=self.rng.integers(1, 10000),
+                seed=int(self.rng.integers(1, 10000)),
             )
         )
 
@@ -281,7 +285,7 @@ class _BaseDataset(BaseData):
 
         new_dset = copy.copy(self)
         new_dset.schema = copy.deepcopy(new_dset.schema)
-        new_dset._data = fold_data
+        new_dset._data = fold_data.clone()
         new_dset._clear_cache()
         new_dset.schema.score = None
 

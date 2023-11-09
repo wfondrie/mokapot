@@ -54,26 +54,6 @@ def main() -> None:  # noqa: C901
     rng = np.random.default_rng(config.seed)
     enabled_plugins = {p: plugins[p]() for p in config.plugin}
 
-    # Parse Datasets
-    if config.aggregate or len(config.psm_files) == 1:
-        prefixes = [""]
-        datasets = utils.listify(
-            read_pin(
-                config.psm_files,
-                rng=rng,
-                subset=config.subset_max_train,
-            )
-        )
-    else:
-        datasets = [
-            read_pin(f, rng=rng, subset=config.subset_max_train)
-            for f in config.psm_files
-        ]
-        prefixes = [Path(f).stem for f in config.psm_files]
-
-    for plugin in enabled_plugins.values():
-        datasets = [plugin.process_data(ds, config) for ds in datasets]
-
     # Parse FASTA, if required:
     if config.proteins is not None:
         logging.info("Protein-level confidence estimates enabled.")
@@ -88,8 +68,34 @@ def main() -> None:  # noqa: C901
             decoy_prefix=config.decoy_prefix,
             rng=rng,
         )
-        for dataset in datasets:
-            dataset.proteins = proteins
+    else:
+        proteins = None
+
+    # Parse Datasets
+    if config.aggregate or len(config.psm_files) == 1:
+        prefixes = [""]
+        datasets = utils.listify(
+            read_pin(
+                config.psm_files,
+                rng=rng,
+                subset=config.subset_max_train,
+                proteins=proteins,
+            )
+        )
+    else:
+        datasets = [
+            read_pin(
+                f,
+                rng=rng,
+                subset=config.subset_max_train,
+                proteins=proteins,
+            )
+            for f in config.psm_files
+        ]
+        prefixes = [Path(f).stem for f in config.psm_files]
+
+    for plugin in enabled_plugins.values():
+        datasets = [plugin.process_data(ds, config) for ds in datasets]
 
     # Define a model:
     model = None

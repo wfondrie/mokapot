@@ -324,5 +324,5 @@ def _drop_cols(datasets: Iterable[PsmDataset]) -> Iterable[PsmDataset]:
         dataset = copy.copy(dataset)
         dataset.schema = copy.deepcopy(dataset.schema)
         dataset.schema.features = []
-        dataset._data = dataset.data.select(keep_cols)
+        dataset._data = dataset.data.clone().select(keep_cols)
         yield dataset

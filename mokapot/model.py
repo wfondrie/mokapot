@@ -262,7 +262,12 @@ class Model:
 
         # Scale features and choose the initial direction
         self.features = dataset.schema.features
-        norm_feat = self.scaler.fit_transform(dataset.features)
+        norm_feat = self.scaler.fit_transform(
+            dataset.data.select(self.features)
+            .collect(streaming=True)
+            .to_numpy()
+        )
+
         start_labels = self.starting_labels(dataset, norm_feat)
 
         # Shuffle order

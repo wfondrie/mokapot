@@ -222,6 +222,7 @@ def _to_tabular(
     else:
         stem = [stem]
 
+    dest_dir = "" if dest_dir is None else dest_dir
     out_files = []
     for level, table in conf.results:
         fname = Path(dest_dir, ".".join(stem + ["mokapot", level.name, ext]))
