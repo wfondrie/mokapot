@@ -130,7 +130,7 @@ def main():
             model = list(plugin_models.values())[0]
 
     if model is None:
-        logging.debug("Loading Percolator model.")
+        logging.debug(f"Loading Percolator model.")
         model = PercolatorModel(
             train_fdr=config.train_fdr,
             max_iter=config.max_iter,
@@ -156,25 +156,25 @@ def main():
     deduplication = not config.skip_deduplication
     if config.file_root is not None:
         config.dest_dir = f"{Path(config.dest_dir, config.file_root)}."
-    assign_confidence(
-        psms=psms,
-        max_workers=config.max_workers,
-        scores=scores,
-        eval_fdr=config.test_fdr,
-        descs=desc,
-        dest_dir=config.dest_dir,
-        decoys=config.keep_decoys,
-        deduplication=deduplication,
-        proteins=proteins,
-        prefixes=prefixes,
-        rng=config.seed,
-        peps_error=config.peps_error,
-    )
+    assign_confidence(psms=psms,
+                      max_workers=config.max_workers,
+                      scores=scores,
+                      descs=desc,
+                      eval_fdr=config.test_fdr,
+                      dest_dir=config.dest_dir,
+                      prefixes=prefixes,
+                      decoys=config.keep_decoys,
+                      deduplication=deduplication,
+                      proteins=proteins,
+                      peps_error=config.peps_error,
+                      peps_algorithm=config.peps_algorithm,
+                      qvalue_algorithm=config.qvalue_algorithm
+                      )
 
     if config.save_models:
         logging.info("Saving models...")
         for i, trained_model in enumerate(models):
-            out_file = f"mokapot.model_fold-{i+1}.pkl"
+            out_file = f"mokapot.model_fold-{i + 1}.pkl"
 
             if config.file_root is not None:
                 out_file = ".".join([config.file_root, out_file])
@@ -244,4 +244,3 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"[Error] {e}")
         sys.exit(252)
-

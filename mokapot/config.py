@@ -12,8 +12,8 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
     """Format help text to keep newlines and whitespace"""
 
     def _fill_text(self, text, width, indent):
-        lines = text.splitlines(keepends=True)
-        return "\n".join(_process_line(txt, width, indent) for txt in lines)
+        text_list = text.splitlines(keepends=True)
+        return "\n".join(_process_line(l, width, indent) for l in text_list)
 
 
 class Config:
@@ -336,6 +336,25 @@ def _parser():
         default=False,
         action="store_true",
         help=("raise error when all PEPs values are equal to 1."),
+    )
+
+    parser.add_argument(
+        "--peps_algorithm",
+        default="qvality",
+        choices=["qvality", "qvality_bin", "kde_nnls", "hist_nnls"],
+        help=(
+            "Specify the algorithm for pep computation. 'qvality_bin' works "
+            "only if the qvality binary is on the search path"
+        ),
+    )
+
+    parser.add_argument(
+        "--qvalue_algorithm",
+        default="tdc",
+        choices=["tdc", "from_peps", "from_counts"],
+        help=(
+            "Specify the algorithm for qvalue computation. `tdc is` the default mokapot algorithm."
+        ),
     )
 
     parser.add_argument(
