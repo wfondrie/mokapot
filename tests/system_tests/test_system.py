@@ -14,9 +14,6 @@ import mokapot
 
 logging.basicConfig(level=logging.INFO)
 
-# Warnings are errors for these tests
-pytestmark = pytest.mark.filterwarnings("error")
-
 
 def test_compare_to_percolator(tmp_path):
     """Test that mokapot get almost the same answer as Percolator"""

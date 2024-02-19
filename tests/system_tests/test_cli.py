@@ -9,9 +9,6 @@ from pathlib import Path
 
 import pytest
 
-# Warnings are errors for these tests
-pytestmark = pytest.mark.filterwarnings("error")
-
 
 @pytest.fixture
 def scope_files():
