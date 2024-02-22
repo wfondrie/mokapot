@@ -771,7 +771,8 @@ class OnDiskPsmDataset:
             start_split_indices.append(end_idx)
             start_idx = end_idx
 
-        # search for smallest index bigger of equal to split index in start indexes of unique groups
+        # search for smallest index bigger of equal to split index in start indexes of
+        # unique groups
         idx_split = idx_start_unique[
             np.searchsorted(idx_start_unique, start_split_indices)
         ]
