@@ -1,4 +1,5 @@
 """Writer to save results in a tab-delmited format"""
+
 from pathlib import Path
 from collections import defaultdict
 

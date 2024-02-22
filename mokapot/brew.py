@@ -1,6 +1,7 @@
 """
 Defines a function to run the Percolator algorithm.
 """
+
 import logging
 import copy
 from operator import itemgetter
@@ -170,7 +171,7 @@ def brew(
             psms=psms,
             train_idx=train_sets,
             chunk_size=CHUNK_SIZE_READ_ALL_DATA,
-            max_workers=max_workers
+            max_workers=max_workers,
         )
         del train_sets
         fitted = Parallel(n_jobs=max_workers, require="sharedmem")(
@@ -190,10 +191,9 @@ def brew(
         scores = [
             _psms.calibrate_scores(
                 _predict_with_ensemble(
-                    psms=_psms,
-                    models=[model],
-                    max_workers=max_workers),
-                test_fdr
+                    psms=_psms, models=[model], max_workers=max_workers
+                ),
+                test_fdr,
             )
             for _psms in psms
         ]
@@ -203,9 +203,8 @@ def brew(
         if ensemble:
             scores = [
                 _predict_with_ensemble(
-                    psms=_psms,
-                    models=models,
-                    max_workers=max_workers)
+                    psms=_psms, models=models, max_workers=max_workers
+                )
                 for _psms in psms
             ]
         else:
@@ -232,7 +231,7 @@ def brew(
                     psms=psms,
                     models=models,
                     test_fdr=test_fdr,
-                    max_workers=max_workers
+                    max_workers=max_workers,
                 )
             )
     # If model training has failed

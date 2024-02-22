@@ -13,6 +13,7 @@ typical use cases. For example, use :py:class:`PercolatorModel` if you
 want to emulate the behavior of Percolator.
 
 """
+
 import logging
 import pickle
 

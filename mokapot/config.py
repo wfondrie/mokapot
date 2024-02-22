@@ -2,6 +2,7 @@
 Contains all of the configuration details for running mokapot
 from the command line.
 """
+
 import argparse
 import textwrap
 

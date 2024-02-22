@@ -16,6 +16,7 @@ One of more instance of this class are required to use the
 :py:func:`~mokapot.brew()` function.
 
 """
+
 import logging
 from abc import ABC, abstractmethod
 
