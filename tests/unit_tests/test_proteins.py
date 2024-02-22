@@ -1,4 +1,5 @@
 """Test that we can parse a FASTA file correctly"""
+
 import pytest
 import mokapot
 from mokapot import read_fasta, digest, make_decoys

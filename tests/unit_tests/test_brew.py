@@ -1,4 +1,5 @@
 """Tests that the brew function works"""
+
 import copy
 
 import pytest

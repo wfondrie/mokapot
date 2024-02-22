@@ -1,4 +1,5 @@
 """Test that models work as expected"""
+
 import pytest
 import mokapot
 import numpy as np

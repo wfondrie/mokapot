@@ -1,6 +1,7 @@
 """
 These tests verify that the aggregatePsmsToPeptides executable works as expected.
 """
+
 import subprocess
 from pathlib import Path
 
