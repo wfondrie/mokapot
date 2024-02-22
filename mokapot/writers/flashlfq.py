@@ -3,6 +3,7 @@
 Details about the format can be found here:
 https://github.com/smith-chem-wisc/FlashLFQ/wiki/Identification-Input-Formats#generic
 """
+
 from pathlib import Path
 import logging
 

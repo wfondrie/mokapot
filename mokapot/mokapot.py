@@ -1,6 +1,7 @@
 """
 This is the command line interface for mokapot
 """
+
 import datetime
 import logging
 import sys
@@ -244,4 +245,3 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"[Error] {e}")
         sys.exit(252)
-
