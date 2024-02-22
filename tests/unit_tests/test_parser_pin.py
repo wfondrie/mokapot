@@ -1,4 +1,5 @@
 """Test that parsing Percolator input files works correctly"""
+
 import pytest
 import mokapot
 import pandas as pd
@@ -22,7 +23,10 @@ def std_pin(tmp_path):
 
 def test_pin_parsing(std_pin):
     """Test pin parsing"""
-    dat = mokapot.read_pin(std_pin, max_workers=4,)
+    dat = mokapot.read_pin(
+        std_pin,
+        max_workers=4,
+    )
     df = pd.read_csv(std_pin, sep="\t")
     assert len(dat) == 1
     assert dat[0].filename == std_pin

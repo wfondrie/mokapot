@@ -1,4 +1,5 @@
 """Test that Confidence classes are working correctly"""
+
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -53,7 +54,11 @@ def test_one_group(psm_df_1000, tmp_path):
     np.random.seed(42)
     psms_disk.group_column = None
     assign_confidence(
-        [psms_disk], prefixes=[None], descs=[True], dest_dir=tmp_path, max_workers=4,
+        [psms_disk],
+        prefixes=[None],
+        descs=[True],
+        dest_dir=tmp_path,
+        max_workers=4,
     )
     df_results_no_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
 
@@ -94,7 +99,11 @@ def test_multi_groups(psm_df_100, tmp_path):
         spectra_dataframe=df_spectra,
     )
     assign_confidence(
-        [psms_disk], prefixes=[None], descs=[True], dest_dir=tmp_path, max_workers=4,
+        [psms_disk],
+        prefixes=[None],
+        descs=[True],
+        dest_dir=tmp_path,
+        max_workers=4,
     )
     assert Path(tmp_path, f"{0}.targets.psms").exists()
     assert Path(tmp_path, f"{1}.targets.psms").exists()

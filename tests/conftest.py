@@ -1,6 +1,7 @@
 """
 This file contains fixtures that are used at multiple points in the tests.
 """
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -272,7 +273,9 @@ def targets_decoys_psms_scored(tmp_path):
     scores = scores[idx]
     label = label[idx]
     qval = tdc(scores, label)
-    pep = getQvaluesFromScores(target_scores, decoy_scores, includeDecoys=True)[1]
+    pep = getQvaluesFromScores(
+        target_scores, decoy_scores, includeDecoys=True
+    )[1]
     peptides = np.hstack([np.arange(1, n + 1), np.arange(1, n + 1)])
     peptides.sort()
     df = pd.DataFrame(
@@ -287,8 +290,12 @@ def targets_decoys_psms_scored(tmp_path):
         ],
     )
     df["proteinIds"] = "dummy"
-    df[df["Label"] == 1].drop("Label", axis=1).to_csv(psms_t, sep="\t", index=False)
-    df[df["Label"] == -1].drop("Label", axis=1).to_csv(psms_d, sep="\t", index=False)
+    df[df["Label"] == 1].drop("Label", axis=1).to_csv(
+        psms_t, sep="\t", index=False
+    )
+    df[df["Label"] == -1].drop("Label", axis=1).to_csv(
+        psms_d, sep="\t", index=False
+    )
 
     return [psms_t, psms_d]
 
