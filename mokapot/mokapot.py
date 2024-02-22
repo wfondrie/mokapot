@@ -68,7 +68,7 @@ def main():
     parse = get_parser(config)
     enabled_plugins = {p: plugins[p]() for p in config.plugin}
 
-    datasets = parse(config.psm_files)
+    datasets = parse(config.psm_files, max_workers=config.max_workers)
     if config.aggregate or len(config.psm_files) == 1:
         for plugin in enabled_plugins.values():
             datasets = plugin.process_data(datasets, config)
@@ -158,6 +158,7 @@ def main():
         config.dest_dir = f"{Path(config.dest_dir, config.file_root)}."
     assign_confidence(
         psms=psms,
+        max_workers=config.max_workers,
         scores=scores,
         eval_fdr=config.test_fdr,
         descs=desc,
@@ -167,6 +168,7 @@ def main():
         proteins=proteins,
         prefixes=prefixes,
         rng=config.seed,
+        peps_error=config.peps_error,
     )
 
     if config.save_models:
@@ -239,3 +241,7 @@ if __name__ == "__main__":
     except ValueError as e:
         logging.error(f"[Error] {e}")
         sys.exit(250)  # input failure
+    except Exception as e:
+        logging.error(f"[Error] {e}")
+        sys.exit(252)
+

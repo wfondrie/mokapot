@@ -109,3 +109,5 @@ venv.bak/
 # idea
 .idea/
 
+tests/integration_tests/run*
+
