@@ -111,8 +111,7 @@ class PsmDataset(ABC):
         missing_columns = [c not in self.data.columns for c in used_columns]
         if not missing_columns:
             raise ValueError(
-                "The following specified columns were not found: "
-                f"{missing_columns}"
+                "The following specified columns were not found: " f"{missing_columns}"
             )
 
         # Get the feature columns
@@ -135,9 +134,7 @@ class PsmDataset(ABC):
     @property
     def _metadata_columns(self):
         """A list of the metadata columns"""
-        return tuple(
-            c for c in self.data.columns if c not in self._feature_columns
-        )
+        return tuple(c for c in self.data.columns if c not in self._feature_columns)
 
     @property
     def metadata(self):
@@ -512,12 +509,8 @@ class CrossLinkedPsmDataset(PsmDataset):
     ):
         """Initialize a PsmDataset object."""
         self._target_columns = utils.tuplize(target_columns)
-        self._peptide_columns = tuple(
-            utils.tuplize(c) for c in peptide_columns
-        )
-        self._protein_columns = tuple(
-            utils.tuplize(c) for c in protein_columns
-        )
+        self._peptide_columns = tuple(utils.tuplize(c) for c in peptide_columns)
+        self._protein_columns = tuple(utils.tuplize(c) for c in protein_columns)
 
         # Finish initialization
         other_columns = sum(
@@ -567,9 +560,7 @@ class CrossLinkedPsmDataset(PsmDataset):
             training. Typically, 0 is reserved for targets, below a
             specified FDR threshold.
         """
-        qvals = qvalues.crosslink_tdc(
-            scores, num_targets=self.targets, desc=desc
-        )
+        qvals = qvalues.crosslink_tdc(scores, num_targets=self.targets, desc=desc)
         unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
         new_labels = np.ones(len(qvals))
         new_labels[~self.targets] = -1
@@ -648,9 +639,7 @@ class OnDiskPsmDataset:
         labels = _update_labels(scores, targets, eval_fdr, desc)
         pos = labels == 1
         if not pos.sum():
-            raise RuntimeError(
-                "No target PSMs were below the 'eval_fdr' threshold."
-            )
+            raise RuntimeError("No target PSMs were below the 'eval_fdr' threshold.")
 
         target_score = np.min(scores[pos])
         decoy_score = np.median(scores[labels == -1])
@@ -841,9 +830,7 @@ def calibrate_scores(scores, targets, eval_fdr, desc=True):
     labels = _update_labels(scores, targets, eval_fdr, desc)
     pos = labels == 1
     if not pos.sum():
-        raise RuntimeError(
-            "No target PSMs were below the 'eval_fdr' threshold."
-        )
+        raise RuntimeError("No target PSMs were below the 'eval_fdr' threshold.")
 
     target_score = np.min(scores[pos])
     decoy_score = np.median(scores[labels == -1])
