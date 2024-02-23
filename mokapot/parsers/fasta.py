@@ -1,4 +1,5 @@
 """The code for parsing FASTA files"""
+
 import re
 import logging
 from textwrap import wrap

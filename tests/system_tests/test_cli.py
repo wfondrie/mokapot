@@ -4,6 +4,7 @@ These tests verify that the CLI works as expected.
 At least for now, they do not check the correctness of the
 output, just that the expect outputs are created.
 """
+
 import subprocess
 from pathlib import Path
 

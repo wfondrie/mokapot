@@ -1,6 +1,7 @@
 """
 Utility functions
 """
+
 import itertools
 import gzip
 

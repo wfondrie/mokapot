@@ -1,6 +1,7 @@
 """
 This module contains the parsers for reading in PSMs
 """
+
 import logging
 
 import pandas as pd
@@ -351,7 +352,10 @@ def get_rows_from_dataframe(idx, chunk, train_psms, psms, file_idx):
 
 
 def concat_and_reindex_chunks(df, orig_idx):
-    return [pd.concat(df_fold).reindex(orig_idx_fold) for df_fold, orig_idx_fold in zip(df, orig_idx)]
+    return [
+        pd.concat(df_fold).reindex(orig_idx_fold)
+        for df_fold, orig_idx_fold in zip(df, orig_idx)
+    ]
 
 
 def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
@@ -376,7 +380,9 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
         list of dataframes
     """
 
-    train_psms = [[[] for _ in range(len(train_idx))] for _ in range(len(psms))]
+    train_psms = [
+        [[] for _ in range(len(train_idx))] for _ in range(len(psms))
+    ]
     for _psms, idx, file_idx in zip(psms, zip(*train_idx), range(len(psms))):
         reader = read_file_in_chunks(
             file=_psms.filename,
@@ -384,7 +390,9 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
             use_cols=_psms.columns,
         )
         Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(get_rows_from_dataframe)(idx, chunk, train_psms, _psms, file_idx)
+            delayed(get_rows_from_dataframe)(
+                idx, chunk, train_psms, _psms, file_idx
+            )
             for chunk in reader
         )
     train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(

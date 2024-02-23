@@ -1,6 +1,7 @@
 """
 These tests verify that the dataset classes are functioning properly.
 """
+
 import numpy as np
 import pandas as pd
 from mokapot import LinearPsmDataset

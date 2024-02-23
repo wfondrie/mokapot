@@ -1,6 +1,7 @@
 """
 These tests verify that the aggregatePsmsToPeptides executable works as expected.
 """
+
 import subprocess
 from pathlib import Path
 
@@ -91,8 +92,12 @@ def test_determinism_different_psmid(tmp_path, psm_files_4000):
         "2",
     ]
 
-    subprocess.run(cmd + [psm_files_4000[0], "--file_root", "run1"], check=True)
-    subprocess.run(cmd + [psm_files_4000[1],  "--file_root", "run2"], check=True)
+    subprocess.run(
+        cmd + [psm_files_4000[0], "--file_root", "run1"], check=True
+    )
+    subprocess.run(
+        cmd + [psm_files_4000[1], "--file_root", "run2"], check=True
+    )
 
     assert Path(tmp_path, "run1.targets.peptides").exists()
     assert Path(tmp_path, "run1.decoys.peptides").exists()

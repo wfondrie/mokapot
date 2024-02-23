@@ -1,4 +1,5 @@
 """Handle proteins for the picked protein FDR."""
+
 import logging
 
 LOGGER = logging.getLogger(__name__)

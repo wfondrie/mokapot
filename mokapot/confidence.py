@@ -15,6 +15,7 @@ We recommend using the :py:func:`~mokapot.brew()` function or the
 :py:meth:`~mokapot.LinearPsmDataset.assign_confidence()` method to obtain these
 confidence estimates, rather than initializing the classes below directly.
 """
+
 import os
 import glob
 
@@ -890,14 +891,16 @@ def assign_confidence(
                     deduplication,
                     i,
                     sep,
-                    dest_dir_prefix
+                    dest_dir_prefix,
                 )
                 for chunk_metadata, score_chunk, i in zip(
                     reader, scores_slices, range(len(scores_slices))
                 )
             )
 
-            scores_metadata_paths = glob.glob(f"{dest_dir_prefix}scores_metadata_*")
+            scores_metadata_paths = glob.glob(
+                f"{dest_dir_prefix}scores_metadata_*"
+            )
             iterable_sorted = merge_sort(
                 scores_metadata_paths, col_score="score", sep=sep
             )

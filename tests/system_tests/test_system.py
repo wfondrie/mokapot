@@ -5,6 +5,7 @@ that is expected.
 At least for now, this means testing the correlation between mokapot
 results and Percolator results.
 """
+
 import os
 import logging
 
@@ -17,7 +18,9 @@ logging.basicConfig(level=logging.INFO)
 
 def test_compare_to_percolator(tmp_path):
     """Test that mokapot get almost the same answer as Percolator"""
-    dat = mokapot.read_pin(os.path.join("data", "phospho_rep1.pin"), max_workers=3)
+    dat = mokapot.read_pin(
+        os.path.join("data", "phospho_rep1.pin"), max_workers=3
+    )
     proteins = mokapot.read_fasta(os.path.join("data", "human_sp_td.fasta"))
     psms, models, scores, desc = mokapot.brew(dat)
     mokapot.assign_confidence(

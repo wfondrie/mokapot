@@ -1,6 +1,7 @@
 """
 This is the command line interface for mokapot
 """
+
 import datetime
 import logging
 import sys
