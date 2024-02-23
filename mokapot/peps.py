@@ -1,9 +1,11 @@
 import numpy as np
 import scipy.stats as stats
-import scipy.optimize as opt
 import matplotlib.pyplot as plt
 from triqler import qvality
 
+# TODO: Remove the next and uncomment the 2nd next line when scipy.optimize.nnls is fixed (see _nnls.py for explanation)
+from ._nnls import nnls
+# from scipy.optimize import nnls
 
 PEP_ALGORITHM = {
     'qvality': lambda scores, targets: peps_from_scores_qvality(scores, targets, use_binary=False),
@@ -38,12 +40,14 @@ def peps_from_scores_qvality(scores, targets, use_binary=False):
 
     :param scores: A numpy array containing the scores for each target and decoy peptide.
     :param targets: A boolean array indicating whether each peptide is a target (True) or a decoy (False).
+    :param use_binary: Whether to the binary (Percolator) version of qvality (True), or the Python (triqler) version
+        (False). Defaults to False. If True, the compiled `qvality` binary must be on the shell search path.
     :return: A numpy array containing the posterior error probabilities (PEPs) calculated using the qvality
         method. The PEPs are calculated based on the provided scores and targets, and are returned in the same order
         as the targets array.
     """
-    # todo: this method should contain the logic of sorting the scores (and the returned peps afterwards) as well
-    # as error handling, since getQvaluesFromScores may throw a SystemExit exception
+    # todo: this method should contain the logic of sorting the scores (and the returned peps afterwards)
+    # todo: should also do the error handling, since getQvaluesFromScores may throw a SystemExit exception
     qvalues_from_scores = qvality.getQvaluesFromScoresQvality if use_binary else qvality.getQvaluesFromScores
     old_verbosity, qvality.VERB = qvality.VERB, 0
     _, peps = qvalues_from_scores(
@@ -121,7 +125,7 @@ def monotonize_nnls(x, w=None, ascending=True):
         D = np.diag(np.sqrt(w))
         A = D.dot(A)
         x = D.dot(x)
-    d, _ = opt.nnls(A, x)
+    d, _ = nnls(A, x)
     xm = np.cumsum(d)
     return xm
 
@@ -207,10 +211,11 @@ def peps_from_scores_kde_nnls(scores, targets, num_eval_scores=500, pi0_estimati
 
     # Linearly interpolate the pep estimates from the eval points to the scores of interest.
     peps = np.interp(scores, eval_scores, pepEst)
+    peps = np.clip(peps, 0, 1)
     return peps
 
 
-def fit_nnls(n, k, ascending=True, weight_exponent = 1):
+def fit_nnls(n, k, ascending=True, *, weight_exponent = 1, erase_zeros=False):
     """
     This method performs a non-negative least squares (NNLS) fit on given input parameters 'n' and 'k', such that
     `k[i]` is close to `p[i] * n[i]` in a weighted least squared sense (weight is determined by `n[i] ** weightExponent`)
@@ -222,8 +227,10 @@ def fit_nnls(n, k, ascending=True, weight_exponent = 1):
         - n: The input array of length N.
         - k: The input array of length N.
         - ascending: (optional) A boolean value indicating whether the output array should be in ascending order. Default value is True.
-        - weightExponent: (optional) The exponent to be used for the weight array. Default value is 1.
-
+        - weight_exponent: (optional) The exponent to be used for the weight array. Default value is 1.
+        - erase_zeros: (optional) If True, rows corresponding to n==0 will be erased from the system of equations,
+            whereas if False (default), there will be equations inserted that try to minimize the jump in probabilities,
+            i.e. distribute the jumps evenly
     Returns:
         - p: The monotonically increasing or decreasing array of length N.
 
@@ -234,9 +241,23 @@ def fit_nnls(n, k, ascending=True, weight_exponent = 1):
         return fit_nnls(n[::-1], k[::-1])[::-1]
     N = len(n)
     D = np.diag(n)
-    A = D.dot(np.tril(np.ones((N, N))))
-    W = np.diag(n ** (0.5 * weight_exponent))
-    d, _ = opt.nnls(W.dot(A), W.dot(k))
+    A = D @ np.tril(np.ones((N, N)))
+    w = n ** (0.5 * weight_exponent)
+    W = np.diag(w)
+
+    nz = (n==0).nonzero()[0]
+    if len(nz)>0:
+        if not erase_zeros:
+            A[nz, nz] = 1
+            A[nz, np.minimum(nz+1, N-1)] = -1
+            w[nz] = 1
+            k[nz] = 0
+            W = np.diag(w)
+        else:
+            W = np.delete(W, nz, axis=0)
+
+    tol = 10 * N * np.spacing(1.) * np.linalg.norm(k)
+    d, _ = nnls(W @ A, W @ k, atol=tol)
     p = np.cumsum(d)
     return p
 

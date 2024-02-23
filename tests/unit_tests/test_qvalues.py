@@ -106,6 +106,7 @@ def test_tdc_diff_len():
 
 @pytest.fixture
 def rand_scores():
+    np.random.seed(1240) # this produced an error with failing iterations
     N = 5000
     pi0 = 0.7
     R0 = stats.norm(loc=-4, scale=2)
