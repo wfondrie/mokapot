@@ -26,6 +26,7 @@ from triqler import qvality
 from joblib import Parallel, delayed
 
 from . import qvalues
+from .peps import peps_from_scores
 from .utils import (
     create_chunks,
     groupby_max,
@@ -440,6 +441,8 @@ class LinearConfidence(Confidence):
         peps_error=False,
         sep="\t",
         rng=0,
+        peps_algorithm="qvality",
+        qvalue_algorithm="tdc",
     ):
         """Initialize a a LinearPsmConfidence object"""
         super().__init__(psms, proteins, rng)
@@ -457,6 +460,8 @@ class LinearConfidence(Confidence):
             decoys=decoys,
             sep=sep,
             peps_error=peps_error,
+            peps_algorithm=peps_algorithm,
+            qvalue_algorithm=qvalue_algorithm
         )
 
         self.accepted = {}
@@ -497,6 +502,8 @@ class LinearConfidence(Confidence):
         decoys=False,
         peps_error=False,
         sep="\t",
+        peps_algorithm="qvality",
+        qvalue_algorithm="tdc",
     ):
         """
         Assign confidence to PSMs and peptides.
@@ -564,8 +571,8 @@ class LinearConfidence(Confidence):
                 )
 
             # Estimate q-values and assign to dataframe
-            LOGGER.info("Assiging q-values to %s...", level)
-            self.qvals = qvalues.tdc(self.scores, self.targets, desc=True)
+            LOGGER.info("Assigning q-values to %s (using %s algorithm) ...", level, qvalue_algorithm)
+            self.qvals = qvalues.qvalues_from_scores(self.scores, self.targets, qvalue_algorithm)
 
             # Set scores to be the correct sign again:
             self.scores = self.scores * (desc * 2 - 1)
@@ -578,13 +585,10 @@ class LinearConfidence(Confidence):
             )
 
             # Calculate PEPs
-            LOGGER.info("Assiging PEPs to %s...", level)
+
+            LOGGER.info("Assigning PEPs to %s (using %s algorithm) ...", level, peps_algorithm)
             try:
-                _, self.peps = qvality.getQvaluesFromScores(
-                    self.scores[self.targets],
-                    self.scores[~self.targets],
-                    includeDecoys=True,
-                )
+                self.peps = peps_from_scores(self.scores, self.targets, peps_algorithm)
             except SystemExit as msg:
                 if "no decoy hits available for PEP calculation" in str(msg):
                     self.peps = 0
@@ -742,6 +746,8 @@ def assign_confidence(
     append_to_output_file=False,
     rng=0,
     peps_error=False,
+    peps_algorithm="qvality", 
+    qvalue_algorithm="tdc",
 ):
     """Assign confidence to PSMs peptides, and optionally, proteins.
 
@@ -952,6 +958,8 @@ def assign_confidence(
                 proteins=proteins,
                 rng=rng,
                 peps_error=peps_error,
+                peps_algorithm=peps_algorithm,
+                qvalue_algorithm=qvalue_algorithm,
             )
             if prefix is None:
                 append_to_output_file = True
