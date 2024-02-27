@@ -2,6 +2,7 @@
 Contains all of the configuration details for running mokapot
 from the command line.
 """
+
 import argparse
 import textwrap
 
@@ -248,6 +249,23 @@ def _parser():
     )
 
     parser.add_argument(
+        "--rescale",
+        default=False,
+        action="store_true",
+        help=("rescale data when using pretrained model."),
+    )
+
+    parser.add_argument(
+        "--subset_max_rescale",
+        type=int,
+        default=None,
+        help=(
+            "Maximum number of PSMs to use for rescaling "
+            "data when using pre-trained models."
+        ),
+    )
+
+    parser.add_argument(
         "--override",
         default=False,
         action="store_true",
@@ -290,6 +308,13 @@ def _parser():
     )
 
     parser.add_argument(
+        "--skip_deduplication",
+        default=False,
+        action="store_true",
+        help=("Keep deduplication"),
+    )
+
+    parser.add_argument(
         "--folds",
         type=int,
         default=3,
@@ -298,6 +323,20 @@ def _parser():
             "PSMs originating from the same mass spectrum "
             "are always in the same fold."
         ),
+    )
+
+    parser.add_argument(
+        "--ensemble",
+        default=False,
+        action="store_true",
+        help=("activate ensemble prediction. "),
+    )
+
+    parser.add_argument(
+        "--peps_error",
+        default=False,
+        action="store_true",
+        help=("raise error when all PEPs values are equal to 1."),
     )
 
     parser.add_argument(

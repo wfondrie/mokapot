@@ -1,6 +1,7 @@
 """
 This module contains a parser for PepXML files.
 """
+
 import logging
 import itertools
 from functools import partial
