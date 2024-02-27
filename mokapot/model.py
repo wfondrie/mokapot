@@ -511,7 +511,7 @@ def load_model(model_file, data_to_rescale=None):
     # Try a percolator model first:
     try:
         weights = pd.read_csv(model_file, sep="\t", nrows=2).loc[1, :]
-        logging.info("Loading the Percolator model.")
+        LOGGER.info("Loading the Percolator model.")
 
         weight_cols = [c for c in weights.index if c != "m0"]
         model = Model(estimator=LinearSVC(), scaler=StandardScaler())
@@ -524,7 +524,7 @@ def load_model(model_file, data_to_rescale=None):
 
     # Then try loading it with pickle:
     except (KeyError, UnicodeDecodeError):
-        logging.info("Loading mokapot model.")
+        LOGGER.info("Loading mokapot model.")
         with open(model_file, "rb") as mod_in:
             model = pickle.load(mod_in)
 

@@ -272,13 +272,13 @@ def brew(
         descs = [True] * len(psms)
 
     if using_best_feat:
-        logging.warning(
+        LOGGER.warning(
             "Learned model did not improve over the best feature. "
             "Now scoring by the best feature for each collection "
             "of PSMs."
         )
     elif reset:
-        logging.warning(
+        LOGGER.warning(
             "Learned model did not improve upon the pretrained "
             "input model. Now re-scoring each collection of PSMs "
             "using the original model."
