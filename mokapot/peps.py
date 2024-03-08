@@ -256,7 +256,16 @@ def fit_nnls(n, k, ascending=True, *, weight_exponent = 1, erase_zeros=False):
         else:
             W = np.delete(W, nz, axis=0)
 
-    tol = 10 * N * np.spacing(1.) * np.linalg.norm(k)
+    # The default tolerance of nnls is too low, leading sometimes to
+    # non-convergent iterations and subsequent failures. A good tolerance should
+    # probably be related to the condition number of `W @ A` and to the error in
+    # `W @ k` (numerical and statistical, where the latter is probably much,
+    # much larger than the former). Since this is a) difficult to estimate
+    # anyway and b) run-time consuming, we settle here for a fixed tolerance,
+    # which a) seems large enough to never lead to non-convergence and b) is
+    # fitting for the typical condition numbers and values of k seen in
+    # experiments.
+    tol = 1e-7
     d, _ = nnls(W @ A, W @ k, atol=tol)
     p = np.cumsum(d)
     return p
