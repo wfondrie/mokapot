@@ -210,3 +210,30 @@ def test_peps_hist_nnls():
     assert np.all(peps_values >= 0)
     assert np.all(peps_values <= 1)
     assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
+
+    # Those were collected seeds from random experiments where nnls failed
+    seeds = [41908, 39831, 21706, 38306, 23020, 46079, 96127, 23472, 21706,
+             38306, 23020, 46079, 96127, 23472, 21706, 38306, 23020, 46079,
+             96127, 23472, 21706, 38306, 23020, 46079, 96127, 23472, 21706,
+             38306, 23020, 46079, 96127, 23472, 21706, 38306, 23020, 46079,
+             96127, 23472, 21706]
+
+    # Uncomment the following line for more extensive testing
+    # seeds = np.random.randint(1000000, size=1000)
+    for i, seed in enumerate(seeds):
+        np.random.seed(seed)
+        scores, targets = get_target_decoy_data()
+        try:
+            peps_values = peps.peps_from_scores_hist_nnls(scores, targets)
+        except:  # nopep8 (bare except is okay, since we re-raise the exception)
+            print(f"\nnnls failed on seed #{i}: {seed}")
+            raise
+
+        assert np.all(peps_values >= 0)
+        assert np.all(peps_values <= 1)
+        assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
+
+
+
+
+
