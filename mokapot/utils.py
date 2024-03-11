@@ -4,6 +4,7 @@ Utility functions
 
 import itertools
 import gzip
+from typing import List, Any
 
 import numpy as np
 import pandas as pd
@@ -65,7 +66,24 @@ def tuplize(obj):
     return tuple(obj)
 
 
-def create_chunks(data, chunk_size):
+def create_chunks(data: List[Any], chunk_size: int) -> List[List[Any]]:
+    """
+    Splits the given data into chunks of the specified size.
+
+    Parameters
+    ----------
+    data : List[Any]
+        The input data to be split into chunks.
+
+    chunk_size : int
+        The size of each individual chunk.
+
+    Returns
+    -------
+    List[List[Any]]
+        A list containing sublists, where each sublist is a chunk of the input data.
+
+    """
     return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
