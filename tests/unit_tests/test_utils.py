@@ -102,6 +102,23 @@ def test_tuplize():
     assert utils.tuplize(tuple_in) == tuple_out
 
 
+def test_create_chunks():
+    # Case 1: Chunk size is less than data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]
+
+    # Case 2: Chunk size is equal to data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 5) == [[1, 2, 3, 4, 5]]
+
+    # Case 3: Chunk size is greater than data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 10) == [[1, 2, 3, 4, 5]]
+
+    # Case 4: Chunk size is 1
+    assert utils.create_chunks([1, 2, 3, 4, 5], 1) ==  [[1], [2], [3], [4], [5]]
+
+    # Case 6: Empty data array, chunk size doesn't matter
+    assert utils.create_chunks([], 3) ==  []
+
+
 def test_get_unique_psms_and_peptides(tmp_path, psms):
     psms_iterable = psms
     out_peptides = tmp_path / "peptides.csv"
