@@ -11,7 +11,7 @@ from .dataset import OnDiskPsmDataset
 from .utils import get_unique_peptides_from_psms, merge_sort
 
 
-def main():
+def main(cli_args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--targets_psms", type=str, required=True)
     parser.add_argument("--decoys_psms", type=str, required=True)
@@ -26,7 +26,7 @@ def main():
         "--verbosity", type=int, choices=[0, 1, 2, 3], default=2
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(args=cli_args)
 
     verbosity_dict = {
         0: logging.ERROR,
