@@ -23,7 +23,7 @@ from .confidence import assign_confidence
 from .plugins import get_plugins
 
 
-def main():
+def main(main_args=None):
     """The CLI entry point"""
     start = time.time()
     plugins = get_plugins()
@@ -34,7 +34,7 @@ def main():
         parsergroup = parser.add_argument_group(plugin_name)
         plugin.add_arguments(parsergroup)
 
-    config = Config(parser)
+    config = Config(parser, main_args=main_args)
 
     # Setup logging
     verbosity_dict = {

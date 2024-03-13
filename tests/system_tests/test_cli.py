@@ -5,8 +5,9 @@ At least for now, they do not check the correctness of the
 output, just that the expect outputs are created.
 """
 
-import subprocess
 from pathlib import Path
+
+from helpers.cli import run_mokapot_cli
 
 import pytest
 
@@ -27,16 +28,15 @@ def phospho_files():
 
 def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
-    cmd = ["mokapot", scope_files[0], "--dest_dir", tmp_path]
-    subprocess.run(cmd, check=True)
+    params = [scope_files[0], "--dest_dir", tmp_path]
+    run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
 
 
 def test_cli_options(tmp_path, scope_files):
     """Test non-defaults"""
-    cmd = [
-        "mokapot",
+    params = [
         scope_files[0],
         scope_files[1],
         "--dest_dir",
@@ -64,7 +64,7 @@ def test_cli_options(tmp_path, scope_files):
         "3",
     ]
 
-    subprocess.run(cmd, check=True)
+    run_mokapot_cli(params)
     file_bases = [f.name.split(".")[0] for f in scope_files[0:2]]
 
     assert Path(tmp_path, f"blah.{file_bases[0]}.targets.psms").exists()
@@ -81,8 +81,7 @@ def test_cli_options(tmp_path, scope_files):
 
 def test_cli_aggregate(tmp_path, scope_files):
     """Test that aggregate results in one result file."""
-    cmd = [
-        "mokapot",
+    params = [
         scope_files[0],
         scope_files[1],
         "--dest_dir",
@@ -94,23 +93,22 @@ def test_cli_aggregate(tmp_path, scope_files):
         "1",
     ]
 
-    subprocess.run(cmd, check=True)
+    run_mokapot_cli(params)
     assert Path(tmp_path, "blah.targets.psms").exists()
     assert Path(tmp_path, "blah.targets.peptides").exists()
     assert not Path(tmp_path, "blah.targets.decoy.psms").exists()
     assert not Path(tmp_path, "blah.targets.decoy.peptides").exists()
 
     # Test that decoys are also in the output when --keep_decoys is used
-    cmd += ["--keep_decoys"]
-    subprocess.run(cmd, check=True)
+    params += ["--keep_decoys"]
+    run_mokapot_cli(params)
     assert Path(tmp_path, "blah.decoys.psms").exists()
     assert Path(tmp_path, "blah.decoys.peptides").exists()
 
 
 def test_cli_fasta(tmp_path, phospho_files):
     """Test that proteins happen"""
-    cmd = [
-        "mokapot",
+    params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
@@ -120,7 +118,7 @@ def test_cli_fasta(tmp_path, phospho_files):
         "1",
     ]
 
-    subprocess.run(cmd, check=True)
+    run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
     assert Path(tmp_path, "targets.proteins").exists()
@@ -128,8 +126,7 @@ def test_cli_fasta(tmp_path, phospho_files):
 
 def test_cli_saved_models(tmp_path, phospho_files):
     """Test that saved_models works"""
-    cmd = [
-        "mokapot",
+    params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
@@ -137,10 +134,10 @@ def test_cli_saved_models(tmp_path, phospho_files):
         "0.01",
     ]
 
-    subprocess.run(cmd + ["--save_models"], check=True)
+    run_mokapot_cli(params + ["--save_models"])
 
-    cmd += ["--load_models", *list(Path(tmp_path).glob("*.pkl"))]
-    subprocess.run(cmd, check=True)
+    params += ["--load_models", *list(Path(tmp_path).glob("*.pkl"))]
+    run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
 
@@ -154,8 +151,7 @@ def test_cli_plugins(tmp_path, phospho_files):
     if mokapot_ctree is None:
         pytest.skip("Testing plugins is not installed")
 
-    cmd = [
-        "mokapot",
+    params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
@@ -163,23 +159,22 @@ def test_cli_plugins(tmp_path, phospho_files):
         "0.01",
     ]
 
-    res = subprocess.run(cmd + ["--help"], check=True, capture_output=True)
-    assert "--yell" in res.stdout.decode()
+    res = run_mokapot_cli(params + ["--help"], capture_output=True)
+    assert "--yell" in res['stderr']
 
     # Make sure it does not yell when the plugin is not loaded explicitly
-    res = subprocess.run(cmd, check=True, capture_output=True)
-    assert "Yelling at the user" not in res.stderr.decode()
+    res = run_mokapot_cli(params, capture_output=True)
+    assert "Yelling at the user" not in res['stderr']
 
     # Check that it does yell when the plugin is loaded and arg is requested
-    cmd += ["--plugin", "mokapot_ctree", "--yell"]
-    res = subprocess.run(cmd, check=True, capture_output=True)
-    assert "Yelling at the user" in res.stderr.decode()
+    params += ["--plugin", "mokapot_ctree", "--yell"]
+    res = run_mokapot_cli(params, capture_output=True)
+    assert "Yelling at the user" in res['stderr']
 
 
 def test_cli_skip_deduplication(tmp_path, phospho_files):
     """Test that peptides file results is skipped when using skip_deduplication"""
-    cmd = [
-        "mokapot",
+    params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
@@ -188,7 +183,7 @@ def test_cli_skip_deduplication(tmp_path, phospho_files):
         "--skip_deduplication",
     ]
 
-    subprocess.run(cmd, check=True)
+    run_mokapot_cli(params)
 
     assert Path(tmp_path, "targets.psms").exists()
     assert not Path(tmp_path, "targets.peptides").exists()
@@ -196,8 +191,7 @@ def test_cli_skip_deduplication(tmp_path, phospho_files):
 
 def test_cli_ensemble(tmp_path, phospho_files):
     """Test ensemble flag"""
-    cmd = [
-        "mokapot",
+    params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
@@ -206,26 +200,25 @@ def test_cli_ensemble(tmp_path, phospho_files):
         "--ensemble",
     ]
 
-    subprocess.run(cmd, check=True)
+    run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
 
 
 def test_cli_rescale(tmp_path, scope_files):
     """Test that rescale works"""
-    cmd = [
-        "mokapot",
+    params = [
         scope_files[1],
         "--dest_dir",
         tmp_path,
         "--test_fdr",
         "0.01",
+        "--save_models"
     ]
 
-    subprocess.run(cmd + ["--save_models"], check=True)
+    run_mokapot_cli(params)
 
-    cmd = [
-        "mokapot",
+    params = [
         scope_files[0],
         "--dest_dir",
         tmp_path,
@@ -235,10 +228,10 @@ def test_cli_rescale(tmp_path, scope_files):
         *list(Path(tmp_path).glob("*.pkl")),
         "--rescale",
     ]
-    subprocess.run(cmd, check=True)
+    run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
 
-    subprocess.run(cmd + ["--subset_max_rescale", "5000"], check=True)
+    run_mokapot_cli(params + ["--subset_max_rescale", "5000"])
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
