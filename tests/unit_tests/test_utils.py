@@ -34,6 +34,7 @@ def psms_iterator():
         ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
     ]
 
+
 @pytest.fixture
 def peptide_csv_file(tmp_path):
     file = tmp_path / "peptides.csv"
@@ -41,6 +42,7 @@ def peptide_csv_file(tmp_path):
         f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
     yield file
     os.unlink(file)
+
 
 def test_groupby_max(df):
     """Test that the groupby_max() function works"""
@@ -121,11 +123,10 @@ def test_create_chunks():
     assert utils.create_chunks([1, 2, 3, 4, 5], 10) == [[1, 2, 3, 4, 5]]
 
     # Case 4: Chunk size is 1
-    assert utils.create_chunks([1, 2, 3, 4, 5], 1) ==  [[1], [2], [3], [4], [5]]
+    assert utils.create_chunks([1, 2, 3, 4, 5], 1) == [[1], [2], [3], [4], [5]]
 
     # Case 6: Empty data array, chunk size doesn't matter
-    assert utils.create_chunks([], 3) ==  []
-
+    assert utils.create_chunks([], 3) == []
 
 
 def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
@@ -149,3 +150,47 @@ def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
 
     output = pd.read_csv(peptide_csv_file, sep="\t")
     pd.testing.assert_frame_equal(expected_output, output)
+
+
+def test_convert_targets_column(psms_iterator):
+    df = pd.DataFrame(psms_iterator,
+                      columns=["PSMId", "Label", "Peptide", "score", "q-value",
+                               "posterior_error_prob", "proteinIds"])
+    labels = df["Label"].astype(int)
+    expect = [True, False, False, True, True, False, True]
+
+    # Test with values in [0, 1] as strings
+    df_out = utils.convert_targets_column(df, "Label")
+    assert df_out is df  # check that returned and original df are the same
+    assert df["Label"].dtype == "bool"
+    assert (df["Label"] == expect).all()
+
+    # Test with values in [0, 1]
+    df["Label"] = labels
+    utils.convert_targets_column(df, "Label")
+    assert df["Label"].dtype == "bool"
+    assert (df["Label"] == expect).all()
+
+    # Test with values in [-1, 1]
+    labels[labels == 0] = -1
+    df["Label"] = labels
+    utils.convert_targets_column(df, "Label")
+    assert df["Label"].dtype == "bool"
+    assert (df["Label"] == expect).all()
+
+    # Test with values in [-1, 1] as strings
+    df["Label"] = labels.astype(str)
+    utils.convert_targets_column(df, "Label")
+    assert df["Label"].dtype == "bool"
+    assert (df["Label"] == expect).all()
+
+    # Test with bool values (should be idempotent)
+    df["Label"] = (labels == 1)
+    utils.convert_targets_column(df, "Label")
+    assert df["Label"].dtype == "bool"
+    assert (df["Label"] == expect).all()
+
+    # Junk in the target column should raise a ValueError
+    df["Label"] = labels + 3
+    with pytest.raises(ValueError):
+        utils.convert_targets_column(df, "Label")

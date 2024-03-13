@@ -81,10 +81,11 @@ def create_chunks(data: List[Any], chunk_size: int) -> List[List[Any]]:
     Returns
     -------
     List[List[Any]]
-        A list containing sublists, where each sublist is a chunk of the input data.
+        A list containing sublists, where each sublist is a chunk of the input
+        data.
 
     """
-    return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
+    return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
 def get_unique_peptides_from_psms(
@@ -169,8 +170,33 @@ def merge_sort(paths, col_score, target_column=None, sep="\t"):
             yield row
 
 
-def convert_targets_column(data, target_column):
-    data[target_column] = data[target_column].astype(int)
-    if any(data[target_column] == -1):
-        data[target_column] = ((data[target_column] + 1) / 2).astype(bool)
+def convert_targets_column(data: pd.DataFrame,
+                           target_column: str) -> pd.DataFrame:
+    """Converts target column values to boolean
+    (True if value is 1, False otherwise).
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        The DataFrame containing the target column to be converted (will be
+        modified in-place).
+    target_column : str
+        The name of the target column in the DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with the target column converted to boolean.
+
+    Raises
+    ------
+    ValueError
+        If the target column contains values other than -1, 0, or 1.
+    """
+
+    labels = data[target_column].astype(int)
+    if any(labels < -1) or any(labels > 1):
+        raise ValueError(f"Invalid target column '{target_column}' "
+                         "contains values not in {-1, 0, 1}")
+    data[target_column] = (labels == 1)
     return data
