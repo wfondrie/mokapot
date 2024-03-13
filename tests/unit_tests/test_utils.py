@@ -1,4 +1,5 @@
 """Test the utility functions"""
+import os
 
 import pytest
 import numpy as np
@@ -21,9 +22,9 @@ def df():
 
 
 @pytest.fixture
-def psms():
+def psms_iterator():
     """Create a standard psms iterable"""
-    yield [
+    return [
         ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
         ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
         ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
@@ -33,6 +34,13 @@ def psms():
         ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
     ]
 
+@pytest.fixture
+def peptide_csv_file(tmp_path):
+    file = tmp_path / "peptides.csv"
+    with open(file, "w") as f:
+        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
+    yield file
+    os.unlink(file)
 
 def test_groupby_max(df):
     """Test that the groupby_max() function works"""
@@ -119,15 +127,13 @@ def test_create_chunks():
     assert utils.create_chunks([], 3) ==  []
 
 
-def test_get_unique_psms_and_peptides(tmp_path, psms):
-    psms_iterable = psms
-    out_peptides = tmp_path / "peptides.csv"
-    with open(out_peptides, "w") as f:
-        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
+
+def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
+    psms_iterator = psms_iterator
     utils.get_unique_peptides_from_psms(
-        iterable=psms_iterable,
-        peptide_col_index=2,
-        out_peptides=out_peptides,
+        iterable=psms_iterator,
+        peptide_col_index=3,
+        out_peptides=peptide_csv_file,
         sep="\t",
     )
 
@@ -141,5 +147,5 @@ def test_get_unique_psms_and_peptides(tmp_path, psms):
         columns=["PSMId", "Label", "Peptide", "score", "proteinIds"],
     )
 
-    output = pd.read_csv(out_peptides, sep="\t")
+    output = pd.read_csv(peptide_csv_file, sep="\t")
     pd.testing.assert_frame_equal(expected_output, output)
