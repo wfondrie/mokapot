@@ -24,19 +24,20 @@ class Config:
     Options can be specified as command-line arguments.
     """
 
-    def __init__(self, parser=None) -> None:
+    def __init__(self, parser=None, main_args=None) -> None:
         """Initialize configuration values."""
         self._namespace = None
         if parser is None:
             self.parser = _parser()
         else:
             self.parser = parser
+        self.main_args = main_args
 
     @property
     def args(self):
         """Collect args lazily."""
         if self._namespace is None:
-            self._namespace = vars(self.parser.parse_args())
+            self._namespace = vars(self.parser.parse_args(self.main_args))
 
         return self._namespace
 
