@@ -7,7 +7,7 @@ output, just that the expect outputs are created.
 
 from pathlib import Path
 
-from helpers.cli import run_mokapot_cli
+from ..helpers.cli import run_mokapot_cli
 
 import pytest
 

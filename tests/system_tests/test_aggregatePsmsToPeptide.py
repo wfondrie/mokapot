@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from helpers.cli import run_aggregate_cli
+from ..helpers.cli import (run_aggregate_cli)
 
 # Warnings are errors for these tests
 pytestmark = pytest.mark.filterwarnings("error")
