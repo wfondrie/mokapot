@@ -133,7 +133,7 @@ def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
     psms_iterator = psms_iterator
     utils.get_unique_peptides_from_psms(
         iterable=psms_iterator,
-        peptide_col_index=3,
+        peptide_col_index=2,
         out_peptides=peptide_csv_file,
         sep="\t",
     )

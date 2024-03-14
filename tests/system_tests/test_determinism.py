@@ -4,7 +4,7 @@ These tests verify that the aggregatePsmsToPeptides executable works as expected
 
 from pathlib import Path
 
-from helpers.cli import run_mokapot_cli
+from ..helpers.cli import run_mokapot_cli
 
 import pandas as pd
 import pytest
