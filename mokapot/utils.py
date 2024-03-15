@@ -193,10 +193,9 @@ def convert_targets_column(data: pd.DataFrame,
     ValueError
         If the target column contains values other than -1, 0, or 1.
     """
-
     labels = data[target_column].astype(int)
     if any(labels < -1) or any(labels > 1):
         raise ValueError(f"Invalid target column '{target_column}' "
                          "contains values not in {-1, 0, 1}")
-    data[target_column] = (labels == 1)
+    data[target_column] = (labels == 1).astype(int)
     return data

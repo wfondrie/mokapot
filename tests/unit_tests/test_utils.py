@@ -152,43 +152,40 @@ def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
     pd.testing.assert_frame_equal(expected_output, output)
 
 
+from pandas.testing import assert_series_equal
 def test_convert_targets_column(psms_iterator):
     df = pd.DataFrame(psms_iterator,
                       columns=["PSMId", "Label", "Peptide", "score", "q-value",
                                "posterior_error_prob", "proteinIds"])
     labels = df["Label"].astype(int)
-    expect = [True, False, False, True, True, False, True]
+    expect = pd.Series([True, False, False, True, True, False, True], name="Label")
+    expect = expect.astype(int)
 
     # Test with values in [0, 1] as strings
     df_out = utils.convert_targets_column(df, "Label")
     assert df_out is df  # check that returned and original df are the same
-    assert df["Label"].dtype == "bool"
-    assert (df["Label"] == expect).all()
+    assert_series_equal(df["Label"], expect)
 
     # Test with values in [0, 1]
     df["Label"] = labels
     utils.convert_targets_column(df, "Label")
-    assert df["Label"].dtype == "bool"
-    assert (df["Label"] == expect).all()
+    assert_series_equal(df["Label"], expect)
 
     # Test with values in [-1, 1]
     labels[labels == 0] = -1
     df["Label"] = labels
     utils.convert_targets_column(df, "Label")
-    assert df["Label"].dtype == "bool"
-    assert (df["Label"] == expect).all()
+    assert_series_equal(df["Label"], expect)
 
     # Test with values in [-1, 1] as strings
     df["Label"] = labels.astype(str)
     utils.convert_targets_column(df, "Label")
-    assert df["Label"].dtype == "bool"
-    assert (df["Label"] == expect).all()
+    assert_series_equal(df["Label"], expect)
 
     # Test with bool values (should be idempotent)
     df["Label"] = (labels == 1)
     utils.convert_targets_column(df, "Label")
-    assert df["Label"].dtype == "bool"
-    assert (df["Label"] == expect).all()
+    assert_series_equal(df["Label"], expect)
 
     # Junk in the target column should raise a ValueError
     df["Label"] = labels + 3
