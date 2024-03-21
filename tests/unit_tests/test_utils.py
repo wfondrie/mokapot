@@ -159,17 +159,21 @@ def test_convert_targets_column(psms_iterator):
                                "posterior_error_prob", "proteinIds"])
     labels = df["Label"].astype(int)
     expect = pd.Series([True, False, False, True, True, False, True], name="Label")
-    expect = expect.astype(int)
+    expect_int = expect.astype(int)
+
+    # Actually, all tests should compare with expect, and not with expect_int, but
+    # when I fix convert_targets_column to always return bool, as it should be,
+    # other things break, which I can't fix at the moment. Sigh...
 
     # Test with values in [0, 1] as strings
     df_out = utils.convert_targets_column(df, "Label")
     assert df_out is df  # check that returned and original df are the same
-    assert_series_equal(df["Label"], expect)
+    assert_series_equal(df["Label"], expect_int)
 
     # Test with values in [0, 1]
     df["Label"] = labels
     utils.convert_targets_column(df, "Label")
-    assert_series_equal(df["Label"], expect)
+    assert_series_equal(df["Label"], expect_int)
 
     # Test with values in [-1, 1]
     labels[labels == 0] = -1
@@ -185,7 +189,7 @@ def test_convert_targets_column(psms_iterator):
     # Test with bool values (should be idempotent)
     df["Label"] = (labels == 1)
     utils.convert_targets_column(df, "Label")
-    assert_series_equal(df["Label"], expect)
+    assert_series_equal(df["Label"], expect_int)
 
     # Junk in the target column should raise a ValueError
     df["Label"] = labels + 3
