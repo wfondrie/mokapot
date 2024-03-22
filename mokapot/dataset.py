@@ -618,6 +618,10 @@ class OnDiskPsmDataset:
         self.charge_column = charge_column
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
+        if str(filename).endswith("parquet"):
+            self.read_file = read_file_parquet
+        else:
+            self.read_file = read_file
 
     def calibrate_scores(self, scores, eval_fdr, desc=True):
         """
@@ -660,7 +664,7 @@ class OnDiskPsmDataset:
         return (scores - target_score) / (target_score - decoy_score)
 
     def _targets_count_by_feature(self, column, eval_fdr, desc):
-        df = read_file(
+        df = self.read_file(
             file_name=self.filename,
             use_cols=[column] + [self.target_column],
             target_column=self.target_column,
@@ -699,7 +703,7 @@ class OnDiskPsmDataset:
             if num_passing > best_positives:
                 best_positives = num_passing
                 best_feat = feat_idx
-                df = read_file(
+                df = self.read_file(
                     file_name=self.filename,
                     use_cols=[best_feat, self.target_column],
                 )

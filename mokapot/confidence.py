@@ -34,7 +34,7 @@ from .utils import (
     merge_sort,
     get_unique_psms_and_peptides,
 )
-from .dataset import read_file
+from .dataset import read_file, read_file_parquet
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
 from .parsers.pin import read_file_in_chunks
@@ -96,7 +96,15 @@ class GroupedConfidence:
         peps_error=False,
     ):
         """Initialize a GroupedConfidence object"""
-        data = read_file(psms.filename, use_cols=list(psms.columns))
+        if str(psms.filename).endswith("parquet"):
+            self.read_file = read_file_parquet
+            self.format = Format.parquet
+            group_file = f"{dest_dir}{prefixes}group_psms.parquet"
+        else:
+            self.read_file = read_file
+            self.format = Format.csv
+            group_file = f"{dest_dir}{prefixes}group_psms.csv"
+        data = self.read_file(psms.filename, use_cols=list(psms.columns))
         self.group_column = psms.group_column
         psms.group_column = None
         # Do TDC to eliminate multiples PSMs for a spectrum that may occur
@@ -112,14 +120,15 @@ class GroupedConfidence:
             .index
         )
         append_to_group = False
-        group_file = f"{dest_dir}{prefixes}group_psms.csv"
         for group, group_df in data.groupby(self.group_column):
             LOGGER.info("Group: %s == %s", self.group_column, group)
             tdc_winners = group_df.index.intersection(idx)
             group_psms = group_df.loc[tdc_winners, :]
             group_scores = scores.loc[group_psms.index].values
-
-            group_psms.to_csv(group_file, sep="\t", index=False)
+            if self.format == Format.parquet:
+                group_psms.to_parquet(group_file, index=False)
+            else:
+                group_psms.to_csv(group_file, sep="\t", index=False)
             psms.filename = group_file
             assign_confidence(
                 [psms],
@@ -137,6 +146,7 @@ class GroupedConfidence:
                 append_to_output_file=append_to_group,
                 rng=rng,
                 peps_error=peps_error,
+                format=self.format,
             )
             if combine:
                 append_to_group = True
@@ -505,7 +515,6 @@ class LinearConfidence(Confidence):
         sep="\t",
         peps_algorithm="qvality",
         qvalue_algorithm="tdc",
-        format=Format("csv"),
     ):
         """
         Assign confidence to PSMs and peptides.
@@ -819,8 +828,12 @@ def assign_confidence(
         for _psms in psms:
             feat, _, _, desc = _psms.find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
+            if format == Format.parquet:
+                read_func = read_file_parquet
+            else:
+                read_func = read_file
             scores.append(
-                read_file(file_name=_psms.filename, use_cols=[feat])[
+                read_func(file_name=_psms.filename, use_cols=[feat])[
                     feat
                 ].values
             )
