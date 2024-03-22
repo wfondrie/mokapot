@@ -45,6 +45,7 @@ def main(main_args=None):
     }
     if verbosity_dict[config.verbosity] != logging.DEBUG:
         warnings.filterwarnings("ignore")
+
     logging.basicConfig(
         format=("[{levelname}] {message}"),
         style="{",
