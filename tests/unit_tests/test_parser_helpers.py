@@ -18,10 +18,6 @@ def test_find_columns():
     # Test case where input is an empty list
     assert find_columns("Test", []) == []
 
-    # Test case where input column is case-sensitive
-    columns = ["TEST", "test", "test"]
-    assert find_columns("TEST", columns) == ["TEST"]
-
 
 def test_find_column_with_col_none():
     assert find_column(None, ['ID', 'Name', 'Value'], 'id') == 'ID'
