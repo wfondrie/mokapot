@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from joblib import Parallel, delayed
 
+from .helpers import find_column, find_columns
 from ..utils import (
     open_file,
     tuplize,
@@ -174,19 +175,19 @@ def read_percolator(
 
     # TODO: Refactor the generation of column variables with simpler implementation
     # Find all of the necessary columns, case-insensitive:
-    specid = [c for c in columns if c.lower() == "specid"]
-    peptides = [c for c in columns if c.lower() == "peptide"]
-    proteins = [c for c in columns if c.lower() == "proteins"]
-    labels = [c for c in columns if c.lower() == "label"]
-    scan = [c for c in columns if c.lower() == "scannr"][0]
+    specid = find_columns("specid", columns)
+    peptides = find_columns("peptide", columns)
+    proteins = find_columns("proteins", columns)
+    labels = find_columns("label", columns)
+    scan = find_columns("scannr", columns)[0]
     nonfeat = sum([specid, [scan], peptides, proteins, labels], [])
 
     # Optional columns
-    filename = _check_column(filename_column, columns, "filename")
-    calcmass = _check_column(calcmass_column, columns, "calcmass")
-    expmass = _check_column(expmass_column, columns, "expmass")
-    ret_time = _check_column(rt_column, columns, "ret_time")
-    charge = _check_column(charge_column, columns, "charge_column")
+    filename = find_column(filename_column, columns, "filename")
+    calcmass = find_column(calcmass_column, columns, "calcmass")
+    expmass = find_column(expmass_column, columns, "expmass")
+    ret_time = find_column(rt_column, columns, "ret_time")
+    charge = find_column(charge_column, columns, "charge_column")
     spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
 
     # Only add charge to features if there aren't other charge columns:
@@ -400,20 +401,6 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
         for df, orig_idx in zip(train_psms, zip(*train_idx))
     )
     return [pd.concat(df) for df in zip(*train_psms_reordered)]
-
-
-def _check_column(col, columns, default):
-    """Check that a column exists in the dataframe."""
-    if col is None:
-        try:
-            return [c for c in columns if c.lower() == default][0]
-        except IndexError:
-            return None
-
-    if col not in columns:
-        raise ValueError(f"The '{col}' column was not found.")
-
-    return col
 
 
 def read_data_for_rescale(psms, subset_max_rescale):
