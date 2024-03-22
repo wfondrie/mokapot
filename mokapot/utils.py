@@ -4,7 +4,7 @@ Utility functions
 
 import itertools
 import gzip
-from typing import List, Any
+from typing import List, Any, Tuple
 
 import numpy as np
 import pandas as pd
@@ -53,7 +53,7 @@ def safe_divide(numerator, denominator, ones=False):
     return np.divide(numerator, denominator, out=out, where=(denominator != 0))
 
 
-def tuplize(obj):
+def tuplize(obj: Any) -> Tuple:
     """Convert obj to a tuple, without splitting strings"""
     try:
         _ = iter(obj)
