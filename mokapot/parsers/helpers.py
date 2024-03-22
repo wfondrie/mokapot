@@ -1,6 +1,9 @@
 from typing import Optional, List
 
+from typeguard import typechecked
 
+
+@typechecked
 def find_columns(col: str, columns: List[str]) -> List[str]:
     """
     Parameters
@@ -20,6 +23,7 @@ def find_columns(col: str, columns: List[str]) -> List[str]:
     return [c for c in columns if c.lower() == col.lower()]
 
 
+@typechecked
 def find_column(col: Optional[str], columns: List[str], default: str) -> Optional[str]:
     """
     Parameters
