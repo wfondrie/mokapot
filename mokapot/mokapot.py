@@ -78,6 +78,7 @@ def main(main_args=None):
         for plugin in enabled_plugins.values():
             datasets = [plugin.process_data(ds, config) for ds in datasets]
         prefixes = [Path(f).stem for f in config.psm_files]
+
     # Parse FASTA, if required:
     if config.proteins is not None:
         logging.info("Protein-level confidence estimates enabled.")
@@ -152,11 +153,13 @@ def main(main_args=None):
         rng=config.seed,
     )
     logging.info("")
+
     if config.dest_dir is not None:
         Path(config.dest_dir).mkdir(exist_ok=True)
-    deduplication = not config.skip_deduplication
+
     if config.file_root is not None:
         config.dest_dir = f"{Path(config.dest_dir, config.file_root)}."
+
     assign_confidence(psms=psms,
                       max_workers=config.max_workers,
                       scores=scores,
@@ -165,7 +168,7 @@ def main(main_args=None):
                       dest_dir=config.dest_dir,
                       prefixes=prefixes,
                       decoys=config.keep_decoys,
-                      deduplication=deduplication,
+                      deduplication=not config.skip_deduplication,
                       proteins=proteins,
                       peps_error=config.peps_error,
                       peps_algorithm=config.peps_algorithm,
