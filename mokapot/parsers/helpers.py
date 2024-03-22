@@ -20,8 +20,7 @@ def find_columns(col: str, columns: List[str]) -> List[str]:
     return [c for c in columns if c.lower() == col.lower()]
 
 
-def find_column(col: Optional[str], columns: List[str], default: str) \
-                -> Optional[str]:
+def find_column(col: Optional[str], columns: List[str], default: str) -> Optional[str]:
     """
     Parameters
     ----------
@@ -37,7 +36,7 @@ def find_column(col: Optional[str], columns: List[str], default: str) \
 
     Returns
     -------
-    Optional[str]
+    Optional[str]:
         The validated column. If `col` is None, it returns the first matching
         column in `columns` with case-insensitive comparison to `default`. If
         `col` is not None, it returns `col` after ensuring it is present in
