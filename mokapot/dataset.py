@@ -18,6 +18,7 @@ One of more instance of this class are required to use the
 """
 
 import logging
+import pyarrow.parquet as pq
 from abc import ABC, abstractmethod
 
 from zlib import crc32
@@ -28,6 +29,7 @@ from . import qvalues
 from . import utils
 from .parsers.fasta import read_fasta
 from .proteins import Proteins
+from .constants import Format
 
 LOGGER = logging.getLogger(__name__)
 
@@ -616,6 +618,10 @@ class OnDiskPsmDataset:
         self.charge_column = charge_column
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
+        if str(filename).endswith("parquet"):
+            self.read_file = read_file_parquet
+        else:
+            self.read_file = read_file
 
     def calibrate_scores(self, scores, eval_fdr, desc=True):
         """
@@ -658,7 +664,7 @@ class OnDiskPsmDataset:
         return (scores - target_score) / (target_score - decoy_score)
 
     def _targets_count_by_feature(self, column, eval_fdr, desc):
-        df = read_file(
+        df = self.read_file(
             file_name=self.filename,
             use_cols=[column] + [self.target_column],
             target_column=self.target_column,
@@ -697,7 +703,7 @@ class OnDiskPsmDataset:
             if num_passing > best_positives:
                 best_positives = num_passing
                 best_feat = feat_idx
-                df = read_file(
+                df = self.read_file(
                     file_name=self.filename,
                     use_cols=[best_feat, self.target_column],
                 )
@@ -851,8 +857,19 @@ def calibrate_scores(scores, targets, eval_fdr, desc=True):
     return (scores - target_score) / (target_score - decoy_score)
 
 
-def update_labels(file_name, scores, target_column, eval_fdr=0.01, desc=True):
-    df = read_file(
+def update_labels(
+    file_name,
+    scores,
+    target_column,
+    eval_fdr=0.01,
+    desc=True,
+    format=Format.csv,
+):
+    if format == Format.parquet:
+        read_file_unchunked_func = read_file_parquet
+    else:
+        read_file_unchunked_func = read_file
+    df = read_file_unchunked_func(
         file_name=file_name,
         use_cols=[target_column],
         target_column=target_column,
@@ -870,6 +887,18 @@ def read_file(file_name, use_cols=None, target_column=None):
         df = pd.read_csv(
             f, sep="\t", usecols=use_cols, index_col=False, on_bad_lines="skip"
         ).apply(pd.to_numeric, errors="ignore")
+    if target_column:
+        return utils.convert_targets_column(df, target_column)
+    else:
+        return df
+
+
+def read_file_parquet(file_name, use_cols=None, target_column=None):
+    df = (
+        pq.read_table(file_name, columns=use_cols)
+        .to_pandas()
+        .apply(pd.to_numeric, errors="ignore")
+    )
     if target_column:
         return utils.convert_targets_column(df, target_column)
     else:

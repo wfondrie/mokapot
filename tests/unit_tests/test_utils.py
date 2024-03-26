@@ -4,6 +4,7 @@ import pytest
 import numpy as np
 import pandas as pd
 from mokapot import utils
+from mokapot.constants import Format
 
 
 @pytest.fixture
@@ -126,3 +127,14 @@ def test_get_unique_psms_and_peptides(tmp_path, psms):
 
     output = pd.read_csv(out_peptides, sep="\t")
     pd.testing.assert_frame_equal(expected_output, output)
+
+
+def test_merge_sort(merge_sort_data):
+    files_csv, files_parquet = merge_sort_data
+    iterable_csv = utils.merge_sort(files_csv, "score")
+    iterable_parquet = utils.merge_sort(
+        files_parquet, "score", format=Format.parquet
+    )
+    assert list(iterable_csv) == list(
+        iterable_parquet
+    ), "Merge sort ids vary between parquet and csv"
