@@ -829,11 +829,11 @@ def assign_confidence(
             feat, _, _, desc = _psms.find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
             if format == Format.parquet:
-                read_func = read_file_parquet
+                read_file_unchunked_func = read_file_parquet
             else:
-                read_func = read_file
+                read_file_unchunked_func = read_file
             scores.append(
-                read_func(file_name=_psms.filename, use_cols=[feat])[
+                read_file_unchunked_func(file_name=_psms.filename, use_cols=[feat])[
                     feat
                 ].values
             )

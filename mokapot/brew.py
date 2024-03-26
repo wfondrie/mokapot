@@ -284,21 +284,16 @@ def brew(
         feat, _, desc = best_feats[best_feat_idx]
         descs = [desc] * len(psms)
         if format == Format.parquet:
-            scores = [
-                read_file_parquet(
-                    _psms.filename,
-                    use_cols=[feat],
-                ).values
-                for _psms in psms
-            ]
+            read_file_unchunked_func = read_file_parquet
         else:
-            scores = [
-                read_file(
-                    _psms.filename,
-                    use_cols=[feat],
-                ).values
-                for _psms in psms
-            ]
+            read_file_unchunked_func = read_file
+        scores = [
+            read_file_unchunked_func(
+                _psms.filename,
+                use_cols=[feat],
+            ).values
+            for _psms in psms
+        ]
 
     else:
         using_best_feat = False

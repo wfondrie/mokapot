@@ -866,17 +866,14 @@ def update_labels(
     format=Format.csv,
 ):
     if format == Format.parquet:
-        df = read_file_parquet(
-            file_name=file_name,
-            use_cols=[target_column],
-            target_column=target_column,
-        )
+        read_file_unchunked_func = read_file_parquet
     else:
-        df = read_file(
-            file_name=file_name,
-            use_cols=[target_column],
-            target_column=target_column,
-        )
+        read_file_unchunked_func = read_file
+    df = read_file_unchunked_func(
+        file_name=file_name,
+        use_cols=[target_column],
+        target_column=target_column,
+    )
     return _update_labels(
         scores=scores,
         targets=df[target_column],
