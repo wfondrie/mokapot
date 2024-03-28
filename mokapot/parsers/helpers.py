@@ -23,6 +23,22 @@ def find_columns(col: str, columns: List[str]) -> List[str]:
     return [c for c in columns if c.lower() == col.lower()]
 
 
+def find_column_new(col, columns, required=True, unique=True, ignore_case=False):
+    if ignore_case:
+        str_compare = lambda str1, str2: str1.lower() == str2.lower()
+    else:
+        str_compare = lambda str1, str2: str1 == str2
+    found_columns = [c for c in columns if str_compare(c, col)]
+
+    if required and not found_columns:
+        raise ValueError(f"The column '{col}' was not found.")
+
+    if unique and len(found_columns) > 1:
+        raise ValueError(f"The column '{col}' should be unique. Found {found_columns}.")
+
+    return found_columns[0] if unique else found_columns
+
+
 @typechecked
 def find_column(col: Optional[str], columns: List[str], default: str) -> Optional[str]:
     """

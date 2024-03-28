@@ -20,6 +20,7 @@ import os
 import glob
 
 import logging
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
@@ -34,7 +35,7 @@ from .utils import (
     merge_sort,
     get_unique_psms_and_peptides,
 )
-from .dataset import read_file
+from .dataset import read_file, PsmDataset, OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
 from .parsers.pin import read_file_in_chunks
@@ -837,11 +838,22 @@ def assign_confidence(
         "q-value",
         "posterior_error_prob",
     ]
-    output_columns = {
+    output_columns_map = {
         "psms": out_columns_psms_peps,
         "peptides": out_columns_psms_peps,
         "proteins": out_columns_proteins,
     }
+    output_columns_new = [
+        "PSMId",
+        "peptide",
+        "score",
+        "q-value",
+        "posterior_error_prob",
+        "proteinIds",
+        "pcm",
+        "modifiedPeptide",
+        "peptideGroup",
+    ]
 
     for _psms, score, desc, prefix in zip(psms, scores, descs, prefixes):
         metadata_columns = [
@@ -860,6 +872,7 @@ def assign_confidence(
                 dest_dir_prefix = dest_dir_prefix + f"{prefix}."
             out_files = []
             for level in levels:
+                output_columns = output_columns_map[level]
                 if group_column is not None and not combine:
                     dest_dir_prefix_group = f"{dest_dir_prefix}{group_column}."
                 else:
@@ -868,44 +881,21 @@ def assign_confidence(
                 outfile_d = str(dest_dir_prefix_group) + f"decoys.{level}"
                 if not append_to_output_file:
                     with open(outfile_t, "w") as fp:
-                        fp.write(f"{sep.join(output_columns[level])}\n")
+                        fp.write(f"{sep.join(output_columns)}\n")
                 out_files.append([outfile_t])
                 if decoys:
                     if not append_to_output_file:
                         with open(outfile_d, "w") as fp:
-                            fp.write(f"{sep.join(output_columns[level])}\n")
+                            fp.write(f"{sep.join(output_columns)}\n")
                     out_files[-1].append(outfile_d)
 
-            reader = read_file_in_chunks(
-                file=_psms.filename,
-                chunk_size=CONFIDENCE_CHUNK_SIZE,
-                use_cols=_psms.metadata_columns,
-            )
-            scores_slices = create_chunks(
-                score, chunk_size=CONFIDENCE_CHUNK_SIZE
-            )
+            # Write out the file
+            iterable_sorted = create_sorted_file_iterator(_psms,
+                                                          dest_dir_prefix,
+                                                          do_rollup,
+                                                          max_workers, score,
+                                                          sep)
 
-            Parallel(n_jobs=max_workers, require="sharedmem")(
-                delayed(save_sorted_metadata_chunks)(
-                    chunk_metadata,
-                    score_chunk,
-                    _psms,
-                    do_rollup,
-                    i,
-                    sep,
-                    dest_dir_prefix,
-                )
-                for chunk_metadata, score_chunk, i in zip(
-                    reader, scores_slices, range(len(scores_slices))
-                )
-            )
-
-            scores_metadata_paths = glob.glob(
-                f"{dest_dir_prefix}scores_metadata_*"
-            )
-            iterable_sorted = merge_sort(
-                scores_metadata_paths, col_score="score", sep=sep
-            )
             LOGGER.info("Assigning confidence...")
             LOGGER.info("Performing target-decoy competition...")
             LOGGER.info(
@@ -945,7 +935,7 @@ def assign_confidence(
                         )
                 LOGGER.info("\t- Found %i PSMs.", n_psms)
 
-            [os.remove(sc_path) for sc_path in scores_metadata_paths]
+            # [os.remove(sc_path) for sc_path in scores_metadata_paths] # no-commit
 
             LinearConfidence(
                 psms=_psms,
@@ -982,6 +972,39 @@ def assign_confidence(
                 rng=rng,
                 peps_error=peps_error,
             )
+
+
+def create_sorted_file_iterator(_psms, dest_dir_prefix, do_rollup, max_workers,
+                                score, sep):
+    reader = read_file_in_chunks(
+        file=_psms.filename,
+        chunk_size=CONFIDENCE_CHUNK_SIZE,
+        use_cols=_psms.metadata_columns,
+    )
+    scores_slices = create_chunks(
+        score, chunk_size=CONFIDENCE_CHUNK_SIZE
+    )
+    Parallel(n_jobs=max_workers, require="sharedmem")(
+        delayed(save_sorted_metadata_chunks)(
+            chunk_metadata,
+            score_chunk,
+            _psms,
+            do_rollup,
+            i,
+            sep,
+            dest_dir_prefix,
+        )
+        for chunk_metadata, score_chunk, i in zip(
+            reader, scores_slices, range(len(scores_slices))
+        )
+    )
+    scores_metadata_paths = glob.glob(
+        f"{dest_dir_prefix}scores_metadata_*"
+    )
+    iterable_sorted = merge_sort(
+        scores_metadata_paths, col_score="score", sep=sep
+    )
+    return iterable_sorted
 
 
 def save_sorted_metadata_chunks(
