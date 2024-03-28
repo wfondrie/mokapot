@@ -4,6 +4,7 @@ Utility functions
 
 import itertools
 import gzip
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -67,13 +68,14 @@ def tuplize(obj) -> tuple:
 
 
 @typechecked
-def create_chunks(data: list, chunk_size: int) -> list[list]:
+def create_chunks(data: Union[list, np.array], chunk_size: int) -> \
+        list[Union[list, np.array]]:
     """
     Splits the given data into chunks of the specified size.
 
     Parameters
     ----------
-    data : list
+    data : Union[list, np.array]
         The input data to be split into chunks.
 
     chunk_size : int
@@ -81,7 +83,7 @@ def create_chunks(data: list, chunk_size: int) -> list[list]:
 
     Returns
     -------
-    list[list]
+    list[Union[list, np.array]]
         A list containing sublists, where each sublist is a chunk of the input
         data.
 
@@ -109,7 +111,6 @@ def get_unique_psms_and_peptides(iterable, out_psms, out_peptides, sep):
     seen_peptide = set()
     f_psm = open(out_psms, "a")
     f_peptide = open(out_peptides, "a")
-
 
     for line_list in iterable:
         line_hash_psm = tuple([int(line_list[2]), float(line_list[3])])
@@ -223,10 +224,12 @@ def map_columns_to_indices(search: list | tuple, columns: list[str]) -> \
     Parameters
     ----------
     search : list | tuple
-        The list or tuple of search items to map to indices. It can contain strings or nested lists/tuples of search items.
+        The list or tuple of search items to map to indices. It can contain
+        strings or nested lists/tuples of search items.
 
     columns : list[str]
-        The list of columns in which to search for the items. This must be a list of strings.
+        The list of columns in which to search for the items. This must be a
+        list of strings.
 
     Returns
     -------
@@ -240,7 +243,8 @@ def map_columns_to_indices(search: list | tuple, columns: list[str]) -> \
     Raises
     ------
     ValueError
-        If the search list/tuple contains a string that is not contained in `columns`
+        If the search list/tuple contains a string that is not contained in
+        `columns`
     """
     return type(search)(
         columns.index(s) if isinstance(s, str)

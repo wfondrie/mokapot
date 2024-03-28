@@ -5,7 +5,6 @@ import pytest
 import numpy as np
 import pandas as pd
 from mokapot import utils
-from utils import map_columns_to_indices
 
 
 @pytest.fixture
@@ -154,12 +153,15 @@ def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
 
 
 from pandas.testing import assert_series_equal
+
+
 def test_convert_targets_column(psms_iterator):
     df = pd.DataFrame(psms_iterator,
                       columns=["PSMId", "Label", "Peptide", "score", "q-value",
                                "posterior_error_prob", "proteinIds"])
     labels = df["Label"].astype(int)
-    expect = pd.Series([True, False, False, True, True, False, True], name="Label")
+    expect = pd.Series([True, False, False, True, True, False, True],
+                       name="Label")
     expect_int = expect.astype(int)
 
     # Actually, all tests should compare with expect, and not with expect_int, but
@@ -200,17 +202,17 @@ def test_convert_targets_column(psms_iterator):
 
 def test_map_columns_to_indices():
     # Test with empty structure
-    assert map_columns_to_indices([], []) == []
-    assert map_columns_to_indices((), []) == ()
+    assert utils.map_columns_to_indices([], []) == []
+    assert utils.map_columns_to_indices((), []) == ()
 
     # Test recursive
-    assert map_columns_to_indices(
-        [('a', ('b', ['c'], ('b',), 'c')), ('c', 'b')], ['a', 'b', 'c']) == [
-               (0, (1, [2], (1,), 2)), (2, 1)]
+    assert (utils.map_columns_to_indices(
+        [('a', ('b', ['c'], ('b',), 'c')), ('c', 'b')], ['a', 'b', 'c']) ==
+            [(0, (1, [2], (1,), 2)), (2, 1)])
 
     # Test that an assertion is raised if a value isn't found
     with pytest.raises(ValueError):
-        map_columns_to_indices(['a', 'b', 'c', 'd'], ['a', 'b', 'c'])
+        utils.map_columns_to_indices(['a', 'b', 'c', 'd'], ['a', 'b', 'c'])
 
     # Test with a real world case
     columns = ['SpecId', 'Label', 'ScanNr', 'ExpMass', 'Mass', 'MS8_feature_5',
@@ -219,6 +221,5 @@ def test_map_columns_to_indices():
                'Peptide', 'Proteins', 'ModifiedPeptide', 'PCM', 'PeptideGroup']
     level_columns = [('SpecId', 'ScanNr'), 'Peptide', 'Proteins',
                      'ModifiedPeptide', 'PCM', 'PeptideGroup']
-    assert map_columns_to_indices(level_columns, columns) == [(0, 2), 12, 13,
-                                                              14, 15, 16]
-
+    assert (utils.map_columns_to_indices(level_columns, columns) ==
+            [(0, 2), 12, 13, 14, 15, 16])
