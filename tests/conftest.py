@@ -194,6 +194,7 @@ def psms_ondisk():
             "Proteins",
             "Label",
         ],
+        level_columns=[],
         filename_column=None,
         specId_column="SpecId",
         spectra_dataframe=df_spectra,

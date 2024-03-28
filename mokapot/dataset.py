@@ -589,6 +589,7 @@ class OnDiskPsmDataset:
         group_column,
         feature_columns,
         metadata_columns,
+        level_columns,
         filename_column,
         scan_column,
         specId_column,
@@ -608,6 +609,7 @@ class OnDiskPsmDataset:
         self.group_column = group_column
         self.feature_columns = feature_columns
         self.metadata_columns = metadata_columns
+        self.level_columns = level_columns
         self.filename_column = filename_column
         self.scan_column = scan_column
         self.calcmass_column = calcmass_column

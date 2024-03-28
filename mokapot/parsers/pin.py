@@ -265,6 +265,7 @@ def read_percolator(
         group_column=group_column,
         feature_columns=_feature_columns,
         metadata_columns=nonfeat,
+        level_columns = level_columns,
         filename_column=filename,
         scan_column=scan,
         specId_column=specid[0],

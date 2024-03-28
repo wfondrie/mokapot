@@ -58,6 +58,7 @@ def main(main_args=None):
         group_column=None,
         feature_columns=None,
         metadata_columns=None,
+        level_columns=None,
         filename_column=None,
         scan_column=None,
         specId_column=None,

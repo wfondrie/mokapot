@@ -38,6 +38,7 @@ def test_one_group(psm_df_1000, tmp_path):
             "proteins",
             "target",
         ],
+        level_columns=[],
         specId_column="spectrum",
         spectra_dataframe=df_spectra,
     )
@@ -95,6 +96,7 @@ def test_multi_groups(psm_df_100, tmp_path):
             "proteins",
             "target",
         ],
+        level_columns=[],
         specId_column="spectrum",
         spectra_dataframe=df_spectra,
     )
