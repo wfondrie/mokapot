@@ -34,12 +34,11 @@ from .utils import (
     merge_sort,
     get_unique_psms_and_peptides,
 )
-from .dataset import read_file, read_file_parquet
+from .dataset import read_file
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
 from .parsers.pin import read_file_in_chunks
-from .constants import CONFIDENCE_CHUNK_SIZE, Format
-from .brew import get_file_reader
+from .constants import CONFIDENCE_CHUNK_SIZE
 
 LOGGER = logging.getLogger(__name__)
 
@@ -96,15 +95,7 @@ class GroupedConfidence:
         peps_error=False,
     ):
         """Initialize a GroupedConfidence object"""
-        if str(psms.filename).endswith("parquet"):
-            self.read_file = read_file_parquet
-            self.format = Format.parquet
-            group_file = f"{dest_dir}{prefixes}group_psms.parquet"
-        else:
-            self.read_file = read_file
-            self.format = Format.csv
-            group_file = f"{dest_dir}{prefixes}group_psms.csv"
-        data = self.read_file(psms.filename, use_cols=list(psms.columns))
+        data = read_file(psms.filename, use_cols=list(psms.columns))
         self.group_column = psms.group_column
         psms.group_column = None
         # Do TDC to eliminate multiples PSMs for a spectrum that may occur
@@ -120,15 +111,14 @@ class GroupedConfidence:
             .index
         )
         append_to_group = False
+        group_file = f"{dest_dir}{prefixes}group_psms.csv"
         for group, group_df in data.groupby(self.group_column):
             LOGGER.info("Group: %s == %s", self.group_column, group)
             tdc_winners = group_df.index.intersection(idx)
             group_psms = group_df.loc[tdc_winners, :]
             group_scores = scores.loc[group_psms.index].values
-            if self.format == Format.parquet:
-                group_psms.to_parquet(group_file, index=False)
-            else:
-                group_psms.to_csv(group_file, sep="\t", index=False)
+
+            group_psms.to_csv(group_file, sep="\t", index=False)
             psms.filename = group_file
             assign_confidence(
                 [psms],
@@ -146,7 +136,6 @@ class GroupedConfidence:
                 append_to_output_file=append_to_group,
                 rng=rng,
                 peps_error=peps_error,
-                format=self.format,
             )
             if combine:
                 append_to_group = True
@@ -472,7 +461,7 @@ class LinearConfidence(Confidence):
             sep=sep,
             peps_error=peps_error,
             peps_algorithm=peps_algorithm,
-            qvalue_algorithm=qvalue_algorithm,
+            qvalue_algorithm=qvalue_algorithm
         )
 
         self.accepted = {}
@@ -582,14 +571,8 @@ class LinearConfidence(Confidence):
                 )
 
             # Estimate q-values and assign to dataframe
-            LOGGER.info(
-                "Assigning q-values to %s (using %s algorithm) ...",
-                level,
-                qvalue_algorithm,
-            )
-            self.qvals = qvalues.qvalues_from_scores(
-                self.scores, self.targets, qvalue_algorithm
-            )
+            LOGGER.info("Assigning q-values to %s (using %s algorithm) ...", level, qvalue_algorithm)
+            self.qvals = qvalues.qvalues_from_scores(self.scores, self.targets, qvalue_algorithm)
 
             # Set scores to be the correct sign again:
             self.scores = self.scores * (desc * 2 - 1)
@@ -603,15 +586,9 @@ class LinearConfidence(Confidence):
 
             # Calculate PEPs
 
-            LOGGER.info(
-                "Assigning PEPs to %s (using %s algorithm) ...",
-                level,
-                peps_algorithm,
-            )
+            LOGGER.info("Assigning PEPs to %s (using %s algorithm) ...", level, peps_algorithm)
             try:
-                self.peps = peps_from_scores(
-                    self.scores, self.targets, peps_algorithm
-                )
+                self.peps = peps_from_scores(self.scores, self.targets, peps_algorithm)
             except SystemExit as msg:
                 if "no decoy hits available for PEP calculation" in str(msg):
                     self.peps = 0
@@ -769,9 +746,8 @@ def assign_confidence(
     append_to_output_file=False,
     rng=0,
     peps_error=False,
-    peps_algorithm="qvality",
+    peps_algorithm="qvality", 
     qvalue_algorithm="tdc",
-    format=Format("csv"),
 ):
     """Assign confidence to PSMs peptides, and optionally, proteins.
 
@@ -828,12 +804,8 @@ def assign_confidence(
         for _psms in psms:
             feat, _, _, desc = _psms.find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
-            if format == Format.parquet:
-                read_file_unchunked_func = read_file_parquet
-            else:
-                read_file_unchunked_func = read_file
             scores.append(
-                read_file_unchunked_func(file_name=_psms.filename, use_cols=[feat])[
+                read_file(file_name=_psms.filename, use_cols=[feat])[
                     feat
                 ].values
             )
@@ -901,8 +873,8 @@ def assign_confidence(
                         with open(outfile_d, "w") as fp:
                             fp.write(f"{sep.join(output_columns[level])}\n")
                     out_files[-1].append(outfile_d)
-            reader_func = get_file_reader(format)
-            reader = reader_func(
+
+            reader = read_file_in_chunks(
                 file=_psms.filename,
                 chunk_size=CONFIDENCE_CHUNK_SIZE,
                 use_cols=_psms.metadata_columns,
@@ -920,7 +892,6 @@ def assign_confidence(
                     i,
                     sep,
                     dest_dir_prefix,
-                    format=format,
                 )
                 for chunk_metadata, score_chunk, i in zip(
                     reader, scores_slices, range(len(scores_slices))
@@ -931,10 +902,7 @@ def assign_confidence(
                 f"{dest_dir_prefix}scores_metadata_*"
             )
             iterable_sorted = merge_sort(
-                sorted(scores_metadata_paths),
-                col_score="score",
-                sep=sep,
-                format=format,
+                scores_metadata_paths, col_score="score", sep=sep
             )
             LOGGER.info("Assigning confidence...")
             LOGGER.info("Performing target-decoy competition...")
@@ -958,7 +926,6 @@ def assign_confidence(
                     out_psms=f"{dest_dir}psms.csv",
                     out_peptides=f"{dest_dir}peptides.csv",
                     sep=sep,
-                    format=format,
                 )
                 LOGGER.info(
                     "\t- Found %i PSMs from unique spectra.", unique_psms
@@ -1016,14 +983,7 @@ def assign_confidence(
 
 
 def save_sorted_metadata_chunks(
-    chunk_metadata,
-    score_chunk,
-    psms,
-    deduplication,
-    i,
-    sep,
-    dest_dir_prefix,
-    format=Format.csv,
+    chunk_metadata, score_chunk, psms, deduplication, i, sep, dest_dir_prefix
 ):
     chunk_metadata = convert_targets_column(
         data=chunk_metadata.apply(pd.to_numeric, errors="ignore"),
@@ -1033,18 +993,12 @@ def save_sorted_metadata_chunks(
     chunk_metadata.sort_values(by="score", ascending=False, inplace=True)
     if deduplication:
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
-    if format == Format.parquet:
-        chunk_metadata.to_parquet(
-            f"{dest_dir_prefix}scores_metadata_{i}.parquet",
-            index=False,
-        )
-    else:
-        chunk_metadata.to_csv(
-            f"{dest_dir_prefix}scores_metadata_{i}.csv",
-            sep=sep,
-            index=False,
-            mode="w",
-        )
+    chunk_metadata.to_csv(
+        f"{dest_dir_prefix}scores_metadata_{i}.csv",
+        sep=sep,
+        index=False,
+        mode="w",
+    )
 
 
 def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
