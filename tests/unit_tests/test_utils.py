@@ -5,6 +5,7 @@ import pytest
 import numpy as np
 import pandas as pd
 from mokapot import utils
+from utils import map_columns_to_indices
 
 
 @pytest.fixture
@@ -195,3 +196,29 @@ def test_convert_targets_column(psms_iterator):
     df["Label"] = labels + 3
     with pytest.raises(ValueError):
         utils.convert_targets_column(df, "Label")
+
+
+def test_map_columns_to_indices():
+    # Test with empty structure
+    assert map_columns_to_indices([], []) == []
+    assert map_columns_to_indices((), []) == ()
+
+    # Test recursive
+    assert map_columns_to_indices(
+        [('a', ('b', ['c'], ('b',), 'c')), ('c', 'b')], ['a', 'b', 'c']) == [
+               (0, (1, [2], (1,), 2)), (2, 1)]
+
+    # Test that an assertion is raised if a value isn't found
+    with pytest.raises(ValueError):
+        map_columns_to_indices(['a', 'b', 'c', 'd'], ['a', 'b', 'c'])
+
+    # Test with a real world case
+    columns = ['SpecId', 'Label', 'ScanNr', 'ExpMass', 'Mass', 'MS8_feature_5',
+               'missedCleavages', 'MS8_feature_7', 'MS8_feature_13',
+               'MS8_feature_156', 'MS8_feature_157', 'MS8_feature_158',
+               'Peptide', 'Proteins', 'ModifiedPeptide', 'PCM', 'PeptideGroup']
+    level_columns = [('SpecId', 'ScanNr'), 'Peptide', 'Proteins',
+                     'ModifiedPeptide', 'PCM', 'PeptideGroup']
+    assert map_columns_to_indices(level_columns, columns) == [(0, 2), 12, 13,
+                                                              14, 15, 16]
+
