@@ -20,10 +20,13 @@ import os
 import glob
 
 import logging
+from pathlib import Path
+
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
 from joblib import Parallel, delayed
+from typeguard import typechecked
 
 from . import qvalues
 from .peps import peps_from_scores
@@ -111,7 +114,7 @@ class GroupedConfidence:
             .index
         )
         append_to_group = False
-        group_file = f"{dest_dir}{prefixes}group_psms.csv"
+        group_file = dest_dir / f"{prefixes}group_psms.csv"
         for group, group_df in data.groupby(self.group_column):
             LOGGER.info("Group: %s == %s", self.group_column, group)
             tdc_winners = group_df.index.intersection(idx)
@@ -540,22 +543,15 @@ class LinearConfidence(Confidence):
             proteins = proteins.sort_values(
                 by=self._score_column, ascending=False
             ).reset_index(drop=True)
-            proteins_path = "proteins.csv"
+            proteins_path = Path("proteins.csv")
             proteins.to_csv(proteins_path, index=False, sep=sep)
             levels += ["proteins"]
             level_paths += [proteins_path]
             out_paths += [
-                os.path.sep.join(
-                    _psms.split(os.path.sep)[:-1]
-                    + [
-                        ".".join(
-                            _psms.split(os.path.sep)[-1].split(".")[:-1]
-                            + ["proteins"]
-                        )
-                    ]
-                )
+                _psms.with_suffix(".proteins")
                 for _psms in out_paths[0]
             ]
+
             LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
         for level, data_path, out_path in zip(levels, level_paths, out_paths):
             data = read_file(data_path, target_column=self._target_column)
@@ -728,15 +724,19 @@ class CrossLinkedConfidence(Confidence):
 
 
 # Functions -------------------------------------------------------------------
+
+
+@typechecked
 def assign_confidence(
     psms,
     max_workers,
     scores=None,
     descs=None,
     eval_fdr=0.01,
-    dest_dir=None,
+    dest_dir : Path | None =None,
+    file_root : str = "",
     sep="\t",
-    prefixes=None,
+    prefixes : list[str|None] | None = None,
     decoys=False,
     do_rollup=True,
     proteins=None,
@@ -770,13 +770,14 @@ def assign_confidence(
         `scores` is not :code:`None`, this parameter has no affect on the
         analysis itself, but does affect logging messages and the FDR
         threshold applied for some output formats, such as FlashLFQ.
-    dest_dir : str or None, optional
+    dest_dir : Path or None, optional
         The directory in which to save the files. :code:`None` will use the
         current working directory.
     sep : str, optional
         The delimiter to use.
     prefixes : [str]
         The prefixes added to all output file names.
+
     decoys : bool, optional
         Save decoys confidence estimates as well?
     do_rollup: bool
@@ -809,8 +810,8 @@ def assign_confidence(
                 ].values
             )
 
-    psms_path = f"{dest_dir}psms.csv"
-    peptides_path = f"{dest_dir}peptides.csv"
+    psms_path = dest_dir / f"{file_root}psms.csv"
+    peptides_path = dest_dir / f"{file_root}peptides.csv"
     levels = ["psms"]
     level_data_path = [psms_path]
 
@@ -852,20 +853,18 @@ def assign_confidence(
             "score",
         ]
         if _psms.group_column is None:
-            if str(dest_dir)[-1] == ".":
-                dest_dir_prefix = dest_dir
-            else:
-                dest_dir_prefix = f"{dest_dir}/"
-            if prefix is not None:
-                dest_dir_prefix = dest_dir_prefix + f"{prefix}."
+            file_prefix = file_root
+            if prefix:
+                file_prefix = f"{file_prefix}{prefix}."
+
             out_files = []
             for level in levels:
                 if group_column is not None and not combine:
-                    dest_dir_prefix_group = f"{dest_dir_prefix}{group_column}."
+                    file_prefix_group = f"{file_prefix}{group_column}."
                 else:
-                    dest_dir_prefix_group = dest_dir_prefix
-                outfile_t = str(dest_dir_prefix_group) + f"targets.{level}"
-                outfile_d = str(dest_dir_prefix_group) + f"decoys.{level}"
+                    file_prefix_group = file_prefix
+                outfile_t = dest_dir / f"{file_prefix_group}targets.{level}"
+                outfile_d = dest_dir / f"{file_prefix_group}decoys.{level}"
                 if not append_to_output_file:
                     with open(outfile_t, "w") as fp:
                         fp.write(f"{sep.join(output_columns[level])}\n")
@@ -893,16 +892,15 @@ def assign_confidence(
                     do_rollup,
                     i,
                     sep,
-                    dest_dir_prefix,
+                    dest_dir,
+                    file_prefix
                 )
                 for chunk_metadata, score_chunk, i in zip(
                     reader, scores_slices, range(len(scores_slices))
                 )
             )
 
-            scores_metadata_paths = glob.glob(
-                f"{dest_dir_prefix}scores_metadata_*"
-            )
+            scores_metadata_paths = list(dest_dir.glob(f"{file_prefix}scores_metadata_*"))
             iterable_sorted = merge_sort(
                 scores_metadata_paths, col_score="score", sep=sep
             )
@@ -925,8 +923,8 @@ def assign_confidence(
                     unique_peptides,
                 ) = get_unique_psms_and_peptides(
                     iterable=iterable_sorted,
-                    out_psms=f"{dest_dir}psms.csv",
-                    out_peptides=f"{dest_dir}peptides.csv",
+                    out_psms=dest_dir / f"{file_root}psms.csv",
+                    out_peptides=dest_dir / f"{file_root}peptides.csv",
                     sep=sep,
                 )
                 LOGGER.info(
@@ -984,8 +982,9 @@ def assign_confidence(
             )
 
 
+@typechecked
 def save_sorted_metadata_chunks(
-    chunk_metadata, score_chunk, psms, do_rollup, i, sep, dest_dir_prefix
+    chunk_metadata, score_chunk, psms, do_rollup, i, sep, dest_dir : Path, file_prefix : str
 ):
     chunk_metadata = convert_targets_column(
         data=chunk_metadata.apply(pd.to_numeric, errors="ignore"),
@@ -993,10 +992,12 @@ def save_sorted_metadata_chunks(
     )
     chunk_metadata["score"] = score_chunk
     chunk_metadata.sort_values(by="score", ascending=False, inplace=True)
+
     if do_rollup:
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
+
     chunk_metadata.to_csv(
-        f"{dest_dir_prefix}scores_metadata_{i}.csv",
+        dest_dir / f"{file_prefix}scores_metadata_{i}.csv",
         sep=sep,
         index=False,
         mode="w",

@@ -16,6 +16,7 @@ want to emulate the behavior of Percolator.
 
 import logging
 import pickle
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -25,6 +26,7 @@ from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.exceptions import NotFittedError
+from typeguard import typechecked
 
 LOGGER = logging.getLogger(__name__)
 
@@ -179,7 +181,8 @@ class Model:
         """Set the random number generator"""
         self._rng = np.random.default_rng(rng)
 
-    def save(self, out_file):
+    @typechecked
+    def save(self, out_file : Path):
         """
         Save the model to a file.
 
@@ -462,7 +465,8 @@ class DummyScaler:
 
 
 # Functions -------------------------------------------------------------------
-def save_model(model, out_file):
+@typechecked
+def save_model(model, out_file : Path):
     """
     Save a :py:class:`mokapot.model.Model` object to a file.
 
@@ -485,7 +489,8 @@ def save_model(model, out_file):
     return model.save(out_file)
 
 
-def load_model(model_file, data_to_rescale=None):
+@typechecked
+def load_model(model_file : Path, data_to_rescale=None):
     """
     Load a saved model for mokapot.
 

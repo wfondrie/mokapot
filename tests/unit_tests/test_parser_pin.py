@@ -1,4 +1,5 @@
 """Test that parsing Percolator input files works correctly"""
+from pathlib import Path
 
 import pytest
 import mokapot
@@ -46,4 +47,4 @@ def test_pin_parsing(std_pin):
 
 def test_pin_wo_dir():
     """Test a PIN file without a DefaultDirection line"""
-    mokapot.read_pin("data/scope2_FP97AA.pin", max_workers=4)
+    mokapot.read_pin(Path("data", "scope2_FP97AA.pin"), max_workers=4)

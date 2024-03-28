@@ -5,6 +5,7 @@ from the command line.
 
 import argparse
 import textwrap
+from pathlib import Path
 
 from mokapot import __version__
 
@@ -61,7 +62,7 @@ def _parser():
 
     parser.add_argument(
         "psm_files",
-        type=str,
+        type=Path,
         nargs="+",
         help=(
             "A collection of PSMs in the Percolator tab-delimited or PepXML "
@@ -72,7 +73,7 @@ def _parser():
     parser.add_argument(
         "-d",
         "--dest_dir",
-        type=str,
+        type=Path,
         help=(
             "The directory in which to write the result files. Defaults to "
             "the current working directory"
@@ -100,7 +101,7 @@ def _parser():
 
     parser.add_argument(
         "--proteins",
-        type=str,
+        type=Path,
         help=(
             "The FASTA file used for the database search. Using this "
             "option enable protein-level confidence estimates using "
@@ -285,7 +286,7 @@ def _parser():
 
     parser.add_argument(
         "--load_models",
-        type=str,
+        type=Path,
         nargs="+",
         help=(
             "Load previously saved models and skip model training."

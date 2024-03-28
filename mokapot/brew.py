@@ -144,6 +144,8 @@ def brew(
     # If trained models are provided, use the them as-is.
     try:
         fitted = [[m, False] for m in model if m.is_trained]
+        # todo: assertions with exceptions for control flow and checking user
+        #  input is atrocious
         assert len(fitted) == len(model)  # Test that all models are fitted.
         assert len(model) == folds
     except AssertionError as orig_err:

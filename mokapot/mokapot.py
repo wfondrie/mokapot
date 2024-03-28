@@ -74,11 +74,11 @@ def main(main_args=None):
     if config.aggregate or len(config.psm_files) == 1:
         for plugin in enabled_plugins.values():
             datasets = plugin.process_data(datasets, config)
-        prefixes = [None for f in config.psm_files]
+        prefixes = ["" for f in config.psm_files]
     else:
         for plugin in enabled_plugins.values():
             datasets = [plugin.process_data(ds, config) for ds in datasets]
-        prefixes = [Path(f).stem for f in config.psm_files]
+        prefixes = [f.stem for f in config.psm_files]
 
     # Parse FASTA, if required:
     if config.proteins is not None:
@@ -156,10 +156,12 @@ def main(main_args=None):
     logging.info("")
 
     if config.dest_dir is not None:
-        Path(config.dest_dir).mkdir(exist_ok=True)
+        config.dest_dir.mkdir(exist_ok=True)
 
     if config.file_root is not None:
-        config.dest_dir = f"{Path(config.dest_dir, config.file_root)}."
+        file_root = f"{config.file_root}."
+    else:
+        file_root = ""
 
     assign_confidence(psms=psms,
                       max_workers=config.max_workers,
@@ -167,6 +169,7 @@ def main(main_args=None):
                       descs=desc,
                       eval_fdr=config.test_fdr,
                       dest_dir=config.dest_dir,
+                      file_root=file_root,
                       prefixes=prefixes,
                       decoys=config.keep_decoys,
                       do_rollup=not config.skip_rollup,
@@ -179,15 +182,15 @@ def main(main_args=None):
     if config.save_models:
         logging.info("Saving models...")
         for i, trained_model in enumerate(models):
-            out_file = f"mokapot.model_fold-{i + 1}.pkl"
+            out_file = Path(f"mokapot.model_fold-{i + 1}.pkl")
 
             if config.file_root is not None:
-                out_file = ".".join([config.file_root, out_file])
+                out_file = Path(config.file_root + "." + out_file.name)
 
             if config.dest_dir is not None:
-                out_file = Path(config.dest_dir, out_file)
+                out_file = config.dest_dir / out_file
 
-            trained_model.save(str(out_file))
+            trained_model.save(out_file)
 
     total_time = round(time.time() - start)
     total_time = str(datetime.timedelta(seconds=total_time))

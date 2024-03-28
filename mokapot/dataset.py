@@ -19,10 +19,12 @@ One of more instance of this class are required to use the
 
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from zlib import crc32
 import numpy as np
 import pandas as pd
+from typeguard import typechecked
 
 from . import qvalues
 from . import utils
@@ -578,9 +580,10 @@ class CrossLinkedPsmDataset(PsmDataset):
 
 
 class OnDiskPsmDataset:
+    @typechecked
     def __init__(
         self,
-        filename,
+        filename : Path | None,
         columns,
         target_column,
         spectrum_columns,
@@ -853,7 +856,8 @@ def calibrate_scores(scores, targets, eval_fdr, desc=True):
     return (scores - target_score) / (target_score - decoy_score)
 
 
-def update_labels(file_name, scores, target_column, eval_fdr=0.01, desc=True):
+@typechecked
+def update_labels(file_name : Path, scores, target_column, eval_fdr=0.01, desc=True):
     df = read_file(
         file_name=file_name,
         use_cols=[target_column],
@@ -866,8 +870,8 @@ def update_labels(file_name, scores, target_column, eval_fdr=0.01, desc=True):
         desc=desc,
     )
 
-
-def read_file(file_name, use_cols=None, target_column=None):
+@typechecked
+def read_file(file_name : Path, use_cols=None, target_column=None):
     with utils.open_file(file_name) as f:
         df = pd.read_csv(
             f, sep="\t", usecols=use_cols, index_col=False, on_bad_lines="skip"

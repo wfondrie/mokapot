@@ -3,6 +3,8 @@ This file contains fixtures that are used at multiple points in the tests.
 """
 
 import logging
+from pathlib import Path
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -151,7 +153,7 @@ def psms(psm_df_1000):
 @pytest.fixture
 def psms_ondisk():
     """A small OnDiskPsmDataset"""
-    filename = "data/scope2_FP97AA.pin"
+    filename = Path("data", "scope2_FP97AA.pin")
     df_spectra = pd.read_csv(
         filename, sep="\t", usecols=["ScanNr", "ExpMass", "Label"]
     )

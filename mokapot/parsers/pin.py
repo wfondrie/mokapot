@@ -3,6 +3,7 @@ This module contains the parsers for reading in PSMs
 """
 
 import logging
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
@@ -143,7 +144,7 @@ def create_chunks_with_identifier(data, identifier_column, chunk_size):
 
 
 def read_percolator(
-    perc_file,
+    perc_file : Path,
     max_workers,
     group_column=None,
     filename_column=None,
@@ -161,7 +162,7 @@ def read_percolator(
 
     Parameters
     ----------
-    perc_file : str
+    perc_file : Path
         The file to parse.
 
     Returns

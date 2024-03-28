@@ -13,15 +13,15 @@ from .utils import get_unique_peptides_from_psms, merge_sort
 
 def main(main_args=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--targets_psms", type=str, required=True)
-    parser.add_argument("--decoys_psms", type=str, required=True)
+    parser.add_argument("--targets_psms", type=Path, required=True)
+    parser.add_argument("--decoys_psms", type=Path, required=True)
     parser.add_argument("--test_fdr", type=float, default=0.01)
     parser.add_argument(
         "--keep_decoys",
         action="store_true",
         default=False,
     )
-    parser.add_argument("--dest_dir", type=str)
+    parser.add_argument("--dest_dir", type=Path)
     parser.add_argument(
         "--verbosity", type=int, choices=[0, 1, 2, 3], default=2
     )
@@ -87,9 +87,10 @@ def main(main_args=None):
 
     # Find unique peptides and write to a temporary file (used later on)
     # todo: should be a Path object, no string
-    peptides_path = str(Path(args.dest_dir) / "peptides.csv")
+    peptides_path = Path(args.dest_dir) / "peptides.csv"
     with open(peptides_path, "w") as f_peptide:
         f_peptide.write(f"{sep.join(metadata_columns)}\n")
+
     unique_peptides = get_unique_peptides_from_psms(
         iterable=iterable,
         peptide_col_index=2,
@@ -98,16 +99,13 @@ def main(main_args=None):
     )
     logging.info("\t- Found %i unique peptides.", unique_peptides)
 
-    out_targets, out_decoys = [
-        os.path.split(in_path)[-1].rsplit(".", 1)[0] + ".peptides"
-        for in_path in [args.targets_psms, args.decoys_psms]
-    ]
+    out_targets = args.targets_psms.with_suffix(".peptides")
+    out_decoys = args.decoys_psms.with_suffix(".peptides")
     if args.dest_dir is not None:
-        Path(args.dest_dir).mkdir(exist_ok=True)
-        out_targets, out_decoys = [
-            os.path.join(args.dest_dir, out_path)
-            for out_path in [out_targets, out_decoys]
-        ]
+        args.dest_dir.mkdir(exist_ok=True)
+        out_targets = args.dest_dir / out_targets.name
+        out_decoys = args.dest_dir / out_decoys.name
+
     with open(out_targets, "w") as fp:
         fp.write(f"{sep.join(output_columns)}\n")
     if args.keep_decoys:

@@ -4,6 +4,7 @@ Utility functions
 
 import itertools
 import gzip
+from pathlib import Path
 from typing import Union
 
 import numpy as np
@@ -11,8 +12,9 @@ import pandas as pd
 from typeguard import typechecked
 
 
-def open_file(file_name):
-    if str(file_name).endswith(".gz"):
+@typechecked
+def open_file(file_name : Path):
+    if file_name.suffix == ".gz":
         return gzip.open(file_name)
     else:
         return open(file_name)
@@ -91,8 +93,9 @@ def create_chunks(data: Union[list, np.array], chunk_size: int) -> \
     return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
+@typechecked
 def get_unique_peptides_from_psms(
-    iterable, peptide_col_index, out_peptides, sep
+    iterable, peptide_col_index, out_peptides : Path, sep
 ):
     f_peptide = open(out_peptides, "a")
     seen_peptide = set()
