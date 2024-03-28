@@ -365,7 +365,7 @@ def mock_proteins():
 
 @pytest.fixture
 def mock_conf():
-    "Create a mock-up of a LinearConfidence object"
+    """Create a mock-up of a LinearConfidence object"""
 
     class conf:
         def __init__(self):
@@ -398,3 +398,13 @@ def mock_conf():
             self.decoy_confidence_estimates = {"peptides": self.peptides}
 
     return conf()
+
+
+def pytest_sessionstart(session):
+    # Set pandas max_columns such, that when debugging you can see all columns
+    # of a dataframe instead of just a few
+    pd.set_option("display.max_columns", None)
+
+    # Also set full precision
+    # (see https://pandas.pydata.org/docs/user_guide/options.html)
+    pd.set_option("display.precision", 17)
