@@ -1,4 +1,3 @@
-import os
 import sys
 import argparse
 import logging
@@ -122,7 +121,7 @@ def main(main_args=None):
         sep=sep,
     )
 
-    os.remove(peptides_path)
+    peptides_path.unlink()
 
 if __name__ == "__main__":
     try:

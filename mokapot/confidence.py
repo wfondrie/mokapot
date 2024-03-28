@@ -16,9 +16,6 @@ We recommend using the :py:func:`~mokapot.brew()` function or the
 confidence estimates, rather than initializing the classes below directly.
 """
 
-import os
-import glob
-
 import logging
 from pathlib import Path
 
@@ -81,6 +78,7 @@ class GroupedConfidence:
             Should groups be combined into a single file?
     """
 
+    @typechecked
     def __init__(
         self,
         psms,
@@ -89,7 +87,7 @@ class GroupedConfidence:
         desc=True,
         eval_fdr=0.01,
         decoys=False,
-        dest_dir=None,
+        dest_dir: Path | None = None,
         sep="\t",
         proteins=None,
         combine=False,
@@ -142,7 +140,7 @@ class GroupedConfidence:
             )
             if combine:
                 append_to_group = True
-            os.remove(group_file)
+            group_file.unlink()
 
     @property
     def group_confidence_estimates(self):
@@ -943,7 +941,7 @@ def assign_confidence(
                         )
                 LOGGER.info("\t- Found %i PSMs.", n_psms)
 
-            [os.remove(sc_path) for sc_path in scores_metadata_paths]
+            [sc_path.unlink() for sc_path in scores_metadata_paths]
 
             LinearConfidence(
                 psms=_psms,

@@ -6,7 +6,6 @@ At least for now, this means testing the correlation between mokapot
 results and Percolator results.
 """
 
-import os
 import logging
 from pathlib import Path
 

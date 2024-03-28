@@ -1,5 +1,4 @@
 """Test the utility functions"""
-import os
 
 import pytest
 import numpy as np
@@ -41,7 +40,7 @@ def peptide_csv_file(tmp_path):
     with open(file, "w") as f:
         f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
     yield file
-    os.unlink(file)
+    file.unlink()
 
 
 def test_groupby_max(df):
