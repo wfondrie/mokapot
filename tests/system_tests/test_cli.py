@@ -172,15 +172,15 @@ def test_cli_plugins(tmp_path, phospho_files):
     assert "Yelling at the user" in res['stderr']
 
 
-def test_cli_skip_deduplication(tmp_path, phospho_files):
-    """Test that peptides file results is skipped when using skip_deduplication"""
+def test_cli_skip_rollup(tmp_path, phospho_files):
+    """Test that peptides file results is skipped when using skip_rollup"""
     params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
         "--test_fdr",
         "0.01",
-        "--skip_deduplication",
+        "--skip_rollup",
     ]
 
     run_mokapot_cli(params)

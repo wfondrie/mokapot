@@ -309,10 +309,10 @@ def _parser():
     )
 
     parser.add_argument(
-        "--skip_deduplication",
+        "--skip_rollup",
         default=False,
         action="store_true",
-        help=("Keep deduplication"),
+        help=("Don't do the rollup to peptide (or other) levels."),
     )
 
     parser.add_argument(

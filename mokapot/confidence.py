@@ -436,7 +436,7 @@ class LinearConfidence(Confidence):
         desc=True,
         eval_fdr=0.01,
         decoys=None,
-        deduplication=True,
+        do_rollup=True,
         proteins=None,
         peps_error=False,
         sep="\t",
@@ -450,7 +450,7 @@ class LinearConfidence(Confidence):
         self._peptide_column = "peptide"
         self._protein_column = "proteinIds"
         self._eval_fdr = eval_fdr
-        self.deduplication = deduplication
+        self.do_rollup = do_rollup
 
         self._assign_confidence(
             level_paths=level_paths,
@@ -781,7 +781,7 @@ def assign_confidence(
     decoys : bool, optional
         Save decoys confidence estimates as well?
     do_rollup: bool
-        do we apply deduplication on peptides?
+        do we apply rollup on peptides, modified peptides etc.?
     proteins: Proteins, optional
         collection of proteins
     combine : bool, optional
@@ -957,7 +957,7 @@ def assign_confidence(
                 desc=desc,
                 sep=sep,
                 decoys=decoys,
-                deduplication=do_rollup,
+                do_rollup=do_rollup,
                 proteins=proteins,
                 rng=rng,
                 peps_error=peps_error,
@@ -986,7 +986,7 @@ def assign_confidence(
 
 
 def save_sorted_metadata_chunks(
-    chunk_metadata, score_chunk, psms, deduplication, i, sep, dest_dir_prefix
+    chunk_metadata, score_chunk, psms, do_rollup, i, sep, dest_dir_prefix
 ):
     chunk_metadata = convert_targets_column(
         data=chunk_metadata.apply(pd.to_numeric, errors="ignore"),
@@ -994,7 +994,7 @@ def save_sorted_metadata_chunks(
     )
     chunk_metadata["score"] = score_chunk
     chunk_metadata.sort_values(by="score", ascending=False, inplace=True)
-    if deduplication:
+    if do_rollup:
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
     chunk_metadata.to_csv(
         f"{dest_dir_prefix}scores_metadata_{i}.csv",
