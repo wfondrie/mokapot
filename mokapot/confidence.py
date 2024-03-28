@@ -342,7 +342,6 @@ class Confidence(object):
                 data_in.loc[~target_in, :].to_csv(
                     out_paths[1], sep=sep, index=False, mode="a", header=None
                 )
-        os.remove(data_path)
         return out_paths
 
     def _perform_tdc(self, psms, psm_columns):

@@ -84,7 +84,10 @@ def main(main_args=None):
         "posterior_error_prob",
         "proteinIds",
     ]
-    peptides_path = "peptides.csv"
+
+    # Find unique peptides and write to a temporary file (used later on)
+    # todo: should be a Path object, no string
+    peptides_path = str(Path(args.dest_dir) / "peptides.csv")
     with open(peptides_path, "w") as f_peptide:
         f_peptide.write(f"{sep.join(metadata_columns)}\n")
     unique_peptides = get_unique_peptides_from_psms(
@@ -121,6 +124,7 @@ def main(main_args=None):
         sep=sep,
     )
 
+    os.remove(peptides_path)
 
 if __name__ == "__main__":
     try:
