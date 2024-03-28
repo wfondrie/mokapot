@@ -739,14 +739,14 @@ def assign_confidence(
     sep="\t",
     prefixes=None,
     decoys=False,
-    deduplication=True,
+    do_rollup=True,
     proteins=None,
     group_column=None,
     combine=False,
     append_to_output_file=False,
     rng=0,
     peps_error=False,
-    peps_algorithm="qvality", 
+    peps_algorithm="qvality",
     qvalue_algorithm="tdc",
 ):
     """Assign confidence to PSMs peptides, and optionally, proteins.
@@ -780,7 +780,7 @@ def assign_confidence(
         The prefixes added to all output file names.
     decoys : bool, optional
         Save decoys confidence estimates as well?
-    deduplication: bool
+    do_rollup: bool
         do we apply deduplication on peptides?
     proteins: Proteins, optional
         collection of proteins
@@ -814,11 +814,14 @@ def assign_confidence(
     peptides_path = f"{dest_dir}peptides.csv"
     levels = ["psms"]
     level_data_path = [psms_path]
-    if deduplication:
+
+    if do_rollup:
         levels.append("peptides")
         level_data_path.append(peptides_path)
+
     if proteins:
         levels.append("proteins")
+
     out_columns_psms_peps = [
         "PSMId",
         "peptide",
@@ -888,7 +891,7 @@ def assign_confidence(
                     chunk_metadata,
                     score_chunk,
                     _psms,
-                    deduplication,
+                    do_rollup,
                     i,
                     sep,
                     dest_dir_prefix,
@@ -914,7 +917,7 @@ def assign_confidence(
             with open(psms_path, "w") as f_psm:
                 f_psm.write(f"{sep.join(metadata_columns)}\n")
 
-            if deduplication:
+            if do_rollup:
                 with open(peptides_path, "w") as f_peptide:
                     f_peptide.write(f"{sep.join(metadata_columns)}\n")
 
@@ -954,7 +957,7 @@ def assign_confidence(
                 desc=desc,
                 sep=sep,
                 decoys=decoys,
-                deduplication=deduplication,
+                deduplication=do_rollup,
                 proteins=proteins,
                 rng=rng,
                 peps_error=peps_error,
