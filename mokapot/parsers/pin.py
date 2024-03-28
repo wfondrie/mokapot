@@ -173,14 +173,20 @@ def read_percolator(
     LOGGER.info("Reading %s...", perc_file)
     columns = get_column_names_from_file(perc_file)
 
-    # TODO: Refactor the generation of column variables with simpler implementation
     # Find all of the necessary columns, case-insensitive:
     specid = find_columns("specid", columns)
     peptides = find_columns("peptide", columns)
     proteins = find_columns("proteins", columns)
     labels = find_columns("label", columns)
     scan = find_columns("scannr", columns)[0]
-    nonfeat = sum([specid, [scan], peptides, proteins, labels], [])
+    nonfeat = specid + [scan] + peptides + proteins + labels
+
+    # Columns for different rollup levels
+    modifiedpeptides = find_columns("modifiedpeptide", columns)
+    pcms = find_columns("pcm", columns)
+    peptidegroups = find_columns("peptidegroup", columns)
+    level_columns = peptides + proteins + modifiedpeptides + pcms + peptidegroups
+    nonfeat += modifiedpeptides + pcms + peptidegroups
 
     # Optional columns
     filename = find_column(filename_column, columns, "filename")

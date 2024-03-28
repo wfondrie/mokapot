@@ -49,6 +49,7 @@ def _run_cli(module: str, main_func: Callable, params: List[Any],
         stderr_sink = io.StringIO()
         with redirect_stdout(stdout_sink), redirect_stderr(stderr_sink):
             main_func([str(c) for c in params])
+
         if capture_output:
             return {'stdout': stdout_sink.getvalue(),
                     'stderr': stderr_sink.getvalue()}
