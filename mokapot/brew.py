@@ -87,16 +87,19 @@ def brew(
 
     Returns
     -------
-    Confidence object or list of Confidence objects
+    confidence : Confidence
         An object or a list of objects containing the
         :doc:`confidence estimates <confidence>` at various levels
         (i.e. PSMs, peptides) when assessed using the learned score.
         If a list, they will be in the same order as provided in the
         `psms` parameter.
-    list of Model objects
+    models : list[Model]
         The learned :py:class:`~mokapot.model.Model` objects, one
         for each fold.
-
+    scores : list[float]
+        The scores
+    descs : list[bool]
+        Whether the order is descending or ascending
     """
     rng = np.random.default_rng(rng)
     if model is None:
