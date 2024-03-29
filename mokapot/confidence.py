@@ -808,14 +808,16 @@ def assign_confidence(
                 ].values
             )
 
-    psms_path = dest_dir / f"{file_root}psms.csv"
-    peptides_path = dest_dir / f"{file_root}peptides.csv"
+    level_columns = psms[0].level_columns
+
     levels = ["psms"]
-    level_data_path = [psms_path]
+    level_data_path = [dest_dir / f"{file_root}psms.csv"]
+    level_dedup = [False]
 
     if do_rollup:
         levels.append("peptides")
-        level_data_path.append(peptides_path)
+        level_data_path.append(dest_dir / f"{file_root}peptides.csv")
+        level_dedup = [True]
 
     if proteins:
         levels.append("proteins")
@@ -837,7 +839,7 @@ def assign_confidence(
         "posterior_error_prob",
     ]
     output_columns = {
-        "psms": out_columns_psms_peps,
+        "psms":     out_columns_psms_peps,
         "peptides": out_columns_psms_peps,
         "proteins": out_columns_proteins,
     }
@@ -909,11 +911,11 @@ def assign_confidence(
                 "+".join(_psms.spectrum_columns),
             )
 
-            with open(psms_path, "w") as f_psm:
+            with open(level_data_path[0], "w") as f_psm:
                 f_psm.write(f"{sep.join(metadata_columns)}\n")
 
             if do_rollup:
-                with open(peptides_path, "w") as f_peptide:
+                with open(level_data_path[1], "w") as f_peptide:
                     f_peptide.write(f"{sep.join(metadata_columns)}\n")
 
                 (
@@ -921,8 +923,8 @@ def assign_confidence(
                     unique_peptides,
                 ) = get_unique_psms_and_peptides(
                     iterable=iterable_sorted,
-                    out_psms=dest_dir / f"{file_root}psms.csv",
-                    out_peptides=dest_dir / f"{file_root}peptides.csv",
+                    out_psms=level_data_path[0],
+                    out_peptides=level_data_path[1],
                     sep=sep,
                 )
                 LOGGER.info(
@@ -933,7 +935,7 @@ def assign_confidence(
                 n_psms = 0
                 for row in iterable_sorted:
                     n_psms += 1
-                    with open(psms_path, "a") as f_psm:
+                    with open(level_data_path[0], "a") as f_psm:
                         f_psm.write(
                             sep.join(
                                 [row[0], row[1], row[-3], row[-2], row[-1]]
