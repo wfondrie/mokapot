@@ -403,6 +403,29 @@ def mock_conf():
     return conf()
 
 
+@pytest.fixture
+def peptide_csv_file(tmp_path):
+    file = tmp_path / "peptides.csv"
+    with open(file, "w") as f:
+        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
+    yield file
+    file.unlink()
+
+
+@pytest.fixture
+def psms_iterator():
+    """Create a standard psms iterable"""
+    return [
+        ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
+        ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
+        ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
+        ["4", "1", "QILVQLR", "-5.92", "0.12", "1.0", "_.dummy._\n"],
+        ["5", "1", "HLAQLLR", "-6.05", "0.13", "1.0", "_.dummy._\n"],
+        ["6", "0", "QILVQLR", "-6.06", "0.14", "1.0", "_.dummy._\n"],
+        ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
+    ]
+
+
 def pytest_sessionstart(session):
     # Set pandas max_columns such, that when debugging you can see all columns
     # of a dataframe instead of just a few

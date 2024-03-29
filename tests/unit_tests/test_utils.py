@@ -3,6 +3,8 @@
 import pytest
 import numpy as np
 import pandas as pd
+from pandas.testing import assert_series_equal
+
 from mokapot import utils
 
 
@@ -18,29 +20,6 @@ def df():
     max_res = {"val1": [2, 1, 3], "val2": [1, 1, 1], "group": ["A", "B", "C"]}
 
     return pd.DataFrame(data), pd.DataFrame(max_res)
-
-
-@pytest.fixture
-def psms_iterator():
-    """Create a standard psms iterable"""
-    return [
-        ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
-        ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
-        ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
-        ["4", "1", "QILVQLR", "-5.92", "0.12", "1.0", "_.dummy._\n"],
-        ["5", "1", "HLAQLLR", "-6.05", "0.13", "1.0", "_.dummy._\n"],
-        ["6", "0", "QILVQLR", "-6.06", "0.14", "1.0", "_.dummy._\n"],
-        ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
-    ]
-
-
-@pytest.fixture
-def peptide_csv_file(tmp_path):
-    file = tmp_path / "peptides.csv"
-    with open(file, "w") as f:
-        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
-    yield file
-    file.unlink()
 
 
 def test_groupby_max(df):
@@ -126,32 +105,6 @@ def test_create_chunks():
 
     # Case 6: Empty data array, chunk size doesn't matter
     assert utils.create_chunks([], 3) == []
-
-
-def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
-    psms_iterator = psms_iterator
-    utils.get_unique_peptides_from_psms(
-        iterable=psms_iterator,
-        peptide_col_index=2,
-        out_peptides=peptide_csv_file,
-        sep="\t",
-    )
-
-    expected_output = pd.DataFrame(
-        [
-            [1, 1, "HLAQLLR", -5.75, "_.dummy._"],
-            [3, 0, "NVPTSLLK", -5.83, "_.dummy._"],
-            [4, 1, "QILVQLR", -5.92, "_.dummy._"],
-            [7, 1, "SRTSVIPGPK", -6.12, "_.dummy._"],
-        ],
-        columns=["PSMId", "Label", "Peptide", "score", "proteinIds"],
-    )
-
-    output = pd.read_csv(peptide_csv_file, sep="\t")
-    pd.testing.assert_frame_equal(expected_output, output)
-
-
-from pandas.testing import assert_series_equal
 
 
 def test_convert_targets_column(psms_iterator):

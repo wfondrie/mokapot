@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import copy
 from mokapot import OnDiskPsmDataset, assign_confidence
+from mokapot.confidence import get_unique_peptides_from_psms
 
 
 def test_one_group(psm_df_1000, tmp_path):
@@ -111,3 +112,26 @@ def test_multi_groups(psm_df_100, tmp_path):
     assert Path(tmp_path, f"{1}.targets.psms").exists()
     assert Path(tmp_path, f"{0}.targets.peptides").exists()
     assert Path(tmp_path, f"{1}.targets.peptides").exists()
+
+
+def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
+    psms_iterator = psms_iterator
+    get_unique_peptides_from_psms(
+        iterable=psms_iterator,
+        peptide_col_index=2,
+        out_peptides=peptide_csv_file,
+        sep="\t",
+    )
+
+    expected_output = pd.DataFrame(
+        [
+            [1, 1, "HLAQLLR", -5.75, "_.dummy._"],
+            [3, 0, "NVPTSLLK", -5.83, "_.dummy._"],
+            [4, 1, "QILVQLR", -5.92, "_.dummy._"],
+            [7, 1, "SRTSVIPGPK", -6.12, "_.dummy._"],
+        ],
+        columns=["PSMId", "Label", "Peptide", "score", "proteinIds"],
+    )
+
+    output = pd.read_csv(peptide_csv_file, sep="\t")
+    pd.testing.assert_frame_equal(expected_output, output)

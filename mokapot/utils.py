@@ -93,49 +93,6 @@ def create_chunks(data: Union[list, np.array], chunk_size: int) -> \
     return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
-@typechecked
-def get_unique_peptides_from_psms(
-    iterable, peptide_col_index, out_peptides : Path, sep
-):
-    f_peptide = open(out_peptides, "a")
-    seen_peptide = set()
-    for line_list in iterable:
-        line_hash_peptide = line_list[peptide_col_index]
-        if line_hash_peptide not in seen_peptide:
-            seen_peptide.add(line_hash_peptide)
-            f_peptide.write(f"{sep.join(line_list[:4] + [line_list[-1]])}")
-
-    f_peptide.close()
-    return len(seen_peptide)
-
-
-def get_unique_psms_and_peptides(iterable, out_psms, out_peptides, sep):
-    seen_psm = set()
-    seen_peptide = set()
-    f_psm = open(out_psms, "a")
-    f_peptide = open(out_peptides, "a")
-
-    for line_list in iterable:
-        line_hash_psm = tuple([int(line_list[2]), float(line_list[3])])
-        line_hash_peptide = line_list[-3]
-        line = [
-            line_list[0],
-            line_list[1],
-            line_list[-3],
-            line_list[-2],
-            line_list[-1],
-        ]
-        if line_hash_psm not in seen_psm:
-            seen_psm.add(line_hash_psm)
-            f_psm.write(f"{sep.join(line)}")
-            if line_hash_peptide not in seen_peptide:
-                seen_peptide.add(line_hash_peptide)
-                f_peptide.write(f"{sep.join(line)}")
-    f_psm.close()
-    f_peptide.close()
-    return [len(seen_psm), len(seen_peptide)]
-
-
 def get_next_row(file_handles, current_rows, col_index, sep="\t"):
     max_key = max_row = None
     max_score = None

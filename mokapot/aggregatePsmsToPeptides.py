@@ -5,9 +5,9 @@ import warnings
 from pathlib import Path
 
 from . import __version__
-from .confidence import LinearConfidence
+from .confidence import LinearConfidence, get_unique_peptides_from_psms
 from .dataset import OnDiskPsmDataset
-from .utils import get_unique_peptides_from_psms, merge_sort
+from .utils import merge_sort
 
 
 def main(main_args=None):
