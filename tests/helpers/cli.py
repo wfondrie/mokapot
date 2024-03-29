@@ -38,6 +38,7 @@ def _run_cli(module: str, main_func: Callable, params: List[Any],
     else:
         run_in_subprocess = True
 
+    params = [str(param) for param in params]
     if run_in_subprocess:
         cmd = ["python", "-m", module] + params
         res = subprocess.run(cmd, check=True, capture_output=capture_output)
@@ -48,7 +49,7 @@ def _run_cli(module: str, main_func: Callable, params: List[Any],
         stdout_sink = io.StringIO()
         stderr_sink = io.StringIO()
         with redirect_stdout(stdout_sink), redirect_stderr(stderr_sink):
-            main_func([str(c) for c in params])
+            main_func(params)
 
         if capture_output:
             return {'stdout': stdout_sink.getvalue(),
