@@ -40,7 +40,7 @@ def test_one_group(psm_df_1000, tmp_path):
             "target",
         ],
         level_columns=["peptide"],
-        specId_column="spectrum",
+        specId_column="specid",
         spectra_dataframe=df_spectra,
     )
     np.random.seed(42)

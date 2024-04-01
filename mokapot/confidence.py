@@ -19,6 +19,7 @@ confidence estimates, rather than initializing the classes below directly.
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from triqler import qvality
@@ -32,8 +33,9 @@ from .utils import (
     groupby_max,
     convert_targets_column,
     merge_sort,
+    map_columns_to_indices
 )
-from .dataset import read_file
+from .dataset import read_file, PsmDataset, OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
 from .parsers.pin import read_file_in_chunks
@@ -332,9 +334,13 @@ class Confidence(object):
             data_in["qvals"] = qvals_in
             data_in["PEP"] = pep_in
             if level != "proteins" and self._protein_column is not None:
+                # EZ: seems to move the proteinIds column to the back (last col)
                 data_in[self._protein_column] = data_in.pop(
                     self._protein_column
                 )
+
+            # EZ: the definitions of the columns are to be found in
+            # assign_confidence (that's where the file headers are written)
             data_in.loc[target_in, :].to_csv(
                 out_paths[0], sep=sep, index=False, mode="a", header=None
             )
@@ -540,10 +546,9 @@ class LinearConfidence(Confidence):
             proteins = proteins.sort_values(
                 by=self._score_column, ascending=False
             ).reset_index(drop=True)
-            proteins_path = Path("proteins.csv")
+            proteins_path = level_paths[-1]
             proteins.to_csv(proteins_path, index=False, sep=sep)
-            levels += ["proteins"]
-            level_paths += [proteins_path]
+            assert levels[-1] == "proteins" # todo
             out_paths += [
                 _psms.with_suffix(".proteins")
                 for _psms in out_paths[0]
@@ -807,19 +812,38 @@ def assign_confidence(
                 ].values
             )
 
-    level_columns = psms[0].level_columns
+    curr_psms = psms[0] # just take the first one for info (need to make sure the other are the same)
+
+    # todo: maybe use a collections.namedtuple for all the level info instead of all the ?
+    # from collections import namedtuple
+    # LevelInfo = namedtuple('LevelInfo', ['name', 'data_path', 'deduplicate', 'colnames', 'colindices'])
 
     levels = ["psms"]
     level_data_path = [dest_dir / f"{file_root}psms.csv"]
     level_dedup = [False]
+    level_input_columns = [curr_psms.spectrum_columns]
 
     if do_rollup:
-        levels.append("peptides")
-        level_data_path.append(dest_dir / f"{file_root}peptides.csv")
-        level_dedup = [True]
+        level_columns = curr_psms.level_columns
+        level_columns = level_columns[:1] # strip for the moment to peptides, todo: remove this later
+
+        for level_column in level_columns:
+            level = level_column.lower() + "s"  # e.g. Peptide to peptides
+            levels.append(level)
+            level_data_path.append(dest_dir / f"{file_root}{level}.csv")
+            level_dedup.append(True)
+            level_input_columns.append(level_column)
+
+    level_input_colidx = map_columns_to_indices(level_input_columns, curr_psms.columns)
 
     if proteins:
+        # if do_rollup:
+        #     # Rather: both don't work together
+        #     raise NotImplementedError("Does not work for proteins yet")
         levels.append("proteins")
+        level_data_path.append(dest_dir / f"{file_root}proteins.csv")
+        level_dedup.append("I don't know")
+        level_input_columns.append(curr_psms.protein_column)
 
     out_columns_psms_peps = [
         "PSMId",
@@ -837,7 +861,7 @@ def assign_confidence(
         "q-value",
         "posterior_error_prob",
     ]
-    output_columns = {
+    output_columns_map = {
         "psms":     out_columns_psms_peps,
         "peptides": out_columns_psms_peps,
         "proteins": out_columns_proteins,
@@ -858,6 +882,7 @@ def assign_confidence(
 
             out_files = []
             for level in levels:
+                output_columns = output_columns_map[level]
                 if group_column is not None and not combine:
                     file_prefix_group = f"{file_prefix}{group_column}."
                 else:
@@ -866,12 +891,12 @@ def assign_confidence(
                 outfile_d = dest_dir / f"{file_prefix_group}decoys.{level}"
                 if not append_to_output_file:
                     with open(outfile_t, "w") as fp:
-                        fp.write(f"{sep.join(output_columns[level])}\n")
+                        fp.write(f"{sep.join(output_columns)}\n")
                 out_files.append([outfile_t])
                 if decoys:
                     if not append_to_output_file:
                         with open(outfile_d, "w") as fp:
-                            fp.write(f"{sep.join(output_columns[level])}\n")
+                            fp.write(f"{sep.join(output_columns)}\n")
                     out_files[-1].append(outfile_d)
 
             reader = read_file_in_chunks(
@@ -898,6 +923,15 @@ def assign_confidence(
                     reader, scores_slices, range(len(scores_slices))
                 )
             )
+            # EZ: output columns are: columns of chunk_metadata, which is
+            # _psms.metadata_columns (but in file order) + "score" column
+
+            # We determine here the current order of the columns returns by reader
+            # as long as read_file_in_chunks returns columns in file order rather
+            # than in metadata_columns order
+            # fixme: fix this too as soon as read_file_... is fixed
+            temp_idx = map_columns_to_indices(_psms.metadata_columns, _psms.columns)
+            reader_columns = list(np.array(_psms.columns)[sorted(temp_idx)]) + ["score"]
 
             scores_metadata_paths = list(dest_dir.glob(f"{file_prefix}scores_metadata_*"))
             iterable_sorted = merge_sort(
@@ -913,6 +947,17 @@ def assign_confidence(
             with open(level_data_path[0], "w") as f_psm:
                 f_psm.write(f"{sep.join(metadata_columns)}\n")
 
+            input_columns = [
+                _psms.specId_column,
+                _psms.target_column,
+                _psms.spectrum_columns[0], # scannr todo: (this is ugly)
+                _psms.spectrum_columns[1], # expmass todo: (this also, needs to change)
+                _psms.peptide_column,
+                _psms.protein_column,
+                "score",
+            ]
+            input_colidx = map_columns_to_indices(input_columns, reader_columns)
+
             if do_rollup:
                 with open(level_data_path[1], "w") as f_peptide:
                     f_peptide.write(f"{sep.join(metadata_columns)}\n")
@@ -922,6 +967,7 @@ def assign_confidence(
                     unique_peptides,
                 ) = get_unique_psms_and_peptides(
                     iterable=iterable_sorted,
+                    input_colidx=input_colidx,
                     out_psms=level_data_path[0],
                     out_peptides=level_data_path[1],
                     sep=sep,
@@ -931,18 +977,23 @@ def assign_confidence(
                 )
                 LOGGER.info("\t- Found %i unique peptides.", unique_peptides)
             else:
+                (specid_idx, label_idx, scannr_idx, expmass_idx, peptide_idx,
+                 proteins_idx, score_idx) = tuple(input_colidx)
+                output_colidx = [specid_idx, label_idx, peptide_idx,
+                                 proteins_idx, score_idx]
+
                 n_psms = 0
                 for row in iterable_sorted:
                     n_psms += 1
+                    row = np.array(row)
+                    num_cols = len(row)
+                    # input_colidx = np.array([0, 1, num_cols-3, num_cols-2, num_cols-1]) # todo: get from bla
                     with open(level_data_path[0], "a") as f_psm:
-                        f_psm.write(
-                            sep.join(
-                                [row[0], row[1], row[-3], row[-2], row[-1]]
-                            )
-                        )
+                        f_psm.write(sep.join(row[output_colidx]))
                 LOGGER.info("\t- Found %i PSMs.", n_psms)
 
-            [sc_path.unlink() for sc_path in scores_metadata_paths]
+            # xno-commit
+            # [os.remove(sc_path) for sc_path in scores_metadata_paths]
 
             LinearConfidence(
                 psms=_psms,
@@ -983,7 +1034,7 @@ def assign_confidence(
 
 @typechecked
 def save_sorted_metadata_chunks(
-    chunk_metadata, score_chunk, psms, do_rollup, i, sep, dest_dir : Path, file_prefix : str
+    chunk_metadata : pd.DataFrame, score_chunk, psms, do_rollup, i, sep, dest_dir : Path, file_prefix : str
 ):
     chunk_metadata = convert_targets_column(
         data=chunk_metadata.apply(pd.to_numeric, errors="ignore"),
@@ -1003,22 +1054,19 @@ def save_sorted_metadata_chunks(
     )
 
 
-def get_unique_psms_and_peptides(iterable, out_psms, out_peptides, sep):
+def get_unique_psms_and_peptides(iterable, input_colidx, out_psms, out_peptides, sep):
     seen_psm = set()
     seen_peptide = set()
     f_psm = open(out_psms, "a")
     f_peptide = open(out_peptides, "a")
 
+    specid_idx, label_idx, scannr_idx, expmass_idx, peptide_idx, proteins_idx, score_idx = tuple(input_colidx)
+    output_colidx = [specid_idx, label_idx, peptide_idx, proteins_idx, score_idx]
+
     for line_list in iterable:
-        line_hash_psm = tuple([int(line_list[2]), float(line_list[3])])
-        line_hash_peptide = line_list[-3]
-        line = [
-            line_list[0],
-            line_list[1],
-            line_list[-3],
-            line_list[-2],
-            line_list[-1],
-        ]
+        line_hash_psm = tuple([int(line_list[scannr_idx]), float(line_list[expmass_idx])])
+        line_hash_peptide = line_list[peptide_idx]
+        line = (np.array(line_list))[output_colidx]
         if line_hash_psm not in seen_psm:
             seen_psm.add(line_hash_psm)
             f_psm.write(f"{sep.join(line)}")

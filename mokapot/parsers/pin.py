@@ -183,10 +183,12 @@ def read_percolator(
     nonfeat = specid + [scan] + peptides + proteins + labels
 
     # Columns for different rollup levels
+    # Currently no proteins, since the protein rollup is probably quite different
+    # from the other rollup levels IMHO
     modifiedpeptides = find_columns("modifiedpeptide", columns)
     pcms = find_columns("pcm", columns)
     peptidegroups = find_columns("peptidegroup", columns)
-    level_columns = peptides + proteins + modifiedpeptides + pcms + peptidegroups
+    level_columns = peptides + modifiedpeptides + pcms + peptidegroups
     nonfeat += modifiedpeptides + pcms + peptidegroups
 
     # Optional columns
