@@ -622,6 +622,36 @@ class OnDiskPsmDataset:
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
 
+        # todo: check that if filename is given all column specs are really  columns of the file
+        # todo: btw: should not get the filename but a reader object or something, in order to parse other filetypes without if's
+        if filename:
+            columns = list(pd.read_csv(filename, sep="\t", nrows=0).columns)
+            def check_column(column):
+                if column and column not in columns:
+                    raise ValueError(f"Column '{column}' not found in data columns of file '{filename}' ({columns})")
+            def check_columns(columns):
+                if columns:
+                    for column in columns:
+                        check_column(column)
+
+            check_columns(self.columns)
+            check_column(self.target_column)
+            check_column(self.peptide_column)
+            check_column(self.protein_column)
+            check_columns(self.spectrum_columns)
+            check_column(self.group_column)
+            # check_columns(self.feature_columns)  # fixme: we don't check these for now, otherwise strange things happen
+            check_columns(self.metadata_columns)
+            check_columns(self.level_columns)
+            check_column(self.filename_column)
+            check_column(self.scan_column)
+            check_column(self.calcmass_column)
+            check_column(self.expmass_column)
+            check_column(self.rt_column)
+            check_column(self.charge_column)
+            check_column(self.specId_column)
+
+
     def calibrate_scores(self, scores, eval_fdr, desc=True):
         """
         Calibrate scores as described in Granholm et al. [1]_
@@ -756,7 +786,7 @@ class OnDiskPsmDataset:
         spectra = self.spectra_dataframe[self.spectrum_columns].values
         del self.spectra_dataframe
         spectra = np.apply_along_axis(
-            lambda x: crc32(str((x[0], x[1])).encode()),
+            lambda x: crc32(str((x[0], x[1])).encode()),  # fixme: why not just str(x) or str(tuple(x))
             1,
             spectra,
         )

@@ -167,7 +167,7 @@ def psms_ondisk():
         scan_column="ScanNr",
         calcmass_column="CalcMass",
         expmass_column="ExpMass",
-        rt_column="ret_time",
+        rt_column=None,
         charge_column=None,
         protein_column=None,
         group_column=None,
@@ -196,7 +196,7 @@ def psms_ondisk():
             "Proteins",
             "Label",
         ],
-        level_columns=[],
+        level_columns=["Peptide"],
         filename_column=None,
         specId_column="SpecId",
         spectra_dataframe=df_spectra,
@@ -430,6 +430,13 @@ def pytest_sessionstart(session):
     # Set pandas max_columns such, that when debugging you can see all columns
     # of a dataframe instead of just a few
     pd.set_option("display.max_columns", None)
+
+    # Set max width per column
+    # pd.set_option("display.max_colwidth", None) #default 50
+
+    # Set max width for output of the whole data frame
+    pd.set_option("display.width", None) #default 80, None means auto-detect
+
 
     # Also set full precision
     # (see https://pandas.pydata.org/docs/user_guide/options.html)

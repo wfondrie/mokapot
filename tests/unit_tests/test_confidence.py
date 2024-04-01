@@ -29,7 +29,7 @@ def test_one_group(psm_df_1000, tmp_path):
         rt_column="ret_time",
         charge_column="charge",
         columns=columns,
-        protein_column=None,
+        protein_column="proteins",
         group_column="group",
         metadata_columns=[
             "specid",
@@ -39,7 +39,7 @@ def test_one_group(psm_df_1000, tmp_path):
             "proteins",
             "target",
         ],
-        level_columns=[],
+        level_columns=["peptide"],
         specId_column="spectrum",
         spectra_dataframe=df_spectra,
     )
@@ -87,7 +87,7 @@ def test_multi_groups(psm_df_100, tmp_path):
         rt_column="ret_time",
         charge_column="charge",
         columns=columns,
-        protein_column=None,
+        protein_column="proteins",
         group_column="group",
         metadata_columns=[
             "specid",
@@ -97,8 +97,8 @@ def test_multi_groups(psm_df_100, tmp_path):
             "proteins",
             "target",
         ],
-        level_columns=[],
-        specId_column="spectrum",
+        level_columns=["peptide"],
+        specId_column="specid",
         spectra_dataframe=df_spectra,
     )
     assign_confidence(
