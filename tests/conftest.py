@@ -3,6 +3,7 @@ This file contains fixtures that are used at multiple points in the tests.
 """
 
 import logging
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,6 @@ import pandas as pd
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from triqler.qvality import getQvaluesFromScores
 from mokapot.qvalues import tdc
-
 
 @pytest.fixture(autouse=True)
 def set_logging(caplog):
@@ -435,9 +435,15 @@ def pytest_sessionstart(session):
     # pd.set_option("display.max_colwidth", None) #default 50
 
     # Set max width for output of the whole data frame
-    pd.set_option("display.width", None) #default 80, None means auto-detect
-
+    pd.set_option("display.width", None)  # default 80, None means auto-detect
 
     # Also set full precision
     # (see https://pandas.pydata.org/docs/user_guide/options.html)
     pd.set_option("display.precision", 17)
+
+
+def pytest_plugin_registered(plugin, manager):
+    debugger_active = hasattr(sys, 'gettrace') and sys.gettrace() is not None
+    if str(plugin).find("xdist.dsession.DSession") != -1:
+        if debugger_active:
+            manager.unregister(plugin)
