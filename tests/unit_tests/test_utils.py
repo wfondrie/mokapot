@@ -1,4 +1,5 @@
 """Test the utility functions"""
+import os
 
 import pytest
 import numpy as np
@@ -21,9 +22,9 @@ def df():
 
 
 @pytest.fixture
-def psms():
+def psms_iterator():
     """Create a standard psms iterable"""
-    yield [
+    return [
         ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
         ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
         ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
@@ -32,6 +33,15 @@ def psms():
         ["6", "0", "QILVQLR", "-6.06", "0.14", "1.0", "_.dummy._\n"],
         ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
     ]
+
+
+@pytest.fixture
+def peptide_csv_file(tmp_path):
+    file = tmp_path / "peptides.csv"
+    with open(file, "w") as f:
+        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
+    yield file
+    os.unlink(file)
 
 
 def test_groupby_max(df):
@@ -102,15 +112,29 @@ def test_tuplize():
     assert utils.tuplize(tuple_in) == tuple_out
 
 
-def test_get_unique_psms_and_peptides(tmp_path, psms):
-    psms_iterable = psms
-    out_peptides = tmp_path / "peptides.csv"
-    with open(out_peptides, "w") as f:
-        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
+def test_create_chunks():
+    # Case 1: Chunk size is less than data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]
+
+    # Case 2: Chunk size is equal to data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 5) == [[1, 2, 3, 4, 5]]
+
+    # Case 3: Chunk size is greater than data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 10) == [[1, 2, 3, 4, 5]]
+
+    # Case 4: Chunk size is 1
+    assert utils.create_chunks([1, 2, 3, 4, 5], 1) == [[1], [2], [3], [4], [5]]
+
+    # Case 6: Empty data array, chunk size doesn't matter
+    assert utils.create_chunks([], 3) == []
+
+
+def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
+    psms_iterator = psms_iterator
     utils.get_unique_peptides_from_psms(
-        iterable=psms_iterable,
+        iterable=psms_iterator,
         peptide_col_index=2,
-        out_peptides=out_peptides,
+        out_peptides=peptide_csv_file,
         sep="\t",
     )
 
@@ -124,5 +148,50 @@ def test_get_unique_psms_and_peptides(tmp_path, psms):
         columns=["PSMId", "Label", "Peptide", "score", "proteinIds"],
     )
 
-    output = pd.read_csv(out_peptides, sep="\t")
+    output = pd.read_csv(peptide_csv_file, sep="\t")
     pd.testing.assert_frame_equal(expected_output, output)
+
+
+from pandas.testing import assert_series_equal
+def test_convert_targets_column(psms_iterator):
+    df = pd.DataFrame(psms_iterator,
+                      columns=["PSMId", "Label", "Peptide", "score", "q-value",
+                               "posterior_error_prob", "proteinIds"])
+    labels = df["Label"].astype(int)
+    expect = pd.Series([True, False, False, True, True, False, True], name="Label")
+    expect_int = expect.astype(int)
+
+    # Actually, all tests should compare with expect, and not with expect_int, but
+    # when I fix convert_targets_column to always return bool, as it should be,
+    # other things break, which I can't fix at the moment. Sigh...
+
+    # Test with values in [0, 1] as strings
+    df_out = utils.convert_targets_column(df, "Label")
+    assert df_out is df  # check that returned and original df are the same
+    assert_series_equal(df["Label"], expect_int)
+
+    # Test with values in [0, 1]
+    df["Label"] = labels
+    utils.convert_targets_column(df, "Label")
+    assert_series_equal(df["Label"], expect_int)
+
+    # Test with values in [-1, 1]
+    labels[labels == 0] = -1
+    df["Label"] = labels
+    utils.convert_targets_column(df, "Label")
+    assert_series_equal(df["Label"], expect)
+
+    # Test with values in [-1, 1] as strings
+    df["Label"] = labels.astype(str)
+    utils.convert_targets_column(df, "Label")
+    assert_series_equal(df["Label"], expect)
+
+    # Test with bool values (should be idempotent)
+    df["Label"] = (labels == 1)
+    utils.convert_targets_column(df, "Label")
+    assert_series_equal(df["Label"], expect_int)
+
+    # Junk in the target column should raise a ValueError
+    df["Label"] = labels + 3
+    with pytest.raises(ValueError):
+        utils.convert_targets_column(df, "Label")

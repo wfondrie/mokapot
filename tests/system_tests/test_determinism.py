@@ -2,8 +2,9 @@
 These tests verify that the aggregatePsmsToPeptides executable works as expected.
 """
 
-import subprocess
 from pathlib import Path
+
+from ..helpers.cli import run_mokapot_cli
 
 import pandas as pd
 import pytest
@@ -15,10 +16,7 @@ pytestmark = pytest.mark.filterwarnings("error")
 def test_determinism_same_file(tmp_path, psm_files_4000):
     """Test that two identical mokapot runs produce same results."""
 
-    cmd = [
-        "python",
-        "-m",
-        "mokapot.mokapot",
+    params = [
         "--dest_dir",
         tmp_path,
         "--subset_max_train",
@@ -30,12 +28,8 @@ def test_determinism_same_file(tmp_path, psm_files_4000):
         "--max_iter",
         "2",
     ]
-    subprocess.run(
-        cmd + [psm_files_4000[0], "--file_root", "run1"], check=True
-    )
-    subprocess.run(
-        cmd + [psm_files_4000[0], "--file_root", "run2"], check=True
-    )
+    run_mokapot_cli(params + [psm_files_4000[0], "--file_root", "run1"])
+    run_mokapot_cli(params + [psm_files_4000[0], "--file_root", "run2"])
 
     assert Path(tmp_path, "run1.targets.peptides").exists()
     assert Path(tmp_path, "run1.decoys.peptides").exists()
@@ -77,9 +71,6 @@ def test_determinism_different_psmid(tmp_path, psm_files_4000):
     produce same results."""
 
     cmd = [
-        "python",
-        "-m",
-        "mokapot.mokapot",
         "--dest_dir",
         tmp_path,
         "--subset_max_train",
@@ -92,12 +83,8 @@ def test_determinism_different_psmid(tmp_path, psm_files_4000):
         "2",
     ]
 
-    subprocess.run(
-        cmd + [psm_files_4000[0], "--file_root", "run1"], check=True
-    )
-    subprocess.run(
-        cmd + [psm_files_4000[1], "--file_root", "run2"], check=True
-    )
+    run_mokapot_cli(cmd + [psm_files_4000[0], "--file_root", "run1"])
+    run_mokapot_cli(cmd + [psm_files_4000[1], "--file_root", "run2"])
 
     assert Path(tmp_path, "run1.targets.peptides").exists()
     assert Path(tmp_path, "run1.decoys.peptides").exists()

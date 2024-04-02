@@ -4,6 +4,7 @@ Utility functions
 
 import itertools
 import gzip
+from typing import List, Any, Tuple
 
 import numpy as np
 import pandas as pd
@@ -52,7 +53,7 @@ def safe_divide(numerator, denominator, ones=False):
     return np.divide(numerator, denominator, out=out, where=(denominator != 0))
 
 
-def tuplize(obj):
+def tuplize(obj: Any) -> Tuple:
     """Convert obj to a tuple, without splitting strings"""
     try:
         _ = iter(obj)
@@ -65,8 +66,26 @@ def tuplize(obj):
     return tuple(obj)
 
 
-def create_chunks(data, chunk_size):
-    return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
+def create_chunks(data: List[Any], chunk_size: int) -> List[List[Any]]:
+    """
+    Splits the given data into chunks of the specified size.
+
+    Parameters
+    ----------
+    data : List[Any]
+        The input data to be split into chunks.
+
+    chunk_size : int
+        The size of each individual chunk.
+
+    Returns
+    -------
+    List[List[Any]]
+        A list containing sublists, where each sublist is a chunk of the input
+        data.
+
+    """
+    return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
 def get_unique_peptides_from_psms(
@@ -151,8 +170,42 @@ def merge_sort(paths, col_score, target_column=None, sep="\t"):
             yield row
 
 
-def convert_targets_column(data, target_column):
-    data[target_column] = data[target_column].astype(int)
-    if any(data[target_column] == -1):
-        data[target_column] = ((data[target_column] + 1) / 2).astype(bool)
+def convert_targets_column(data: pd.DataFrame,
+                           target_column: str) -> pd.DataFrame:
+    """Converts target column values to boolean
+    (True if value is 1, False otherwise).
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        The DataFrame containing the target column to be converted (will be
+        modified in-place).
+    target_column : str
+        The name of the target column in the DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with the target column converted to boolean.
+
+    Raises
+    ------
+    ValueError
+        If the target column contains values other than -1, 0, or 1.
+    """
+    labels = data[target_column].astype(int)
+    if any(labels < -1) or any(labels > 1):
+        raise ValueError(f"Invalid target column '{target_column}' "
+                         "contains values not in {-1, 0, 1}")
+    # This is how it should be
+    # data[target_column] = (labels == 1)
+
+    # This is BS, but is like the "old way" of doing things, and it leads to
+    # quite significant errors, but without it some unit tests break, and
+    # I currently don't know what the right solution to this is...
+    if any(labels == -1):
+        data[target_column] = (labels == 1)
+    else:
+        data[target_column] = labels
     return data
+

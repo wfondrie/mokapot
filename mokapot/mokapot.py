@@ -23,7 +23,7 @@ from .confidence import assign_confidence
 from .plugins import get_plugins
 
 
-def main():
+def main(main_args=None):
     """The CLI entry point"""
     start = time.time()
     plugins = get_plugins()
@@ -34,7 +34,7 @@ def main():
         parsergroup = parser.add_argument_group(plugin_name)
         plugin.add_arguments(parsergroup)
 
-    config = Config(parser)
+    config = Config(parser, main_args=main_args)
 
     # Setup logging
     verbosity_dict = {
@@ -45,6 +45,7 @@ def main():
     }
     if verbosity_dict[config.verbosity] != logging.DEBUG:
         warnings.filterwarnings("ignore")
+
     logging.basicConfig(
         format=("[{levelname}] {message}"),
         style="{",
@@ -78,6 +79,7 @@ def main():
         for plugin in enabled_plugins.values():
             datasets = [plugin.process_data(ds, config) for ds in datasets]
         prefixes = [Path(f).stem for f in config.psm_files]
+
     # Parse FASTA, if required:
     if config.proteins is not None:
         logging.info("Protein-level confidence estimates enabled.")
@@ -152,11 +154,13 @@ def main():
         rng=config.seed,
     )
     logging.info("")
+
     if config.dest_dir is not None:
         Path(config.dest_dir).mkdir(exist_ok=True)
-    deduplication = not config.skip_deduplication
+
     if config.file_root is not None:
         config.dest_dir = f"{Path(config.dest_dir, config.file_root)}."
+
     assign_confidence(psms=psms,
                       max_workers=config.max_workers,
                       scores=scores,
@@ -165,7 +169,7 @@ def main():
                       dest_dir=config.dest_dir,
                       prefixes=prefixes,
                       decoys=config.keep_decoys,
-                      deduplication=deduplication,
+                      deduplication=not config.skip_deduplication,
                       proteins=proteins,
                       peps_error=config.peps_error,
                       peps_algorithm=config.peps_algorithm,
