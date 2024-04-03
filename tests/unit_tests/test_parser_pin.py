@@ -2,9 +2,10 @@
 from pathlib import Path
 
 import pytest
-import mokapot
 import pandas as pd
 
+import mokapot
+from mokapot.parsers import pin
 
 @pytest.fixture
 def std_pin(tmp_path):
@@ -48,3 +49,22 @@ def test_pin_parsing(std_pin):
 def test_pin_wo_dir():
     """Test a PIN file without a DefaultDirection line"""
     mokapot.read_pin(Path("data", "scope2_FP97AA.pin"), max_workers=4)
+
+
+def test_read_file_in_chunks():
+    """Test reading files in chungs"""
+    columns = ["SpecId", "Label", "ScanNr", "ExpMass"]
+    iterator = pin.read_file_in_chunks(Path("data", "scope2_FP97AA.pin"), 100, use_cols=columns)
+    df = next(iterator)
+    assert len(df) == 100
+    assert df.iloc[0][0] == "target_0_9674_2_-1"
+    assert df.iloc[0][2] == 9674
+
+    # Read in different column order than given in file
+    columns = ["ExpMass", "SpecId", "Label", "ScanNr"]
+    iterator = pin.read_file_in_chunks(Path("data", "scope2_FP97AA.pin"), 100, use_cols=columns)
+    df = next(iterator)
+    assert len(df) == 100
+    assert df.iloc[0][1] == "target_0_9674_2_-1"
+    assert df.iloc[0][3] == 9674
+
