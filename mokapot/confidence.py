@@ -329,7 +329,6 @@ class Confidence(object):
 
         for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
             chunked_csv_file_iterator, chunked(self.qvals), chunked(self.peps), chunked(self.targets) ):
-            data_chunk = data_chunk.apply(pd.to_numeric, errors="ignore")
             data_chunk["qvals"] = qvals_chunk
             data_chunk["PEP"] = peps_chunk
             if level != "proteins" and protein_column is not None:
