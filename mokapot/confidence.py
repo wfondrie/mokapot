@@ -309,43 +309,43 @@ class Confidence(object):
             The paths to the saved files.
 
         """
-        reader = read_file_in_chunks(
+        # The columns here are usually the metadata_columns from confidence.assign_confidence
+        # which are usually ['PSMId', 'Label', 'peptide', 'proteinIds', 'score']
+        # Since, those are exactly the columns that are written there to the csv
+        # files, it's not exactly clear, why they are passed along here anyway
+        # (but let's assert that here)
+        assert all(pd.read_csv(data_path, sep="\t", nrows=0).columns == columns)
+
+        in_columns = [i for i in columns if i != self._target_column]
+        chunked_csv_file_iterator = read_file_in_chunks(
             file=data_path,
             chunk_size=CONFIDENCE_CHUNK_SIZE,
-            use_cols=[i for i in columns if i != self._target_column],
+            use_cols=in_columns
         )
 
-        self.scores = create_chunks(
-            self.scores, chunk_size=CONFIDENCE_CHUNK_SIZE
-        )
-        self.qvals = create_chunks(
-            self.qvals, chunk_size=CONFIDENCE_CHUNK_SIZE
-        )
-        self.peps = create_chunks(self.peps, chunk_size=CONFIDENCE_CHUNK_SIZE)
-        self.targets = create_chunks(
-            self.targets, chunk_size=CONFIDENCE_CHUNK_SIZE
-        )
+        chunked = lambda list: create_chunks(list, chunk_size=CONFIDENCE_CHUNK_SIZE)
 
-        for data_in, score_in, qvals_in, pep_in, target_in in zip(
-            reader, self.scores, self.qvals, self.peps, self.targets
-        ):
-            data_in = data_in.apply(pd.to_numeric, errors="ignore")
-            data_in["score"] = score_in
-            data_in["qvals"] = qvals_in
-            data_in["PEP"] = pep_in
-            if level != "proteins" and self._protein_column is not None:
+        protein_column = self._protein_column
+
+        for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
+            chunked_csv_file_iterator, chunked(self.qvals), chunked(self.peps), chunked(self.targets) ):
+            data_chunk = data_chunk.apply(pd.to_numeric, errors="ignore")
+            data_chunk["qvals"] = qvals_chunk
+            data_chunk["PEP"] = peps_chunk
+            if level != "proteins" and protein_column is not None:
                 # EZ: seems to move the proteinIds column to the back (last col)
-                data_in[self._protein_column] = data_in.pop(
-                    self._protein_column
-                )
+                # todo: we should rather have an out_columns where the the
+                # protein column is moved to last position and then we reindex
+                # using the out_columns
+                data_chunk[protein_column] = data_chunk.pop(protein_column)
 
             # EZ: the definitions of the columns are to be found in
             # assign_confidence (that's where the file headers are written)
-            data_in.loc[target_in, :].to_csv(
+            data_chunk.loc[targets_chunk, :].to_csv(
                 out_paths[0], sep=sep, index=False, mode="a", header=None
             )
             if decoys:
-                data_in.loc[~target_in, :].to_csv(
+                data_chunk.loc[~targets_chunk, :].to_csv(
                     out_paths[1], sep=sep, index=False, mode="a", header=None
                 )
         return out_paths
