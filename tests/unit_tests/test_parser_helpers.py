@@ -1,5 +1,6 @@
 import pytest
-from mokapot.parsers.helpers import find_column, find_columns
+from mokapot.parsers.helpers import find_optional_column, find_columns, \
+    find_required_column
 
 
 def test_find_columns():
@@ -19,22 +20,46 @@ def test_find_columns():
     assert find_columns("Test", []) == []
 
 
-def test_find_column_with_col_none():
-    assert find_column(None, ['ID', 'Name', 'Value'], 'id') == 'ID'
-    assert find_column(None, ['Id', 'Name', 'Value'], 'Value') == 'Value'
-    assert find_column(None, ['RefID', 'Name', 'Value'], 'id') is None
+def test_find_optional_column():
+    # With col=None:
+    assert find_optional_column(None, ['ID', 'Name', 'Value'], 'id') == 'ID'
+    assert find_optional_column(None, ['Id', 'Name', 'Value'],
+                                'Value') == 'Value'
+    assert find_optional_column(None, ['RefID', 'Name', 'Value'], 'id') is None
+
+    # With matching columns
+    assert find_optional_column('Name', ['ID', 'Name', 'Value'], 'id') == 'Name'
+    assert find_optional_column('Value', ['Id', 'Name', 'Value'],
+                                'Value') == 'Value'
+    assert find_optional_column('ID', ['ID', 'Name', 'Value'], 'id') == 'ID'
+
+    # Without matching columns
+    with pytest.raises(ValueError, match=".*'Invalid'.*was not found.*"):
+        find_optional_column('Invalid', ['ID', 'Name', 'Value'], 'id')
+
+    with pytest.raises(ValueError, match=".*'NotPresent'.*was not found.*"):
+        find_optional_column('NotPresent', ['Id', 'Name', 'Value'], 'Value')
 
 
-def test_find_column_with_col_matching_columns():
-    assert find_column('Name', ['ID', 'Name', 'Value'], 'id') == 'Name'
-    assert find_column('Value', ['Id', 'Name', 'Value'], 'Value') == 'Value'
-    assert find_column('ID', ['ID', 'Name', 'Value'], 'id') == 'ID'
+def test_find_required_column():
+    # Test column found
+    assert find_required_column('Score', ['Identifier', 'Score',
+                                          'Norm_Score']) == 'Score'
 
+    # Test case-insensitive search
+    assert find_required_column('score', ['Identifier', 'Score',
+                                          'Norm_Score']) == 'Score'
 
-def test_find_column_with_col_not_matching_columns():
-    with pytest.raises(ValueError, match="The 'Invalid' column was not found."):
-        find_column('Invalid', ['ID', 'Name', 'Value'], 'id')
+    # Test column not found
+    with pytest.raises(ValueError):
+        find_required_column('Score_missing',
+                             ['Identifier', 'Score', 'Norm_Score'])
 
-    with pytest.raises(ValueError,
-                       match="The 'NotPresent' column was not found."):
-        find_column('NotPresent', ['Id', 'Name', 'Value'], 'Value')
+    # Test column not unique
+    with pytest.raises(ValueError):
+        find_required_column('Score',
+                             ['Identifier', 'Score', 'Norm_Score', 'Score'])
+
+    # Test empty columns list
+    with pytest.raises(ValueError):
+        find_required_column('Score', [])

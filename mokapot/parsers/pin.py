@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from joblib import Parallel, delayed
 
-from .helpers import find_column, find_columns
+from .helpers import find_optional_column, find_columns, find_required_column
 from ..utils import (
     open_file,
     tuplize,
@@ -174,13 +174,13 @@ def read_percolator(
     LOGGER.info("Reading %s...", perc_file)
     columns = get_column_names_from_file(perc_file)
 
-    # Find all of the necessary columns, case-insensitive:
-    specid = find_columns("specid", columns)
-    peptides = find_columns("peptide", columns)
-    proteins = find_columns("proteins", columns)
-    labels = find_columns("label", columns)
-    scan = find_columns("scannr", columns)[0]
-    nonfeat = specid + [scan] + peptides + proteins + labels
+    # Find all the necessary columns, case-insensitive:
+    specid = find_required_column("specid", columns)
+    peptides = find_required_column("peptide", columns)
+    proteins = find_required_column("proteins", columns)
+    labels = find_required_column("label", columns)
+    scan = find_required_column("scannr", columns)
+    nonfeat = [specid, scan, peptides, proteins, labels]
 
     # Columns for different rollup levels
     # Currently no proteins, since the protein rollup is probably quite different
@@ -188,15 +188,15 @@ def read_percolator(
     modifiedpeptides = find_columns("modifiedpeptide", columns)
     pcms = find_columns("pcm", columns)
     peptidegroups = find_columns("peptidegroup", columns)
-    level_columns = peptides + modifiedpeptides + pcms + peptidegroups
+    level_columns = [peptides] + modifiedpeptides + pcms + peptidegroups
     nonfeat += modifiedpeptides + pcms + peptidegroups
 
     # Optional columns
-    filename = find_column(filename_column, columns, "filename")
-    calcmass = find_column(calcmass_column, columns, "calcmass")
-    expmass = find_column(expmass_column, columns, "expmass")
-    ret_time = find_column(rt_column, columns, "ret_time")
-    charge = find_column(charge_column, columns, "charge_column")
+    filename = find_optional_column(filename_column, columns, "filename")
+    calcmass = find_optional_column(calcmass_column, columns, "calcmass")
+    expmass = find_optional_column(expmass_column, columns, "expmass")
+    ret_time = find_optional_column(rt_column, columns, "ret_time")
+    charge = find_optional_column(charge_column, columns, "charge_column")
     spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
 
     # Only add charge to features if there aren't other charge columns:
@@ -217,12 +217,7 @@ def read_percolator(
     features = [c for c in columns if c not in nonfeat]
 
     # Check for errors:
-    col_names = ["Label", "Peptide", "Proteins"]
-    for col, name in zip([labels, peptides, proteins], col_names):
-        if len(col) > 1:
-            raise ValueError(f"More than one '{name}' column found.")
-
-    if not all([specid, peptides, proteins, labels, spectra]):
+    if not all(spectra):
         raise ValueError(
             "This PIN format is incompatible with mokapot. Please"
             " verify that the required columns are present."
@@ -231,7 +226,7 @@ def read_percolator(
     # Check that features don't have missing values:
     feat_slices = create_chunks_with_identifier(
         data=features,
-        identifier_column=spectra + labels,
+        identifier_column=spectra + [labels],
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
@@ -239,12 +234,12 @@ def read_percolator(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
             file=perc_file,
             column=c,
-            spectra=spectra + labels,
+            spectra=spectra + [labels],
             df_spectra_list=df_spectra_list,
         )
         for c in feat_slices
     )
-    df_spectra = convert_targets_column(pd.concat(df_spectra_list), target_column=labels[0])
+    df_spectra = convert_targets_column(pd.concat(df_spectra_list), target_column=labels)
 
     features_to_drop = [drop for drop in features_to_drop if drop]
     features_to_drop = flatten(features_to_drop)
@@ -265,17 +260,17 @@ def read_percolator(
     return OnDiskPsmDataset(
         filename=perc_file,
         columns=columns,
-        target_column=labels[0],
+        target_column=labels,
         spectrum_columns=spectra,
-        peptide_column=peptides[0],
-        protein_column=proteins[0],
+        peptide_column=peptides,
+        protein_column=proteins,
         group_column=group_column,
         feature_columns=_feature_columns,
         metadata_columns=nonfeat,
         level_columns = level_columns,
         filename_column=filename,
         scan_column=scan,
-        specId_column=specid[0],
+        specId_column=specid,
         calcmass_column=calcmass,
         expmass_column=expmass,
         rt_column=ret_time,
