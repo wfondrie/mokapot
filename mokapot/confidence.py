@@ -27,6 +27,7 @@ from triqler import qvality
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
+from file_io import CSVFileWriter, CSVFileReader
 from . import qvalues
 from .peps import peps_from_scores
 from .utils import (
@@ -315,23 +316,35 @@ class Confidence(object):
         # Since, those are exactly the columns that are written there to the csv
         # files, it's not exactly clear, why they are passed along here anyway
         # (but let's assert that here)
-        assert all(pd.read_csv(data_path, sep="\t", nrows=0).columns == columns)
+        reader = CSVFileReader(data_path)
+        assert reader.get_column_names() == columns
 
         in_columns = [i for i in columns if i != self._target_column]
-        chunked_csv_file_iterator = read_file_in_chunks(
-            file=data_path,
-            chunk_size=CONFIDENCE_CHUNK_SIZE,
-            use_cols=in_columns
-        )
+        chunked_data_iterator = reader.get_chunked_data_iterator(CONFIDENCE_CHUNK_SIZE, in_columns)
+
+        # Note: the out_columns need to match those in assign_confidence (out_files)
+        qvalue_column = "q-value"
+        pep_column = "posterior_error_prob"
+        out_columns = in_columns + [qvalue_column, pep_column]
+        protein_column = self._protein_column
+        if level != "proteins" and protein_column is not None:
+            out_columns.remove(protein_column)
+            out_columns.append(protein_column)
+
+        target_writer = CSVFileWriter(out_paths[0], out_columns, sep=sep)
+        target_writer.write_header()
+
+        decoy_writer = CSVFileWriter(out_paths[1], out_columns, sep=sep) if decoys else None
+        if decoys:
+            decoy_writer.write_header()
 
         chunked = lambda list: create_chunks(list, chunk_size=CONFIDENCE_CHUNK_SIZE)
 
-        protein_column = self._protein_column
 
         for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
-            chunked_csv_file_iterator, chunked(self.qvals), chunked(self.peps), chunked(self.targets) ):
-            data_chunk["qvals"] = qvals_chunk
-            data_chunk["PEP"] = peps_chunk
+            chunked_data_iterator, chunked(self.qvals), chunked(self.peps), chunked(self.targets) ):
+            data_chunk[qvalue_column] = qvals_chunk
+            data_chunk[pep_column] = peps_chunk
             if level != "proteins" and protein_column is not None:
                 # EZ: seems to move the proteinIds column to the back (last col)
                 # todo: we should rather have an out_columns where the the
@@ -341,13 +354,9 @@ class Confidence(object):
 
             # EZ: the definitions of the columns are to be found in
             # assign_confidence (that's where the file headers are written)
-            data_chunk.loc[targets_chunk, :].to_csv(
-                out_paths[0], sep=sep, index=False, mode="a", header=None
-            )
+            target_writer.append_data(data_chunk.loc[targets_chunk, :])
             if decoys:
-                data_chunk.loc[~targets_chunk, :].to_csv(
-                    out_paths[1], sep=sep, index=False, mode="a", header=None
-                )
+                decoy_writer.append_data(data_chunk.loc[~targets_chunk, :])
         return out_paths
 
     def _perform_tdc(self, psms, psm_columns):
@@ -545,9 +554,9 @@ class LinearConfidence(Confidence):
             proteins = proteins.sort_values(
                 by=self._score_column, ascending=False
             ).reset_index(drop=True)
+            assert levels[-1] == "proteins" # todo
             proteins_path = level_paths[-1]
             proteins.to_csv(proteins_path, index=False, sep=sep)
-            assert levels[-1] == "proteins" # todo
             out_paths += [
                 _psms.with_suffix(".proteins")
                 for _psms in out_paths[0]

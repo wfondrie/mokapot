@@ -206,6 +206,7 @@ def map_columns_to_indices(search: list | tuple, columns: list[str]) -> \
         If the search list/tuple contains a string that is not contained in
         `columns`
     """
+    assert all(item is not None for item in search)
     return type(search)(
         columns.index(s) if isinstance(s, str)
         else map_columns_to_indices(s, columns)
