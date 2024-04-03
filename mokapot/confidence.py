@@ -27,7 +27,6 @@ from triqler import qvality
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
-from file_io import CSVFileWriter, CSVFileReader
 from . import qvalues
 from .peps import peps_from_scores
 from .utils import (
@@ -40,6 +39,7 @@ from .utils import (
 from .dataset import read_file, PsmDataset, OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
+from .file_io import CSVFileWriter, CSVFileReader
 from .parsers.pin import read_file_in_chunks
 from .constants import CONFIDENCE_CHUNK_SIZE
 
