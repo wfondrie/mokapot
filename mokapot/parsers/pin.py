@@ -316,13 +316,14 @@ def read_file_in_chunks(file, chunk_size, use_cols):
     when reading in chunks an open file object is required as input to iterate over the
     chunks
     """
-    return pd.read_csv(
+    for df in pd.read_csv(
         file,
         sep="\t",
         chunksize=chunk_size,
         usecols=use_cols,
         index_col=False,
-    )
+    ):
+        yield df[use_cols]
 
 
 def get_column_names_from_file(file):

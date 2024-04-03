@@ -925,13 +925,8 @@ def assign_confidence(
             )
             # EZ: output columns are: columns of chunk_metadata, which is
             # _psms.metadata_columns (but in file order) + "score" column
+            reader_columns = _psms.metadata_columns + ["score"]
 
-            # We determine here the current order of the columns returns by reader
-            # as long as read_file_in_chunks returns columns in file order rather
-            # than in metadata_columns order
-            # fixme: fix this too as soon as read_file_... is fixed
-            temp_idx = map_columns_to_indices(_psms.metadata_columns, _psms.columns)
-            reader_columns = list(np.array(_psms.columns)[sorted(temp_idx)]) + ["score"]
 
             scores_metadata_paths = list(dest_dir.glob(f"{file_prefix}scores_metadata_*"))
             iterable_sorted = merge_sort(
