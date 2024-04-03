@@ -899,15 +899,26 @@ def assign_confidence(
                             fp.write(f"{sep.join(output_columns)}\n")
                     out_files[-1].append(outfile_d)
 
+            # Read from the input psms (PsmDataset) and write into smaller
+            # sorted files, by
+
+            # a) Create a reader that only reads columns given in
+            #    psms.metadata_columns in chunks of size CONFIDENCE_CHUNK_SIZE
             reader = read_file_in_chunks(
                 file=_psms.filename,
                 chunk_size=CONFIDENCE_CHUNK_SIZE,
                 use_cols=_psms.metadata_columns,
             )
+
+            # b) Split the scores in chunks of the same size
             scores_slices = create_chunks(
                 score, chunk_size=CONFIDENCE_CHUNK_SIZE
             )
 
+            # c) Write those chunks in parallel, where the columns are given
+            #    by psms.metadata plus the "scores" column
+            #    (NB: after the last change the columns are now indeed in the
+            #     order given by metadata_columns and not by file header order)
             Parallel(n_jobs=max_workers, require="sharedmem")(
                 delayed(save_sorted_metadata_chunks)(
                     chunk_metadata,
@@ -917,14 +928,12 @@ def assign_confidence(
                     i,
                     sep,
                     dest_dir,
-                    file_prefix
+                    f"{file_prefix}scores_metadata"
                 )
                 for chunk_metadata, score_chunk, i in zip(
                     reader, scores_slices, range(len(scores_slices))
                 )
             )
-            # EZ: output columns are: columns of chunk_metadata, which is
-            # _psms.metadata_columns (but in file order) + "score" column
             reader_columns = _psms.metadata_columns + ["score"]
 
 
@@ -1042,7 +1051,7 @@ def save_sorted_metadata_chunks(
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
 
     chunk_metadata.to_csv(
-        dest_dir / f"{file_prefix}scores_metadata_{i}.csv",
+        dest_dir / f"{file_prefix}_{i}.csv",
         sep=sep,
         index=False,
         mode="w",
