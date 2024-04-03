@@ -530,7 +530,6 @@ class LinearConfidence(Confidence):
 
         if self._proteins:
             data = read_file(level_paths[1])
-            data = data.apply(pd.to_numeric, errors="ignore")
             convert_targets_column(
                 data=data, target_column=self._target_column
             )
@@ -989,8 +988,6 @@ def assign_confidence(
                 for row in iterable_sorted:
                     n_psms += 1
                     row = np.array(row)
-                    num_cols = len(row)
-                    # input_colidx = np.array([0, 1, num_cols-3, num_cols-2, num_cols-1]) # todo: get from bla
                     with open(level_data_path[0], "a") as f_psm:
                         f_psm.write(sep.join(row[output_colidx]))
                 LOGGER.info("\t- Found %i PSMs.", n_psms)
@@ -1040,7 +1037,7 @@ def save_sorted_metadata_chunks(
     chunk_metadata : pd.DataFrame, score_chunk, psms, do_rollup, i, sep, dest_dir : Path, file_prefix : str
 ):
     chunk_metadata = convert_targets_column(
-        data=chunk_metadata.apply(pd.to_numeric, errors="ignore"),
+        data=chunk_metadata,
         target_column=psms.target_column,
     )
     chunk_metadata["score"] = score_chunk

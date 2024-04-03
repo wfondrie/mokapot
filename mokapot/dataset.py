@@ -901,11 +901,9 @@ def update_labels(file_name : Path, scores, target_column, eval_fdr=0.01, desc=T
     )
 
 @typechecked
-def read_file(file_name : Path, use_cols=None, target_column=None):
-    with utils.open_file(file_name) as f:
-        df = pd.read_csv(
-            f, sep="\t", usecols=use_cols, index_col=False, on_bad_lines="skip"
-        ).apply(pd.to_numeric, errors="ignore")
+def read_file(file_name: Path, use_cols=None, target_column=None):
+    df = pd.read_csv(file_name, sep="\t", usecols=use_cols, index_col=False,
+                     on_bad_lines="skip")
     if target_column:
         return utils.convert_targets_column(df, target_column)
     else:

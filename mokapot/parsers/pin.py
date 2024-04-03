@@ -234,20 +234,18 @@ def read_percolator(
         identifier_column=spectra + labels,
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
-    df_spectra = []
+    df_spectra_list = []
     features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
             file=perc_file,
             column=c,
             spectra=spectra + labels,
-            df_spectra=df_spectra,
+            df_spectra_list=df_spectra_list,
         )
         for c in feat_slices
     )
-    df_spectra = convert_targets_column(
-        pd.concat(df_spectra).apply(pd.to_numeric, errors="ignore"),
-        target_column=labels[0],
-    )
+    df_spectra = convert_targets_column(pd.concat(df_spectra_list), target_column=labels[0])
+
     features_to_drop = [drop for drop in features_to_drop if drop]
     features_to_drop = flatten(features_to_drop)
     if len(features_to_drop) > 1:
@@ -288,7 +286,7 @@ def read_percolator(
 
 # Utility Functions -----------------------------------------------------------
 def drop_missing_values_and_fill_spectra_dataframe(
-    file, column, spectra, df_spectra
+    file, column, spectra, df_spectra_list
 ):
     na_mask = pd.DataFrame([], columns=list(set(column) - set(spectra)))
     with open_file(file) as f:
@@ -299,7 +297,7 @@ def drop_missing_values_and_fill_spectra_dataframe(
         )
         for i, feature in enumerate(reader):
             if set(spectra) <= set(column):
-                df_spectra.append(feature[spectra])
+                df_spectra_list.append(feature[spectra])
                 feature.drop(spectra, axis=1, inplace=True)
             na_mask = pd.concat(
                 [na_mask, pd.DataFrame([feature.isna().any(axis=0)])],
@@ -353,13 +351,13 @@ def get_rows_from_dataframe(idx, chunk, train_psms, psms, file_idx):
         list of list of dataframes
     """
     chunk = convert_targets_column(
-        data=chunk.apply(pd.to_numeric, errors="ignore"),
+        data=chunk,
         target_column=psms.target_column,
     )
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
         train_psms[file_idx][k].append(
-            chunk.loc[idx_].apply(pd.to_numeric, errors="ignore")
+            chunk.loc[idx_]
         )
 
 
