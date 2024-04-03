@@ -18,6 +18,7 @@ confidence estimates, rather than initializing the classes below directly.
 
 import logging
 from pathlib import Path
+from contextlib import contextmanager
 
 import numpy as np
 import pandas as pd
@@ -897,103 +898,69 @@ def assign_confidence(
                             fp.write(f"{sep.join(output_columns)}\n")
                     out_files[-1].append(outfile_d)
 
-            # Read from the input psms (PsmDataset) and write into smaller
-            # sorted files, by
+            with create_sorted_file_iterator(_psms,
+                                             dest_dir, file_prefix,
+                                             do_rollup,
+                                             max_workers, score,
+                                             sep) as iterable_sorted:
 
-            # a) Create a reader that only reads columns given in
-            #    psms.metadata_columns in chunks of size CONFIDENCE_CHUNK_SIZE
-            reader = read_file_in_chunks(
-                file=_psms.filename,
-                chunk_size=CONFIDENCE_CHUNK_SIZE,
-                use_cols=_psms.metadata_columns,
-            )
-
-            # b) Split the scores in chunks of the same size
-            scores_slices = create_chunks(
-                score, chunk_size=CONFIDENCE_CHUNK_SIZE
-            )
-
-            # c) Write those chunks in parallel, where the columns are given
-            #    by psms.metadata plus the "scores" column
-            #    (NB: after the last change the columns are now indeed in the
-            #     order given by metadata_columns and not by file header order)
-            Parallel(n_jobs=max_workers, require="sharedmem")(
-                delayed(save_sorted_metadata_chunks)(
-                    chunk_metadata,
-                    score_chunk,
-                    _psms,
-                    do_rollup,
-                    i,
-                    sep,
-                    dest_dir,
-                    f"{file_prefix}scores_metadata"
-                )
-                for chunk_metadata, score_chunk, i in zip(
-                    reader, scores_slices, range(len(scores_slices))
-                )
-            )
-            reader_columns = _psms.metadata_columns + ["score"]
-
-
-            scores_metadata_paths = list(dest_dir.glob(f"{file_prefix}scores_metadata_*"))
-            iterable_sorted = merge_sort(
-                scores_metadata_paths, col_score="score", sep=sep
-            )
-            LOGGER.info("Assigning confidence...")
-            LOGGER.info("Performing target-decoy competition...")
-            LOGGER.info(
-                "Keeping the best match per %s columns...",
-                "+".join(_psms.spectrum_columns),
-            )
-
-            with open(level_data_path[0], "w") as f_psm:
-                f_psm.write(f"{sep.join(metadata_columns)}\n")
-
-            input_columns = [
-                _psms.specId_column,
-                _psms.target_column,
-                _psms.spectrum_columns[0], # scannr todo: (this is ugly)
-                _psms.spectrum_columns[1], # expmass todo: (this also, needs to change)
-                _psms.peptide_column,
-                _psms.protein_column,
-                "score",
-            ]
-            input_colidx = map_columns_to_indices(input_columns, reader_columns)
-
-            if do_rollup:
-                with open(level_data_path[1], "w") as f_peptide:
-                    f_peptide.write(f"{sep.join(metadata_columns)}\n")
-
-                (
-                    unique_psms,
-                    unique_peptides,
-                ) = get_unique_psms_and_peptides(
-                    iterable=iterable_sorted,
-                    input_colidx=input_colidx,
-                    out_psms=level_data_path[0],
-                    out_peptides=level_data_path[1],
-                    sep=sep,
-                )
+                LOGGER.info("Assigning confidence...")
+                LOGGER.info("Performing target-decoy competition...")
                 LOGGER.info(
-                    "\t- Found %i PSMs from unique spectra.", unique_psms
+                    "Keeping the best match per %s columns...",
+                    "+".join(_psms.spectrum_columns),
                 )
-                LOGGER.info("\t- Found %i unique peptides.", unique_peptides)
-            else:
-                (specid_idx, label_idx, scannr_idx, expmass_idx, peptide_idx,
-                 proteins_idx, score_idx) = tuple(input_colidx)
-                output_colidx = [specid_idx, label_idx, peptide_idx,
-                                 proteins_idx, score_idx]
 
-                n_psms = 0
-                for row in iterable_sorted:
-                    n_psms += 1
-                    row = np.array(row)
-                    with open(level_data_path[0], "a") as f_psm:
-                        f_psm.write(sep.join(row[output_colidx]))
-                LOGGER.info("\t- Found %i PSMs.", n_psms)
+                # The columns we get from the sorted file iterator
+                iterator_columns = _psms.metadata_columns + ["score"]
 
-            # xno-commit
-            # [os.remove(sc_path) for sc_path in scores_metadata_paths]
+                # Define the columns that we need and determine their indices
+                input_columns = [
+                    _psms.specId_column,
+                    _psms.target_column,
+                    _psms.spectrum_columns[0], # scannr todo: (this is ugly)
+                    _psms.spectrum_columns[1], # expmass todo: (this also, needs to change)
+                    _psms.peptide_column,
+                    _psms.protein_column,
+                    "score",
+                ]
+                input_colidx = map_columns_to_indices(input_columns, iterator_columns)
+
+                with open(level_data_path[0], "w") as f_psm:
+                    f_psm.write(f"{sep.join(metadata_columns)}\n")
+
+                if do_rollup:
+                    with open(level_data_path[1], "w") as f_peptide:
+                        f_peptide.write(f"{sep.join(metadata_columns)}\n")
+
+                    (
+                        unique_psms,
+                        unique_peptides,
+                    ) = get_unique_psms_and_peptides(
+                        iterable=iterable_sorted,
+                        input_colidx=input_colidx,
+                        out_psms=level_data_path[0],
+                        out_peptides=level_data_path[1],
+                        sep=sep,
+                    )
+                    LOGGER.info(
+                        "\t- Found %i PSMs from unique spectra.", unique_psms
+                    )
+                    LOGGER.info("\t- Found %i unique peptides.", unique_peptides)
+                else:
+                    (specid_idx, label_idx, scannr_idx, expmass_idx, peptide_idx,
+                     proteins_idx, score_idx) = tuple(input_colidx)
+                    output_colidx = [specid_idx, label_idx, peptide_idx,
+                                     proteins_idx, score_idx]
+
+                    n_psms = 0
+                    for row in iterable_sorted:
+                        n_psms += 1
+                        row = np.array(row)
+                        with open(level_data_path[0], "a") as f_psm:
+                            f_psm.write(sep.join(row[output_colidx]))
+                    LOGGER.info("\t- Found %i PSMs.", n_psms)
+
 
             LinearConfidence(
                 psms=_psms,
@@ -1032,7 +999,61 @@ def assign_confidence(
             )
 
 
+@contextmanager
 @typechecked
+def create_sorted_file_iterator(_psms, dest_dir: Path, file_prefix: str, do_rollup: bool, max_workers: int,
+                                score: np.ndarray[float], sep: str):
+    # Read from the input psms (PsmDataset) and write into smaller
+    # sorted files, by
+
+    # a) Create a reader that only reads columns given in
+    #    psms.metadata_columns in chunks of size CONFIDENCE_CHUNK_SIZE
+    reader = read_file_in_chunks(
+        file=_psms.filename,
+        chunk_size=CONFIDENCE_CHUNK_SIZE,
+        use_cols=_psms.metadata_columns,
+    )
+
+    # b) Split the scores in chunks of the same size
+    scores_slices = create_chunks(
+        score, chunk_size=CONFIDENCE_CHUNK_SIZE
+    )
+
+    # c) Write those chunks in parallel, where the columns are given
+    #    by psms.metadata plus the "scores" column
+    #    (NB: after the last change the columns are now indeed in the
+    #     order given by metadata_columns and not by file header order)
+    Parallel(n_jobs=max_workers, require="sharedmem")(
+        delayed(save_sorted_metadata_chunks)(
+            chunk_metadata,
+            score_chunk,
+            _psms,
+            do_rollup,
+            i,
+            sep,
+            dest_dir,
+            f"{file_prefix}scores_metadata"
+        )
+        for chunk_metadata, score_chunk, i in zip(
+            reader, scores_slices, range(len(scores_slices))
+        )
+    )
+
+    scores_metadata_paths = list(
+        dest_dir.glob(f"{file_prefix}scores_metadata_*"))
+    sorted_file_iterator = merge_sort(
+        scores_metadata_paths, col_score="score", sep=sep
+    )
+
+    # Return the sorted iterator and clean up afterwards, regardless of whether
+    # an exception was thrown in the `with` block
+    try:
+        yield sorted_file_iterator
+    finally:
+        for sc_path in scores_metadata_paths:
+            sc_path.unlink()
+
+
 def save_sorted_metadata_chunks(
     chunk_metadata : pd.DataFrame, score_chunk, psms, do_rollup, i, sep, dest_dir : Path, file_prefix : str
 ):
