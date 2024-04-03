@@ -57,14 +57,14 @@ def test_read_file_in_chunks():
     iterator = pin.read_file_in_chunks(Path("data", "scope2_FP97AA.pin"), 100, use_cols=columns)
     df = next(iterator)
     assert len(df) == 100
-    assert df.iloc[0][0] == "target_0_9674_2_-1"
-    assert df.iloc[0][2] == 9674
+    assert df.iloc[0, 0] == "target_0_9674_2_-1"
+    assert df.iloc[0, 2] == 9674
 
     # Read in different column order than given in file
     columns = ["ExpMass", "SpecId", "Label", "ScanNr"]
     iterator = pin.read_file_in_chunks(Path("data", "scope2_FP97AA.pin"), 100, use_cols=columns)
     df = next(iterator)
     assert len(df) == 100
-    assert df.iloc[0][1] == "target_0_9674_2_-1"
-    assert df.iloc[0][3] == 9674
+    assert df.iloc[0, 1] == "target_0_9674_2_-1"
+    assert df.iloc[0, 3] == 9674
 
