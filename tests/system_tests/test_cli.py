@@ -25,6 +25,23 @@ def phospho_files():
     fasta = Path("data", "human_sp_td.fasta")
     return pin, fasta
 
+def count_lines(path: Path):
+    """Count the number of lines in a file.
+
+    Parameters
+    ----------
+    path : Path
+        The path to the file.
+
+    Returns
+    -------
+    int
+        The number of lines in the file.
+    """
+    with open(path, "r") as file:
+        lines = file.readlines()
+    return len(lines)
+
 
 def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
@@ -99,11 +116,19 @@ def test_cli_aggregate(tmp_path, scope_files):
     assert not Path(tmp_path, "blah.targets.decoy.psms").exists()
     assert not Path(tmp_path, "blah.targets.decoy.peptides").exists()
 
+    # Line counts were determined by one hopefully correct test run
+    assert count_lines(Path(tmp_path, "blah.targets.psms")) == 10256
+    assert count_lines(Path(tmp_path, "blah.targets.peptides")) == 9663
+
+
     # Test that decoys are also in the output when --keep_decoys is used
     params += ["--keep_decoys"]
     run_mokapot_cli(params)
     assert Path(tmp_path, "blah.decoys.psms").exists()
     assert Path(tmp_path, "blah.decoys.peptides").exists()
+
+    assert count_lines(Path(tmp_path, "blah.decoys.psms")) == 3787
+    assert count_lines(Path(tmp_path, "blah.decoys.peptides")) == 3694
 
 
 def test_cli_fasta(tmp_path, phospho_files):

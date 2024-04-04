@@ -332,14 +332,14 @@ class Confidence(object):
             out_columns.append(protein_column)
 
         target_writer = CSVFileWriter(out_paths[0], out_columns, sep=sep)
-        target_writer.write_header()
-
         decoy_writer = CSVFileWriter(out_paths[1], out_columns, sep=sep) if decoys else None
-        if decoys:
-            decoy_writer.write_header()
+
+        # todo: Headers are already written, we should rather check that they fit...
+        # target_writer.write_header()
+        # if decoys:
+        #     decoy_writer.write_header()
 
         chunked = lambda list: create_chunks(list, chunk_size=CONFIDENCE_CHUNK_SIZE)
-
 
         for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
             chunked_data_iterator, chunked(self.qvals), chunked(self.peps), chunked(self.targets) ):
@@ -347,7 +347,7 @@ class Confidence(object):
             data_chunk[pep_column] = peps_chunk
             if level != "proteins" and protein_column is not None:
                 # EZ: seems to move the proteinIds column to the back (last col)
-                # todo: we should rather have an out_columns where the the
+                # todo: we should rather have an out_columns where the
                 # protein column is moved to last position and then we reindex
                 # using the out_columns
                 data_chunk[protein_column] = data_chunk.pop(protein_column)
@@ -895,13 +895,15 @@ def assign_confidence(
                     file_prefix_group = f"{file_prefix}{group_column}."
                 else:
                     file_prefix_group = file_prefix
+
                 outfile_t = dest_dir / f"{file_prefix_group}targets.{level}"
-                outfile_d = dest_dir / f"{file_prefix_group}decoys.{level}"
                 if not append_to_output_file:
                     with open(outfile_t, "w") as fp:
                         fp.write(f"{sep.join(output_columns)}\n")
                 out_files.append([outfile_t])
+
                 if decoys:
+                    outfile_d = dest_dir / f"{file_prefix_group}decoys.{level}"
                     if not append_to_output_file:
                         with open(outfile_d, "w") as fp:
                             fp.write(f"{sep.join(output_columns)}\n")
@@ -987,8 +989,9 @@ def assign_confidence(
                 peps_algorithm=peps_algorithm,
                 qvalue_algorithm=qvalue_algorithm,
             )
-            if prefix is None:
+            if not prefix:
                 append_to_output_file = True
+
         else:
             LOGGER.info("Assigning confidence within groups...")
             GroupedConfidence(
@@ -1063,8 +1066,10 @@ def create_sorted_file_iterator(_psms, dest_dir: Path, file_prefix: str, do_roll
             sc_path.unlink()
 
 
+@typechecked
 def save_sorted_metadata_chunks(
-    chunk_metadata : pd.DataFrame, score_chunk, psms, do_rollup, i, sep, dest_dir : Path, file_prefix : str
+        chunk_metadata: pd.DataFrame, score_chunk: np.ndarray[float], psms,
+        do_rollup: bool, i: int, sep: str, dest_dir: Path, file_prefix: str
 ):
     chunk_metadata = convert_targets_column(
         data=chunk_metadata,
