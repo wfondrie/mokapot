@@ -447,6 +447,7 @@ class LinearConfidence(Confidence):
         desc=True,
         eval_fdr=0.01,
         decoys=None,
+        deduplication=True,
         do_rollup=True,
         proteins=None,
         peps_error=False,
@@ -461,6 +462,7 @@ class LinearConfidence(Confidence):
         self._peptide_column = "peptide"
         self._protein_column = "proteinIds"
         self._eval_fdr = eval_fdr
+        self.deduplication = deduplication
         self.do_rollup = do_rollup
 
         self._assign_confidence(
@@ -558,8 +560,8 @@ class LinearConfidence(Confidence):
                 _psms.with_suffix(".proteins")
                 for _psms in out_paths[0]
             ]
-
             LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
+
         for level, data_path, out_path in zip(levels, level_paths, out_paths):
             data = read_file(data_path, target_column=self._target_column)
             data_columns = list(data.columns)
@@ -587,7 +589,6 @@ class LinearConfidence(Confidence):
             )
 
             # Calculate PEPs
-
             LOGGER.info("Assigning PEPs to %s (using %s algorithm) ...", level, peps_algorithm)
             try:
                 self.peps = peps_from_scores(self.scores, self.targets, peps_algorithm)
@@ -735,7 +736,7 @@ class CrossLinkedConfidence(Confidence):
 
 @typechecked
 def assign_confidence(
-    psms,
+    psms: list[OnDiskPsmDataset],
     max_workers,
     scores=None,
     descs=None,
@@ -745,6 +746,7 @@ def assign_confidence(
     sep="\t",
     prefixes : list[str|None] | None = None,
     decoys=False,
+    deduplication=True,
     do_rollup=True,
     proteins=None,
     group_column=None,
@@ -760,7 +762,7 @@ def assign_confidence(
     Parameters
     ----------
     max_workers
-    psms : OnDiskPsmDataset
+    psms : list[OnDiskPsmDataset]
         A collection of PSMs.
     rng : int or np.random.Generator, optional
         A seed or generator used for cross-validation split creation and to
@@ -787,6 +789,8 @@ def assign_confidence(
 
     decoys : bool, optional
         Save decoys confidence estimates as well?
+    deduplication: bool
+        Are we performing deduplication on the psm level?
     do_rollup: bool
         do we apply rollup on peptides, modified peptides etc.?
     proteins: Proteins, optional
@@ -817,7 +821,10 @@ def assign_confidence(
                 ].values
             )
 
-    curr_psms = psms[0] # just take the first one for info (need to make sure the other are the same)
+    # just take the first one for info (and make sure the other are the same)
+    curr_psms = psms[0]
+    for _psms in psms[1:]:
+        assert _psms.columns == curr_psms.columns
 
     # todo: maybe use a collections.namedtuple for all the level info instead of all the ?
     # from collections import namedtuple
@@ -825,9 +832,10 @@ def assign_confidence(
 
     levels = ["psms"]
     level_data_path = [dest_dir / f"{file_root}psms.csv"]
-    level_dedup = [False]
+    level_dedup = [deduplication] # todo: check that this makes sense
     level_input_columns = [curr_psms.spectrum_columns]
 
+    extra_output_columns = []
     if do_rollup:
         level_columns = curr_psms.level_columns
         level_columns = level_columns[:1] # strip for the moment to peptides, todo: remove this later
@@ -838,17 +846,18 @@ def assign_confidence(
             level_data_path.append(dest_dir / f"{file_root}{level}.csv")
             level_dedup.append(True)
             level_input_columns.append(level_column)
+            if level not in ['psms', 'peptides', 'proteins']:
+                extra_output_columns.append(level_column)
+
 
     level_input_colidx = map_columns_to_indices(level_input_columns, curr_psms.columns)
 
     if proteins:
-        # if do_rollup:
-        #     # Rather: both don't work together
-        #     raise NotImplementedError("Does not work for proteins yet")
         levels.append("proteins")
         level_data_path.append(dest_dir / f"{file_root}proteins.csv")
-        level_dedup.append("I don't know")
+        level_dedup.append(True)  # This is a special rollup, maybe needs a special value here
         level_input_columns.append(curr_psms.protein_column)
+        level_input_colidx.append(-1)
 
     out_columns_psms_peps = [
         "PSMId",
@@ -857,7 +866,9 @@ def assign_confidence(
         "q-value",
         "posterior_error_prob",
         "proteinIds",
+        *extra_output_columns,
     ]
+
     out_columns_proteins = [
         "mokapot protein group",
         "best peptide",
@@ -866,17 +877,13 @@ def assign_confidence(
         "q-value",
         "posterior_error_prob",
     ]
-    output_columns_map = {
-        "psms":     out_columns_psms_peps,
-        "peptides": out_columns_psms_peps,
-        "proteins": out_columns_proteins,
-    }
 
     for _psms, score, desc, prefix in zip(psms, scores, descs, prefixes):
         metadata_columns = [
             "PSMId",
-            _psms.target_column,
+            _psms.target_column, # fixme: Why is this the only column where we take from the input?
             "peptide",
+            *extra_output_columns,
             "proteinIds",
             "score",
         ]
@@ -887,25 +894,28 @@ def assign_confidence(
 
             out_files = []
             for level in levels:
-                if group_column is not None and not combine:
+                if group_column is not None and not combine: # fixme: What is the relation between group_column and psms.group_column and why can one be None and the other not? And what would that mean?
                     file_prefix_group = f"{file_prefix}{group_column}."
                 else:
                     file_prefix_group = file_prefix
 
-                output_columns = output_columns_map[level]
+                if level == "proteins":
+                    output_columns = out_columns_proteins
+                else:
+                    output_columns = out_columns_psms_peps
 
-                outfile_t = dest_dir / f"{file_prefix_group}targets.{level}"
-                writer = TabbedFileWriter.from_suffix(outfile_t, output_columns)
+                outfile_targets = dest_dir / f"{file_prefix_group}targets.{level}"
+                writer = TabbedFileWriter.from_suffix(outfile_targets, output_columns)
                 if not append_to_output_file:
                     writer.write_header()
-                out_files.append([outfile_t])
+                out_files.append([outfile_targets])
 
                 if decoys:
-                    outfile_d = dest_dir / f"{file_prefix_group}decoys.{level}"
-                    writer = TabbedFileWriter.from_suffix(outfile_d, output_columns)
+                    outfile_decoys = dest_dir / f"{file_prefix_group}decoys.{level}"
+                    writer = TabbedFileWriter.from_suffix(outfile_decoys, output_columns)
                     if not append_to_output_file:
                         writer.write_header()
-                    out_files[-1].append(outfile_d)
+                    out_files[-1].append(outfile_decoys)
 
             with create_sorted_file_iterator(_psms,
                                              dest_dir, file_prefix,

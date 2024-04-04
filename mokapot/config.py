@@ -310,6 +310,13 @@ def _parser():
     )
 
     parser.add_argument(
+        "--skip_deduplication",
+        default=False,
+        action="store_true",
+        help=("Keep deduplication of psms wrt scan number and expMass."),
+    )
+
+    parser.add_argument(
         "--skip_rollup",
         default=False,
         action="store_true",
