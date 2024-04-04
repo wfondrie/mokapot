@@ -45,15 +45,16 @@ def _run_cli(module: str, main_func: Callable, params: List[Any],
         if capture_output:
             return {'stdout': res.stdout.decode(),
                     'stderr': res.stderr.decode()}
-    else:
+    elif capture_output:
         stdout_sink = io.StringIO()
         stderr_sink = io.StringIO()
         with redirect_stdout(stdout_sink), redirect_stderr(stderr_sink):
             main_func(params)
 
-        if capture_output:
-            return {'stdout': stdout_sink.getvalue(),
-                    'stderr': stderr_sink.getvalue()}
+        return {'stdout': stdout_sink.getvalue(),
+                'stderr': stderr_sink.getvalue()}
+    else:
+        main_func(params)
 
 
 def run_mokapot_cli(params: List[Any], run_in_subprocess=None,
