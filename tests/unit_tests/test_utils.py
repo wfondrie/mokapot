@@ -152,6 +152,11 @@ def test_map_columns_to_indices():
     assert utils.map_columns_to_indices([], []) == []
     assert utils.map_columns_to_indices((), []) == ()
 
+    # Test with dict
+    assert (utils.map_columns_to_indices(
+        {"key1": 'a', "key2": 'c'}, ['a', 'b', 'c']) ==
+            {"key1": 0, "key2": 2})
+
     # Test recursive
     assert (utils.map_columns_to_indices(
         [('a', ('b', ['c'], ('b',), 'c')), ('c', 'b')], ['a', 'b', 'c']) ==

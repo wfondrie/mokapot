@@ -171,8 +171,8 @@ def convert_targets_column(data: pd.DataFrame,
 
 
 @typechecked
-def map_columns_to_indices(search: list | tuple, columns: list[str]) -> \
-        list | tuple:
+def map_columns_to_indices(search: list | tuple | dict, columns: list[str]) -> \
+        list | tuple | dict:
     """
     Map columns to indices in recursive fashion preserving order and structure.
 
@@ -202,8 +202,14 @@ def map_columns_to_indices(search: list | tuple, columns: list[str]) -> \
         `columns`
     """
     assert all(item is not None for item in search)
-    return type(search)(
-        columns.index(s) if isinstance(s, str)
-        else map_columns_to_indices(s, columns)
-        for s in search
-    )
+    if isinstance(search, dict):
+        return {
+            k: columns.index(s) if isinstance(s, str)
+            else map_columns_to_indices(s, columns)
+            for k, s in search.items()}
+    else:
+        return type(search)(
+            columns.index(s) if isinstance(s, str)
+            else map_columns_to_indices(s, columns)
+            for s in search
+        )
