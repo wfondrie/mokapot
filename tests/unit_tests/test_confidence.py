@@ -11,6 +11,12 @@ from mokapot.confidence import get_unique_peptides_from_psms
 def test_one_group(psm_df_1000, tmp_path):
     """Test that one group is equivalent to no group."""
 
+    # After correcting the targets column stuff and with that the updated labels
+    # (see _update_labels) it turned out that there were no targets with fdr
+    # below 0.01 anymore, and so as a remedy the eval_fdr was raised to 0.02.
+    # NB: with the old bug there would *always* be targets labelled as 1
+    # incorrectly (namely the last and before last)
+
     pin_file, _, _ = psm_df_1000
     columns = list(pd.read_csv(pin_file, sep="\t").columns)
     df_spectra = pd.read_csv(
@@ -50,6 +56,7 @@ def test_one_group(psm_df_1000, tmp_path):
         descs=[True],
         dest_dir=tmp_path,
         max_workers=4,
+        eval_fdr=0.02,
     )
     df_results_group = pd.read_csv(tmp_path / "0.targets.peptides", sep="\t")
 
@@ -61,6 +68,7 @@ def test_one_group(psm_df_1000, tmp_path):
         descs=[True],
         dest_dir=tmp_path,
         max_workers=4,
+        eval_fdr=0.02,
     )
     df_results_no_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
 
@@ -107,6 +115,7 @@ def test_multi_groups(psm_df_100, tmp_path):
         descs=[True],
         dest_dir=tmp_path,
         max_workers=4,
+        eval_fdr=0.10,
     )
     assert Path(tmp_path, f"{0}.targets.psms").exists()
     assert Path(tmp_path, f"{1}.targets.psms").exists()

@@ -158,20 +158,15 @@ def convert_targets_column(data: pd.DataFrame,
     ValueError
         If the target column contains values other than -1, 0, or 1.
     """
+    if data[target_column].dtype == bool:
+        return data
+
     labels = data[target_column].astype(int)
     if any(labels < -1) or any(labels > 1):
         raise ValueError(f"Invalid target column '{target_column}' "
                          "contains values not in {-1, 0, 1}")
-    # This is how it should be
-    # data[target_column] = (labels == 1)
 
-    # This is BS, but is like the "old way" of doing things, and it leads to
-    # quite significant errors, but without it some unit tests break, and
-    # I currently don't know what the right solution to this is...
-    if any(labels == -1):
-        data[target_column] = (labels == 1)
-    else:
-        data[target_column] = labels
+    data[target_column] = (labels == 1)
     return data
 
 
