@@ -10,7 +10,7 @@ from pathlib import Path
 from ..helpers.cli import run_mokapot_cli
 
 import pytest
-
+import pandas as pd
 
 @pytest.fixture
 def scope_files():
@@ -49,6 +49,11 @@ def test_basic_cli(tmp_path, scope_files):
     run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
+
+    targets_psms_df = pd.read_csv(Path(tmp_path, "targets.psms"), sep="\t", index_col=None, nrows=1)
+    assert targets_psms_df.columns.values.tolist() == ["PSMId", "peptide", "score", "q-value", "posterior_error_prob", "proteinIds"]
+    assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
+    assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
 
 
 def test_cli_options(tmp_path, scope_files):

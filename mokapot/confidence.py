@@ -311,6 +311,10 @@ class Confidence(object):
             The paths to the saved files.
 
         """
+        # Todo: rename this function (maybe: save_to_disk or something), remove
+        #  file type specific stuff (sep) and add column mapping. Further, the
+        #  output files should be passed as TabbedWriters and equiv with input.
+
         # The columns here are usually the metadata_columns from confidence.assign_confidence
         # which are usually ['PSMId', 'Label', 'peptide', 'proteinIds', 'score']
         # Since, those are exactly the columns that are written there to the csv
@@ -328,16 +332,16 @@ class Confidence(object):
         out_columns = in_columns + [qvalue_column, pep_column]
         protein_column = self._protein_column
         if level != "proteins" and protein_column is not None:
+            # Move the "proteinIds" column to the back for dubious reasons
+            # todo: rather than this fiddeling here, we should have a column
+            #  mapping that does this
             out_columns.remove(protein_column)
             out_columns.append(protein_column)
 
+        # Create output writers (headers are already written in
+        # assign_confidence, that's also where column defs can be found)
         target_writer = TabbedFileWriter.from_suffix(out_paths[0], out_columns)
         decoy_writer = TabbedFileWriter.from_suffix(out_paths[1], out_columns) if decoys else None
-
-        # todo: Headers are already written, we should rather check that they fit...
-        # target_writer.write_header()
-        # if decoys:
-        #     decoy_writer.write_header()
 
         chunked = lambda list: create_chunks(list, chunk_size=CONFIDENCE_CHUNK_SIZE)
 
@@ -345,18 +349,11 @@ class Confidence(object):
             chunked_data_iterator, chunked(self.qvals), chunked(self.peps), chunked(self.targets) ):
             data_chunk[qvalue_column] = qvals_chunk
             data_chunk[pep_column] = peps_chunk
-            if level != "proteins" and protein_column is not None:
-                # EZ: seems to move the proteinIds column to the back (last col)
-                # todo: we should rather have an out_columns where the
-                # protein column is moved to last position and then we reindex
-                # using the out_columns
-                data_chunk[protein_column] = data_chunk.pop(protein_column)
 
-            # EZ: the definitions of the columns are to be found in
-            # assign_confidence (that's where the file headers are written)
-            target_writer.append_data(data_chunk.loc[targets_chunk, :])
+            target_writer.append_data(data_chunk.loc[targets_chunk, out_columns])
             if decoys:
-                decoy_writer.append_data(data_chunk.loc[~targets_chunk, :])
+                decoy_writer.append_data(data_chunk.loc[~targets_chunk, out_columns])
+
         return out_paths
 
     def _perform_tdc(self, psms, psm_columns):
