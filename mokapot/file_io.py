@@ -8,7 +8,7 @@ from pathlib import Path
 from typeguard import typechecked
 
 
-CSV_SUFFIXES = [".csv", ".peptides", ".psms", ".proteins"]
+CSV_SUFFIXES = [".csv", ".pin", ".tab", ".peptides", ".psms", ".proteins"]
 
 @typechecked
 class TabbedFileReader(ABC):
@@ -56,14 +56,14 @@ class CSVFileReader(TabbedFileReader):
         raise NotImplementedError
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
-        result = pd.read_csv(self.file_name, **self.stdargs)
+        result = pd.read_csv(self.file_name, usecols=columns, **self.stdargs)
         return result if columns is None else result[columns]
 
     def get_chunked_data_iterator(self, chunk_size: int,
                                   columns: list[str] | None = None) \
             -> Generator[pd.DataFrame, None, None]:
-        for chunk in pd.read_csv(self.file_name, **self.stdargs,
-                                 chunksize=chunk_size):
+        for chunk in pd.read_csv(self.file_name, usecols=columns,
+                                 chunksize=chunk_size, **self.stdargs):
             yield chunk if columns is None else chunk[columns]
 
 

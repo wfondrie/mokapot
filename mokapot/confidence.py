@@ -1018,11 +1018,8 @@ def create_sorted_file_iterator(_psms, dest_dir: Path, file_prefix: str, do_roll
 
     # a) Create a reader that only reads columns given in
     #    psms.metadata_columns in chunks of size CONFIDENCE_CHUNK_SIZE
-    reader = read_file_in_chunks(
-        file=_psms.filename,
-        chunk_size=CONFIDENCE_CHUNK_SIZE,
-        use_cols=_psms.metadata_columns,
-    )
+    reader = TabbedFileReader.from_path(_psms.filename)
+    file_iterator = reader.get_chunked_data_iterator(CONFIDENCE_CHUNK_SIZE, _psms.metadata_columns)
 
     # b) Split the scores in chunks of the same size
     scores_slices = create_chunks(
@@ -1034,18 +1031,16 @@ def create_sorted_file_iterator(_psms, dest_dir: Path, file_prefix: str, do_roll
     #    (NB: after the last change the columns are now indeed in the
     #     order given by metadata_columns and not by file header order)
     Parallel(n_jobs=max_workers, require="sharedmem")(
-        delayed(save_sorted_metadata_chunks)(
+        delayed(_save_sorted_metadata_chunks)(
             chunk_metadata,
             score_chunk,
             _psms,
             do_rollup,
-            i,
-            sep,
-            dest_dir,
-            f"{file_prefix}scores_metadata"
+            TabbedFileWriter.from_suffix(dest_dir / f"{file_prefix}scores_metadata_{i}.csv",
+                                         columns=_psms.metadata_columns + ["score"]),
         )
         for chunk_metadata, score_chunk, i in zip(
-            reader, scores_slices, range(len(scores_slices))
+            file_iterator, scores_slices, range(len(scores_slices))
         )
     )
 
@@ -1065,26 +1060,23 @@ def create_sorted_file_iterator(_psms, dest_dir: Path, file_prefix: str, do_roll
 
 
 @typechecked
-def save_sorted_metadata_chunks(
+def _save_sorted_metadata_chunks(
         chunk_metadata: pd.DataFrame, score_chunk: np.ndarray[float], psms,
-        do_rollup: bool, i: int, sep: str, dest_dir: Path, file_prefix: str
+        deduplication: bool, chunk_writer: TabbedFileWriter
 ):
     chunk_metadata = convert_targets_column(
         data=chunk_metadata,
         target_column=psms.target_column,
     )
+
     chunk_metadata["score"] = score_chunk
     chunk_metadata.sort_values(by="score", ascending=False, inplace=True)
 
-    if do_rollup:
+    if deduplication:
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
 
-    chunk_metadata.to_csv(
-        dest_dir / f"{file_prefix}_{i}.csv",
-        sep=sep,
-        index=False,
-        mode="w",
-    )
+    # fixme: this should be a TabbedWriter probably passed in from the caller
+    chunk_writer.write(chunk_metadata)
 
 
 def get_unique_psms_and_peptides(iterable, input_colidx, out_psms, out_peptides, sep):
