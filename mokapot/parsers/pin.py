@@ -3,6 +3,7 @@ This module contains the parsers for reading in PSMs
 """
 
 import logging
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -293,7 +294,9 @@ def drop_missing_values_and_fill_spectra_dataframe(
         for i, feature in enumerate(reader):
             if set(spectra) <= set(column):
                 df_spectra_list.append(feature[spectra])
-                feature.drop(spectra, axis=1, inplace=True)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=pd.errors.SettingWithCopyWarning)
+                    feature.drop(spectra, axis=1, inplace=True)
             na_mask = pd.concat(
                 [na_mask, pd.DataFrame([feature.isna().any(axis=0)])],
                 ignore_index=True,
