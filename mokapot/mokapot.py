@@ -43,14 +43,13 @@ def main(main_args=None):
         2: logging.INFO,
         3: logging.DEBUG,
     }
-    if verbosity_dict[config.verbosity] != logging.DEBUG:
-        warnings.filterwarnings("ignore")
 
     logging.basicConfig(
         format=("[{levelname}] {message}"),
         style="{",
         level=verbosity_dict[config.verbosity],
     )
+    logging.captureWarnings(True)
 
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")

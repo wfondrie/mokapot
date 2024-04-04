@@ -34,13 +34,12 @@ def main(main_args=None):
         3: logging.DEBUG,
     }
 
-    if verbosity_dict[args.verbosity] != logging.DEBUG:
-        warnings.filterwarnings("ignore")
     logging.basicConfig(
         format=("[{levelname}] {message}"),
         style="{",
         level=verbosity_dict[args.verbosity],
     )
+    logging.captureWarnings(True)
 
     logging.info("mokapot version %s", str(__version__))
     logging.info("Command issued:")
