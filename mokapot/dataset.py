@@ -818,7 +818,10 @@ class OnDiskPsmDataset:
         return spectra_idx
 
 
-def _update_labels(scores, targets, eval_fdr=0.01, desc=True):
+@typechecked
+def _update_labels(scores: np.ndarray[float] | pd.Series,
+                   targets: np.ndarray[bool] | pd.Series,
+                   eval_fdr: float = 0.01, desc: bool = True):
     """Return the label for each PSM, given it's score.
 
     This method is used during model training to define positive examples,
@@ -842,6 +845,11 @@ def _update_labels(scores, targets, eval_fdr=0.01, desc=True):
         Typically, 0 is reserved for targets, below a specified FDR
         threshold.
     """
+    if isinstance(scores, pd.Series):
+        scores = scores.values.astype(float)
+    if isinstance(targets, pd.Series):
+        targets = targets.values.astype(bool)
+
     qvals = qvalues.tdc(scores, target=targets, desc=desc)
     unlabeled = np.logical_and(qvals > eval_fdr, targets)
     new_labels = np.ones(len(qvals))

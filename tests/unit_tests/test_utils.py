@@ -115,10 +115,6 @@ def test_convert_targets_column(psms_iterator):
     expect = pd.Series([True, False, False, True, True, False, True],
                        name="Label")
 
-    # Actually, all tests should compare with expect, and not with expect_int, but
-    # when I fix convert_targets_column to always return bool, as it should be,
-    # other things break, which I can't fix at the moment. Sigh...
-
     # Test with values in [0, 1] as strings
     df_out = utils.convert_targets_column(df, "Label")
     assert df_out is df  # check that returned and original df are the same
