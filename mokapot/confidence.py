@@ -39,7 +39,7 @@ from .utils import (
 from .dataset import read_file, PsmDataset, OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
-from .file_io import CSVFileWriter, CSVFileReader
+from .file_io import TabbedFileWriter, TabbedFileReader
 from .parsers.pin import read_file_in_chunks
 from .constants import CONFIDENCE_CHUNK_SIZE
 
@@ -316,7 +316,7 @@ class Confidence(object):
         # Since, those are exactly the columns that are written there to the csv
         # files, it's not exactly clear, why they are passed along here anyway
         # (but let's assert that here)
-        reader = CSVFileReader(data_path)
+        reader = TabbedFileReader.from_path(data_path)
         assert reader.get_column_names() == columns
 
         in_columns = [i for i in columns if i != self._target_column]
@@ -331,8 +331,8 @@ class Confidence(object):
             out_columns.remove(protein_column)
             out_columns.append(protein_column)
 
-        target_writer = CSVFileWriter(out_paths[0], out_columns, sep=sep)
-        decoy_writer = CSVFileWriter(out_paths[1], out_columns, sep=sep) if decoys else None
+        target_writer = TabbedFileWriter.from_suffix(out_paths[0], out_columns)
+        decoy_writer = TabbedFileWriter.from_suffix(out_paths[1], out_columns) if decoys else None
 
         # todo: Headers are already written, we should rather check that they fit...
         # target_writer.write_header()
@@ -890,23 +890,24 @@ def assign_confidence(
 
             out_files = []
             for level in levels:
-                output_columns = output_columns_map[level]
                 if group_column is not None and not combine:
                     file_prefix_group = f"{file_prefix}{group_column}."
                 else:
                     file_prefix_group = file_prefix
 
+                output_columns = output_columns_map[level]
+
                 outfile_t = dest_dir / f"{file_prefix_group}targets.{level}"
+                writer = TabbedFileWriter.from_suffix(outfile_t, output_columns)
                 if not append_to_output_file:
-                    with open(outfile_t, "w") as fp:
-                        fp.write(f"{sep.join(output_columns)}\n")
+                    writer.write_header()
                 out_files.append([outfile_t])
 
                 if decoys:
                     outfile_d = dest_dir / f"{file_prefix_group}decoys.{level}"
+                    writer = TabbedFileWriter.from_suffix(outfile_d, output_columns)
                     if not append_to_output_file:
-                        with open(outfile_d, "w") as fp:
-                            fp.write(f"{sep.join(output_columns)}\n")
+                        writer.write_header()
                     out_files[-1].append(outfile_d)
 
             with create_sorted_file_iterator(_psms,

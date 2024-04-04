@@ -1,4 +1,4 @@
-import csv
+import warnings
 from typing import Generator
 
 import pandas as pd
@@ -7,6 +7,8 @@ from pathlib import Path
 
 from typeguard import typechecked
 
+
+CSV_SUFFIXES = [".csv", ".peptides", ".psms"]
 
 @typechecked
 class TabbedFileReader(ABC):
@@ -25,6 +27,19 @@ class TabbedFileReader(ABC):
     @abstractmethod
     def get_chunked_data_iterator(self, chunk_size: int, columns: list[str] | None = None) -> Generator[pd.DataFrame, None, None]:
         raise NotImplementedError
+
+    @staticmethod
+    def from_path(file_name: Path, **kwargs) -> "TabbedFileReader":
+        # Currently, we look only at the suffix, however, in the future we could
+        # also look into the file itself (is it ascii? does it have some "magic
+        # bytes"? ...)
+        suffix = file_name.suffix
+        if suffix in CSV_SUFFIXES:
+            return CSVFileReader(file_name, **kwargs)
+
+        # Fallback
+        warnings.warn(f"Suffix '{suffix}' not recognized in file name '{file_name}'. Falling back to CSV...")
+        return CSVFileReader(file_name, **kwargs)
 
 
 @typechecked
@@ -78,6 +93,18 @@ class TabbedFileWriter(ABC):
         self.write_header()
         self.append_data(data)
 
+    @staticmethod
+    def from_suffix(file_name: Path, columns: list[str], **kwargs) -> "TabbedFileWriter":
+        suffix = file_name.suffix
+        if suffix in CSV_SUFFIXES:
+            return CSVFileWriter(file_name, columns, **kwargs)
+
+        # Fallback
+        warnings.warn(f"Suffix '{suffix}' not recognized in file name '{file_name}'. Falling back to CSV...")
+        return CSVFileWriter(file_name, columns, **kwargs)
+
+
+
 
 @typechecked
 class CSVFileWriter(TabbedFileWriter):
@@ -104,4 +131,3 @@ class CSVFileWriter(TabbedFileWriter):
     def append_data(self, data: pd.DataFrame):
         self.check_valid_data(data)
         data.to_csv(self.file_name, mode="a", header=False, **self.stdargs)
-
