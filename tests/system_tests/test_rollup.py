@@ -23,17 +23,16 @@ def percolator_extended_file_big():
     """Get the extended percolator tab file restricted to 10000 rows"""
     return Path("data", "percolator-noSplit-extended-10000.tab")
 
-@pytest.fixture
-def percolator_extended_file_huge():
-    """Get the full extended percolator tab file"""
-    return Path("scratch", "percolator-noSplit-extended.tab")
+# @pytest.fixture
+# def percolator_extended_file_huge():
+#     """Get the full extended percolator tab file"""
+#     return Path("scratch", "percolator-noSplit-extended.tab")
 
 
 def test_rollup_10000(tmp_path, percolator_extended_file_small,
                       percolator_extended_file_big):
     """Test that basic cli works."""
     path = tmp_path
-    # path = Path("scratch", "testing")
 
     import shutil
     shutil.rmtree(path, ignore_errors=True)
@@ -101,7 +100,6 @@ def test_cli_fasta_copy(tmp_path):
 def test_extra_cols(tmp_path):
     """Test that two identical mokapot runs produce same results."""
 
-    tmp_path = Path("scratch", "testing")
     extended_file = Path("data", "percolator-noSplit-extended-10000.tab")
     non_extended_file = Path("data", "percolator-noSplit-non-extended-10000.tab")
 
