@@ -843,7 +843,6 @@ def assign_confidence(
     extra_output_columns = []
     if do_rollup:
         level_columns = curr_psms.level_columns
-        level_columns = level_columns[:1] # strip for the moment to peptides, todo: remove this later
 
         for level_column in level_columns:
             level = level_column.lower() + "s"  # e.g. Peptide to peptides
@@ -860,14 +859,16 @@ def assign_confidence(
         level_data_path[level] = dest_dir / f"{file_root}{level}.csv"
         level_hash_columns[level] = curr_psms.protein_column
 
+    # fixme: the output header and data do not fit, when the extra_output_columns
+    #  are in a different place. Fix that.
     out_columns_psms_peps = [
         "PSMId",
         "peptide",
+        *extra_output_columns,
         "score",
         "q-value",
         "posterior_error_prob",
         "proteinIds",
-        *extra_output_columns,
     ]
 
     out_columns_proteins = [
@@ -987,7 +988,7 @@ def assign_confidence(
                         else:
                             LOGGER.info(f"\t- Found {psm_count} PSMs.")
                     else:
-                        LOGGER.info("\t- Found {count} unique {level}.")
+                        LOGGER.info(f"\t- Found {count} unique {level}.")
 
             LinearConfidence(
                 psms=_psms,

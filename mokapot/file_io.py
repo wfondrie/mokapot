@@ -7,8 +7,8 @@ from pathlib import Path
 
 from typeguard import typechecked
 
+CSV_SUFFIXES = [".csv", ".pin", ".tab", ".peptides", ".psms", ".proteins", ".modifiedpeptides", ".pcms", ".peptidegroups"]
 
-CSV_SUFFIXES = [".csv", ".pin", ".tab", ".peptides", ".psms", ".proteins"]
 
 @typechecked
 class TabbedFileReader(ABC):
