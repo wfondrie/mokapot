@@ -48,6 +48,12 @@ class CSVFileReader(TabbedFileReader):
         self.file_name = file_name
         self.stdargs = {'sep': sep, 'index_col': False}
 
+    def __str__(self):
+        return f'CSVFileReader({self.file_name=})'
+
+    def __repr__(self):
+        return f'CSVFileReader({self.file_name=},{self.stdargs=})'
+
     def get_column_names(self) -> list[str]:
         return pd.read_csv(self.file_name, **self.stdargs,
                            nrows=0).columns.tolist()
@@ -117,6 +123,12 @@ class CSVFileWriter(TabbedFileWriter):
         self.columns = columns
         self.column_types = column_types
         self.stdargs = {'sep': sep, 'index': False}
+
+    def __str__(self):
+        return f'CSVFileWriter({self.file_name=},{self.columns=})'
+
+    def __repr__(self):
+        return f'CSVFileWriter({self.file_name=},{self.columns=},{self.stdargs=})'
 
     def get_column_names(self):
         return self.columns
