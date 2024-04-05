@@ -276,7 +276,7 @@ class PsmDataset(ABC):
                 best_desc = desc
 
         if best_feat is None:
-            raise RuntimeError("No PSMs found below the 'eval_fdr'.")
+            raise RuntimeError(f"No PSMs found below the 'eval_fdr' {eval_fdr}.")
 
         return best_feat, best_positives, new_labels, best_desc
 
