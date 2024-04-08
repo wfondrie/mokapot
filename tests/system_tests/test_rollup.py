@@ -73,6 +73,9 @@ def test_rollup_10000(tmp_path, percolator_extended_file_small,
     run_mokapot_cli(params)
     assert Path(path, "targets.psms").exists()
     assert Path(path, "targets.peptides").exists()
+    assert Path(path, "targets.precursors").exists()
+    assert Path(path, "targets.modifiedpeptides").exists()
+    assert Path(path, "targets.peptidegroups").exists()
 
 
 @pytest.mark.skip
