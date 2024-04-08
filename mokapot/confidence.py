@@ -311,9 +311,7 @@ class Confidence(object):
             The paths to the saved files.
 
         """
-        # Todo: rename this function (maybe: save_to_disk or something), remove
-        #  file type specific stuff (sep) and add column mapping. Further, the
-        #  output files should be passed as TabbedWriters and equiv with input.
+        # Todo: rename this function (maybe: save_to_disk or something),
 
         # The columns here are usually the metadata_columns from confidence.assign_confidence
         # which are usually ['PSMId', 'Label', 'peptide', 'proteinIds', 'score']
@@ -961,9 +959,7 @@ def assign_confidence(
 
 
                 psm_count = 0
-                # line_df = pd.DataFrame(columns=metadata_columns, data=[["" for col in metadata_columns]])
                 for data_row in sorted_file_iterator:
-                    # line_list[-1] = line_list[-1][:-1] # strip \n character at the end
                     line_list = np.array(data_row)
                     psm_count += 1
                     for level in levels:
@@ -976,8 +972,6 @@ def assign_confidence(
                             seen_level_entities[level].add(psm_hash)
                         line = line_list[input_colidx]
                         handles[level].write("\t".join(line))
-                        # line_df.iloc[0, :] = line
-                        # writers[level].append_data(line_df)
 
                 for level in levels:
                     handles[level].close()
@@ -1095,32 +1089,7 @@ def _save_sorted_metadata_chunks(
     if deduplication:
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
 
-    # fixme: this should be a TabbedWriter probably passed in from the caller
     chunk_writer.write(chunk_metadata)
-
-
-def get_unique_psms_and_peptides(iterable, input_colidx, out_psms, out_peptides, sep):
-    seen_psm = set()
-    seen_peptide = set()
-    f_psm = open(out_psms, "a")
-    f_peptide = open(out_peptides, "a")
-
-    specid_idx, label_idx, scannr_idx, expmass_idx, peptide_idx, proteins_idx, score_idx = tuple(input_colidx)
-    output_colidx = [specid_idx, label_idx, peptide_idx, proteins_idx, score_idx]
-
-    for line_list in iterable:
-        line_hash_psm = tuple([int(line_list[scannr_idx]), float(line_list[expmass_idx])])
-        line_hash_peptide = line_list[peptide_idx]
-        line = (np.array(line_list))[output_colidx]
-        if line_hash_psm not in seen_psm:
-            seen_psm.add(line_hash_psm)
-            f_psm.write(f"{sep.join(line)}")
-            if line_hash_peptide not in seen_peptide:
-                seen_peptide.add(line_hash_peptide)
-                f_peptide.write(f"{sep.join(line)}")
-    f_psm.close()
-    f_peptide.close()
-    return [len(seen_psm), len(seen_peptide)]
 
 
 @typechecked
