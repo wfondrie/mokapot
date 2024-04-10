@@ -5,10 +5,17 @@ import numpy as np
 import pandas as pd
 import copy
 from mokapot import OnDiskPsmDataset, assign_confidence
+from mokapot.confidence import get_unique_peptides_from_psms
 
 
 def test_one_group(psm_df_1000, tmp_path):
     """Test that one group is equivalent to no group."""
+
+    # After correcting the targets column stuff and with that the updated labels
+    # (see _update_labels) it turned out that there were no targets with fdr
+    # below 0.01 anymore, and so as a remedy the eval_fdr was raised to 0.02.
+    # NB: with the old bug there would *always* be targets labelled as 1
+    # incorrectly (namely the last and before last)
 
     pin_file, _, _ = psm_df_1000
     columns = list(pd.read_csv(pin_file, sep="\t").columns)
@@ -28,7 +35,7 @@ def test_one_group(psm_df_1000, tmp_path):
         rt_column="ret_time",
         charge_column="charge",
         columns=columns,
-        protein_column=None,
+        protein_column="proteins",
         group_column="group",
         metadata_columns=[
             "specid",
@@ -38,7 +45,8 @@ def test_one_group(psm_df_1000, tmp_path):
             "proteins",
             "target",
         ],
-        specId_column="spectrum",
+        level_columns=["peptide"],
+        specId_column="specid",
         spectra_dataframe=df_spectra,
     )
     np.random.seed(42)
@@ -48,6 +56,7 @@ def test_one_group(psm_df_1000, tmp_path):
         descs=[True],
         dest_dir=tmp_path,
         max_workers=4,
+        eval_fdr=0.02,
     )
     df_results_group = pd.read_csv(tmp_path / "0.targets.peptides", sep="\t")
 
@@ -59,6 +68,7 @@ def test_one_group(psm_df_1000, tmp_path):
         descs=[True],
         dest_dir=tmp_path,
         max_workers=4,
+        eval_fdr=0.02,
     )
     df_results_no_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
 
@@ -85,7 +95,7 @@ def test_multi_groups(psm_df_100, tmp_path):
         rt_column="ret_time",
         charge_column="charge",
         columns=columns,
-        protein_column=None,
+        protein_column="proteins",
         group_column="group",
         metadata_columns=[
             "specid",
@@ -95,7 +105,8 @@ def test_multi_groups(psm_df_100, tmp_path):
             "proteins",
             "target",
         ],
-        specId_column="spectrum",
+        level_columns=["peptide"],
+        specId_column="specid",
         spectra_dataframe=df_spectra,
     )
     assign_confidence(
@@ -104,8 +115,32 @@ def test_multi_groups(psm_df_100, tmp_path):
         descs=[True],
         dest_dir=tmp_path,
         max_workers=4,
+        eval_fdr=0.10,
     )
     assert Path(tmp_path, f"{0}.targets.psms").exists()
     assert Path(tmp_path, f"{1}.targets.psms").exists()
     assert Path(tmp_path, f"{0}.targets.peptides").exists()
     assert Path(tmp_path, f"{1}.targets.peptides").exists()
+
+
+def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
+    psms_iterator = psms_iterator
+    get_unique_peptides_from_psms(
+        iterable=psms_iterator,
+        peptide_col_index=2,
+        out_peptides=peptide_csv_file,
+        sep="\t",
+    )
+
+    expected_output = pd.DataFrame(
+        [
+            [1, 1, "HLAQLLR", -5.75, "_.dummy._"],
+            [3, 0, "NVPTSLLK", -5.83, "_.dummy._"],
+            [4, 1, "QILVQLR", -5.92, "_.dummy._"],
+            [7, 1, "SRTSVIPGPK", -6.12, "_.dummy._"],
+        ],
+        columns=["PSMId", "Label", "Peptide", "score", "proteinIds"],
+    )
+
+    output = pd.read_csv(peptide_csv_file, sep="\t")
+    pd.testing.assert_frame_equal(expected_output, output)

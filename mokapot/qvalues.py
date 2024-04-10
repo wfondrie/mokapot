@@ -4,6 +4,7 @@ This module estimates q-values.
 
 import numpy as np
 import numba as nb
+from typeguard import typechecked
 
 from .peps import peps_from_scores_hist_nnls, monotonize_simple, hist_data_from_scores, estimate_pi0_by_slope
 
@@ -13,8 +14,8 @@ QVALUE_ALGORITHM = {
     'from_counts': lambda scores, targets: qvalues_from_counts(scores, targets),
 }
 
-
-def tdc(scores, target, desc=True):
+@typechecked
+def tdc(scores: np.ndarray[float], target: np.ndarray[bool], desc: bool=True):
     """
     Estimate q-values using target decoy competition.
 

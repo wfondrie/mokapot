@@ -10,7 +10,7 @@ from pathlib import Path
 from ..helpers.cli import run_mokapot_cli
 
 import pytest
-
+import pandas as pd
 
 @pytest.fixture
 def scope_files():
@@ -25,6 +25,23 @@ def phospho_files():
     fasta = Path("data", "human_sp_td.fasta")
     return pin, fasta
 
+def count_lines(path: Path):
+    """Count the number of lines in a file.
+
+    Parameters
+    ----------
+    path : Path
+        The path to the file.
+
+    Returns
+    -------
+    int
+        The number of lines in the file.
+    """
+    with open(path, "r") as file:
+        lines = file.readlines()
+    return len(lines)
+
 
 def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
@@ -32,6 +49,11 @@ def test_basic_cli(tmp_path, scope_files):
     run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
+
+    targets_psms_df = pd.read_csv(Path(tmp_path, "targets.psms"), sep="\t", index_col=None, nrows=1)
+    assert targets_psms_df.columns.values.tolist() == ["PSMId", "peptide", "score", "q-value", "posterior_error_prob", "proteinIds"]
+    assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
+    assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
 
 
 def test_cli_options(tmp_path, scope_files):
@@ -99,11 +121,19 @@ def test_cli_aggregate(tmp_path, scope_files):
     assert not Path(tmp_path, "blah.targets.decoy.psms").exists()
     assert not Path(tmp_path, "blah.targets.decoy.peptides").exists()
 
+    # Line counts were determined by one hopefully correct test run
+    assert count_lines(Path(tmp_path, "blah.targets.psms")) == 10256
+    assert count_lines(Path(tmp_path, "blah.targets.peptides")) == 9663
+
+
     # Test that decoys are also in the output when --keep_decoys is used
     params += ["--keep_decoys"]
     run_mokapot_cli(params)
     assert Path(tmp_path, "blah.decoys.psms").exists()
     assert Path(tmp_path, "blah.decoys.peptides").exists()
+
+    assert count_lines(Path(tmp_path, "blah.decoys.psms")) == 3787
+    assert count_lines(Path(tmp_path, "blah.decoys.peptides")) == 3694
 
 
 def test_cli_fasta(tmp_path, phospho_files):
@@ -172,15 +202,15 @@ def test_cli_plugins(tmp_path, phospho_files):
     assert "Yelling at the user" in res['stderr']
 
 
-def test_cli_skip_deduplication(tmp_path, phospho_files):
-    """Test that peptides file results is skipped when using skip_deduplication"""
+def test_cli_skip_rollup(tmp_path, phospho_files):
+    """Test that peptides file results is skipped when using skip_rollup"""
     params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
         "--test_fdr",
         "0.01",
-        "--skip_deduplication",
+        "--skip_rollup",
     ]
 
     run_mokapot_cli(params)

@@ -113,7 +113,7 @@ def test_model_predict(psms):
 
 def test_model_persistance(tmp_path):
     """test that we can save and load a model"""
-    model_file = str(tmp_path / "model.pkl")
+    model_file = tmp_path / "model.pkl"
 
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
     mokapot.save_model(model, model_file)

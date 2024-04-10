@@ -3,12 +3,14 @@ This module contains the parsers for reading in PSMs
 """
 
 import logging
+import warnings
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
 from joblib import Parallel, delayed
 
-from .helpers import find_column, find_columns
+from .helpers import find_optional_column, find_columns, find_required_column
 from ..utils import (
     open_file,
     tuplize,
@@ -143,7 +145,7 @@ def create_chunks_with_identifier(data, identifier_column, chunk_size):
 
 
 def read_percolator(
-    perc_file,
+    perc_file : Path,
     max_workers,
     group_column=None,
     filename_column=None,
@@ -161,7 +163,7 @@ def read_percolator(
 
     Parameters
     ----------
-    perc_file : str
+    perc_file : Path
         The file to parse.
 
     Returns
@@ -173,21 +175,29 @@ def read_percolator(
     LOGGER.info("Reading %s...", perc_file)
     columns = get_column_names_from_file(perc_file)
 
-    # TODO: Refactor the generation of column variables with simpler implementation
-    # Find all of the necessary columns, case-insensitive:
-    specid = find_columns("specid", columns)
-    peptides = find_columns("peptide", columns)
-    proteins = find_columns("proteins", columns)
-    labels = find_columns("label", columns)
-    scan = find_columns("scannr", columns)[0]
-    nonfeat = sum([specid, [scan], peptides, proteins, labels], [])
+    # Find all the necessary columns, case-insensitive:
+    specid = find_required_column("specid", columns)
+    peptides = find_required_column("peptide", columns)
+    proteins = find_required_column("proteins", columns)
+    labels = find_required_column("label", columns)
+    scan = find_required_column("scannr", columns)
+    nonfeat = [specid, scan, peptides, proteins, labels]
+
+    # Columns for different rollup levels
+    # Currently no proteins, since the protein rollup is probably quite different
+    # from the other rollup levels IMHO
+    modifiedpeptides = find_columns("modifiedpeptide", columns)
+    precursors = find_columns("precursor", columns)
+    peptidegroups = find_columns("peptidegroup", columns)
+    level_columns = [peptides] + modifiedpeptides + precursors + peptidegroups
+    nonfeat += modifiedpeptides + precursors + peptidegroups
 
     # Optional columns
-    filename = find_column(filename_column, columns, "filename")
-    calcmass = find_column(calcmass_column, columns, "calcmass")
-    expmass = find_column(expmass_column, columns, "expmass")
-    ret_time = find_column(rt_column, columns, "ret_time")
-    charge = find_column(charge_column, columns, "charge_column")
+    filename = find_optional_column(filename_column, columns, "filename")
+    calcmass = find_optional_column(calcmass_column, columns, "calcmass")
+    expmass = find_optional_column(expmass_column, columns, "expmass")
+    ret_time = find_optional_column(rt_column, columns, "ret_time")
+    charge = find_optional_column(charge_column, columns, "charge_column")
     spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
 
     # Only add charge to features if there aren't other charge columns:
@@ -208,12 +218,7 @@ def read_percolator(
     features = [c for c in columns if c not in nonfeat]
 
     # Check for errors:
-    col_names = ["Label", "Peptide", "Proteins"]
-    for col, name in zip([labels, peptides, proteins], col_names):
-        if len(col) > 1:
-            raise ValueError(f"More than one '{name}' column found.")
-
-    if not all([specid, peptides, proteins, labels, spectra]):
+    if not all(spectra):
         raise ValueError(
             "This PIN format is incompatible with mokapot. Please"
             " verify that the required columns are present."
@@ -222,23 +227,21 @@ def read_percolator(
     # Check that features don't have missing values:
     feat_slices = create_chunks_with_identifier(
         data=features,
-        identifier_column=spectra + labels,
+        identifier_column=spectra + [labels],
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
-    df_spectra = []
+    df_spectra_list = []
     features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
             file=perc_file,
             column=c,
-            spectra=spectra + labels,
-            df_spectra=df_spectra,
+            spectra=spectra + [labels],
+            df_spectra_list=df_spectra_list,
         )
         for c in feat_slices
     )
-    df_spectra = convert_targets_column(
-        pd.concat(df_spectra).apply(pd.to_numeric, errors="ignore"),
-        target_column=labels[0],
-    )
+    df_spectra = convert_targets_column(pd.concat(df_spectra_list), target_column=labels)
+
     features_to_drop = [drop for drop in features_to_drop if drop]
     features_to_drop = flatten(features_to_drop)
     if len(features_to_drop) > 1:
@@ -258,16 +261,17 @@ def read_percolator(
     return OnDiskPsmDataset(
         filename=perc_file,
         columns=columns,
-        target_column=labels[0],
+        target_column=labels,
         spectrum_columns=spectra,
-        peptide_column=peptides[0],
-        protein_column=proteins[0],
+        peptide_column=peptides,
+        protein_column=proteins,
         group_column=group_column,
         feature_columns=_feature_columns,
         metadata_columns=nonfeat,
+        level_columns = level_columns,
         filename_column=filename,
         scan_column=scan,
-        specId_column=specid[0],
+        specId_column=specid,
         calcmass_column=calcmass,
         expmass_column=expmass,
         rt_column=ret_time,
@@ -278,7 +282,7 @@ def read_percolator(
 
 # Utility Functions -----------------------------------------------------------
 def drop_missing_values_and_fill_spectra_dataframe(
-    file, column, spectra, df_spectra
+    file, column, spectra, df_spectra_list
 ):
     na_mask = pd.DataFrame([], columns=list(set(column) - set(spectra)))
     with open_file(file) as f:
@@ -289,8 +293,10 @@ def drop_missing_values_and_fill_spectra_dataframe(
         )
         for i, feature in enumerate(reader):
             if set(spectra) <= set(column):
-                df_spectra.append(feature[spectra])
-                feature.drop(spectra, axis=1, inplace=True)
+                df_spectra_list.append(feature[spectra])
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=pd.errors.SettingWithCopyWarning)
+                    feature.drop(spectra, axis=1, inplace=True)
             na_mask = pd.concat(
                 [na_mask, pd.DataFrame([feature.isna().any(axis=0)])],
                 ignore_index=True,
@@ -306,13 +312,14 @@ def read_file_in_chunks(file, chunk_size, use_cols):
     when reading in chunks an open file object is required as input to iterate over the
     chunks
     """
-    return pd.read_csv(
+    for df in pd.read_csv(
         file,
         sep="\t",
         chunksize=chunk_size,
         usecols=use_cols,
         index_col=False,
-    )
+    ):
+        yield df[use_cols]
 
 
 def get_column_names_from_file(file):
@@ -342,13 +349,13 @@ def get_rows_from_dataframe(idx, chunk, train_psms, psms, file_idx):
         list of list of dataframes
     """
     chunk = convert_targets_column(
-        data=chunk.apply(pd.to_numeric, errors="ignore"),
+        data=chunk,
         target_column=psms.target_column,
     )
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
         train_psms[file_idx][k].append(
-            chunk.loc[idx_].apply(pd.to_numeric, errors="ignore")
+            chunk.loc[idx_]
         )
 
 

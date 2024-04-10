@@ -3,13 +3,15 @@ This file contains fixtures that are used at multiple points in the tests.
 """
 
 import logging
+import sys
+from pathlib import Path
+
 import pytest
 import numpy as np
 import pandas as pd
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from triqler.qvality import getQvaluesFromScores
 from mokapot.qvalues import tdc
-
 
 @pytest.fixture(autouse=True)
 def set_logging(caplog):
@@ -151,7 +153,7 @@ def psms(psm_df_1000):
 @pytest.fixture
 def psms_ondisk():
     """A small OnDiskPsmDataset"""
-    filename = "data/scope2_FP97AA.pin"
+    filename = Path("data", "scope2_FP97AA.pin")
     df_spectra = pd.read_csv(
         filename, sep="\t", usecols=["ScanNr", "ExpMass", "Label"]
     )
@@ -165,7 +167,7 @@ def psms_ondisk():
         scan_column="ScanNr",
         calcmass_column="CalcMass",
         expmass_column="ExpMass",
-        rt_column="ret_time",
+        rt_column=None,
         charge_column=None,
         protein_column=None,
         group_column=None,
@@ -194,6 +196,7 @@ def psms_ondisk():
             "Proteins",
             "Label",
         ],
+        level_columns=["Peptide"],
         filename_column=None,
         specId_column="SpecId",
         spectra_dataframe=df_spectra,
@@ -365,7 +368,7 @@ def mock_proteins():
 
 @pytest.fixture
 def mock_conf():
-    "Create a mock-up of a LinearConfidence object"
+    """Create a mock-up of a LinearConfidence object"""
 
     class conf:
         def __init__(self):
@@ -398,3 +401,49 @@ def mock_conf():
             self.decoy_confidence_estimates = {"peptides": self.peptides}
 
     return conf()
+
+
+@pytest.fixture
+def peptide_csv_file(tmp_path):
+    file = tmp_path / "peptides.csv"
+    with open(file, "w") as f:
+        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
+    yield file
+    file.unlink()
+
+
+@pytest.fixture
+def psms_iterator():
+    """Create a standard psms iterable"""
+    return [
+        ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
+        ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
+        ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
+        ["4", "1", "QILVQLR", "-5.92", "0.12", "1.0", "_.dummy._\n"],
+        ["5", "1", "HLAQLLR", "-6.05", "0.13", "1.0", "_.dummy._\n"],
+        ["6", "0", "QILVQLR", "-6.06", "0.14", "1.0", "_.dummy._\n"],
+        ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
+    ]
+
+
+def pytest_sessionstart(session):
+    # Set pandas max_columns such, that when debugging you can see all columns
+    # of a dataframe instead of just a few
+    pd.set_option("display.max_columns", None)
+
+    # Set max width per column
+    # pd.set_option("display.max_colwidth", None) #default 50
+
+    # Set max width for output of the whole data frame
+    pd.set_option("display.width", None)  # default 80, None means auto-detect
+
+    # Also set full precision
+    # (see https://pandas.pydata.org/docs/user_guide/options.html)
+    pd.set_option("display.precision", 17)
+
+
+def pytest_plugin_registered(plugin, manager):
+    debugger_active = hasattr(sys, 'gettrace') and sys.gettrace() is not None
+    if str(plugin).find("xdist.dsession.DSession") != -1:
+        if debugger_active:
+            manager.unregister(plugin)

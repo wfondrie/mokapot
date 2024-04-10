@@ -4,14 +4,17 @@ Utility functions
 
 import itertools
 import gzip
-from typing import List, Any, Tuple
+from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pandas as pd
+from typeguard import typechecked
 
 
-def open_file(file_name):
-    if str(file_name).endswith(".gz"):
+@typechecked
+def open_file(file_name : Path):
+    if file_name.suffix == ".gz":
         return gzip.open(file_name)
     else:
         return open(file_name)
@@ -53,7 +56,7 @@ def safe_divide(numerator, denominator, ones=False):
     return np.divide(numerator, denominator, out=out, where=(denominator != 0))
 
 
-def tuplize(obj: Any) -> Tuple:
+def tuplize(obj) -> tuple:
     """Convert obj to a tuple, without splitting strings"""
     try:
         _ = iter(obj)
@@ -66,13 +69,15 @@ def tuplize(obj: Any) -> Tuple:
     return tuple(obj)
 
 
-def create_chunks(data: List[Any], chunk_size: int) -> List[List[Any]]:
+@typechecked
+def create_chunks(data: Union[list, np.array], chunk_size: int) -> \
+        list[Union[list, np.array]]:
     """
     Splits the given data into chunks of the specified size.
 
     Parameters
     ----------
-    data : List[Any]
+    data : Union[list, np.array]
         The input data to be split into chunks.
 
     chunk_size : int
@@ -80,53 +85,12 @@ def create_chunks(data: List[Any], chunk_size: int) -> List[List[Any]]:
 
     Returns
     -------
-    List[List[Any]]
+    list[Union[list, np.array]]
         A list containing sublists, where each sublist is a chunk of the input
         data.
 
     """
     return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
-
-
-def get_unique_peptides_from_psms(
-    iterable, peptide_col_index, out_peptides, sep
-):
-    f_peptide = open(out_peptides, "a")
-    seen_peptide = set()
-    for line_list in iterable:
-        line_hash_peptide = line_list[peptide_col_index]
-        if line_hash_peptide not in seen_peptide:
-            seen_peptide.add(line_hash_peptide)
-            f_peptide.write(f"{sep.join(line_list[:4] + [line_list[-1]])}")
-
-    f_peptide.close()
-    return len(seen_peptide)
-
-
-def get_unique_psms_and_peptides(iterable, out_psms, out_peptides, sep):
-    seen_psm = set()
-    seen_peptide = set()
-    f_psm = open(out_psms, "a")
-    f_peptide = open(out_peptides, "a")
-    for line_list in iterable:
-        line_hash_psm = tuple([int(line_list[2]), float(line_list[3])])
-        line_hash_peptide = line_list[-3]
-        line = [
-            line_list[0],
-            line_list[1],
-            line_list[-3],
-            line_list[-2],
-            line_list[-1],
-        ]
-        if line_hash_psm not in seen_psm:
-            seen_psm.add(line_hash_psm)
-            f_psm.write(f"{sep.join(line)}")
-            if line_hash_peptide not in seen_peptide:
-                seen_peptide.add(line_hash_peptide)
-                f_peptide.write(f"{sep.join(line)}")
-    f_psm.close()
-    f_peptide.close()
-    return [len(seen_psm), len(seen_peptide)]
 
 
 def get_next_row(file_handles, current_rows, col_index, sep="\t"):
@@ -170,6 +134,7 @@ def merge_sort(paths, col_score, target_column=None, sep="\t"):
             yield row
 
 
+@typechecked
 def convert_targets_column(data: pd.DataFrame,
                            target_column: str) -> pd.DataFrame:
     """Converts target column values to boolean
@@ -193,19 +158,58 @@ def convert_targets_column(data: pd.DataFrame,
     ValueError
         If the target column contains values other than -1, 0, or 1.
     """
+    if data[target_column].dtype == bool:
+        return data
+
     labels = data[target_column].astype(int)
     if any(labels < -1) or any(labels > 1):
         raise ValueError(f"Invalid target column '{target_column}' "
                          "contains values not in {-1, 0, 1}")
-    # This is how it should be
-    # data[target_column] = (labels == 1)
 
-    # This is BS, but is like the "old way" of doing things, and it leads to
-    # quite significant errors, but without it some unit tests break, and
-    # I currently don't know what the right solution to this is...
-    if any(labels == -1):
-        data[target_column] = (labels == 1)
-    else:
-        data[target_column] = labels
+    data[target_column] = (labels == 1)
     return data
 
+
+@typechecked
+def map_columns_to_indices(search: list | tuple | dict, columns: list[str]) -> \
+        list | tuple | dict:
+    """
+    Map columns to indices in recursive fashion preserving order and structure.
+
+    Parameters
+    ----------
+    search : list | tuple
+        The list or tuple of search items to map to indices. It can contain
+        strings or nested lists/tuples of search items.
+
+    columns : list[str]
+        The list of columns in which to search for the items. This must be a
+        list of strings.
+
+    Returns
+    -------
+    list | tuple
+        The result of the mapping, with the same structure as the `search`
+        parameter but with indices instead of the search items. If the `search`
+        parameter is a list, the result will be a list as well. If the `search`
+        parameter is a tuple, the result will be a tuple. The order of the items
+        in the result will be preserved.
+
+    Raises
+    ------
+    ValueError
+        If the search list/tuple contains a string that is not contained in
+        `columns`
+    """
+    assert all(item is not None for item in search)
+    if isinstance(search, dict):
+        return {
+            k: columns.index(s) if isinstance(s, str)
+            else map_columns_to_indices(s, columns)
+            for k, s in search.items()}
+    else:
+        return type(search)(
+            columns.index(s) if isinstance(s, str)
+            else map_columns_to_indices(s, columns)
+            for s in search
+        )

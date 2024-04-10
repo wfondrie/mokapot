@@ -1,9 +1,10 @@
 """Test the utility functions"""
-import os
 
 import pytest
 import numpy as np
 import pandas as pd
+from pandas.testing import assert_series_equal
+
 from mokapot import utils
 
 
@@ -19,29 +20,6 @@ def df():
     max_res = {"val1": [2, 1, 3], "val2": [1, 1, 1], "group": ["A", "B", "C"]}
 
     return pd.DataFrame(data), pd.DataFrame(max_res)
-
-
-@pytest.fixture
-def psms_iterator():
-    """Create a standard psms iterable"""
-    return [
-        ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
-        ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
-        ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
-        ["4", "1", "QILVQLR", "-5.92", "0.12", "1.0", "_.dummy._\n"],
-        ["5", "1", "HLAQLLR", "-6.05", "0.13", "1.0", "_.dummy._\n"],
-        ["6", "0", "QILVQLR", "-6.06", "0.14", "1.0", "_.dummy._\n"],
-        ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
-    ]
-
-
-@pytest.fixture
-def peptide_csv_file(tmp_path):
-    file = tmp_path / "peptides.csv"
-    with open(file, "w") as f:
-        f.write("PSMId\tLabel\tPeptide\tscore\tproteinIds\n")
-    yield file
-    os.unlink(file)
 
 
 def test_groupby_max(df):
@@ -129,51 +107,23 @@ def test_create_chunks():
     assert utils.create_chunks([], 3) == []
 
 
-def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
-    psms_iterator = psms_iterator
-    utils.get_unique_peptides_from_psms(
-        iterable=psms_iterator,
-        peptide_col_index=2,
-        out_peptides=peptide_csv_file,
-        sep="\t",
-    )
-
-    expected_output = pd.DataFrame(
-        [
-            [1, 1, "HLAQLLR", -5.75, "_.dummy._"],
-            [3, 0, "NVPTSLLK", -5.83, "_.dummy._"],
-            [4, 1, "QILVQLR", -5.92, "_.dummy._"],
-            [7, 1, "SRTSVIPGPK", -6.12, "_.dummy._"],
-        ],
-        columns=["PSMId", "Label", "Peptide", "score", "proteinIds"],
-    )
-
-    output = pd.read_csv(peptide_csv_file, sep="\t")
-    pd.testing.assert_frame_equal(expected_output, output)
-
-
-from pandas.testing import assert_series_equal
 def test_convert_targets_column(psms_iterator):
     df = pd.DataFrame(psms_iterator,
                       columns=["PSMId", "Label", "Peptide", "score", "q-value",
                                "posterior_error_prob", "proteinIds"])
     labels = df["Label"].astype(int)
-    expect = pd.Series([True, False, False, True, True, False, True], name="Label")
-    expect_int = expect.astype(int)
-
-    # Actually, all tests should compare with expect, and not with expect_int, but
-    # when I fix convert_targets_column to always return bool, as it should be,
-    # other things break, which I can't fix at the moment. Sigh...
+    expect = pd.Series([True, False, False, True, True, False, True],
+                       name="Label")
 
     # Test with values in [0, 1] as strings
     df_out = utils.convert_targets_column(df, "Label")
     assert df_out is df  # check that returned and original df are the same
-    assert_series_equal(df["Label"], expect_int)
+    assert_series_equal(df["Label"], expect)
 
     # Test with values in [0, 1]
     df["Label"] = labels
     utils.convert_targets_column(df, "Label")
-    assert_series_equal(df["Label"], expect_int)
+    assert_series_equal(df["Label"], expect)
 
     # Test with values in [-1, 1]
     labels[labels == 0] = -1
@@ -189,9 +139,39 @@ def test_convert_targets_column(psms_iterator):
     # Test with bool values (should be idempotent)
     df["Label"] = (labels == 1)
     utils.convert_targets_column(df, "Label")
-    assert_series_equal(df["Label"], expect_int)
+    assert_series_equal(df["Label"], expect)
 
     # Junk in the target column should raise a ValueError
     df["Label"] = labels + 3
     with pytest.raises(ValueError):
         utils.convert_targets_column(df, "Label")
+
+
+def test_map_columns_to_indices():
+    # Test with empty structure
+    assert utils.map_columns_to_indices([], []) == []
+    assert utils.map_columns_to_indices((), []) == ()
+
+    # Test with dict
+    assert (utils.map_columns_to_indices(
+        {"key1": 'a', "key2": 'c'}, ['a', 'b', 'c']) ==
+            {"key1": 0, "key2": 2})
+
+    # Test recursive
+    assert (utils.map_columns_to_indices(
+        [('a', ('b', ['c'], ('b',), 'c')), ('c', 'b')], ['a', 'b', 'c']) ==
+            [(0, (1, [2], (1,), 2)), (2, 1)])
+
+    # Test that an assertion is raised if a value isn't found
+    with pytest.raises(ValueError):
+        utils.map_columns_to_indices(['a', 'b', 'c', 'd'], ['a', 'b', 'c'])
+
+    # Test with a real world case
+    columns = ['SpecId', 'Label', 'ScanNr', 'ExpMass', 'Mass', 'MS8_feature_5',
+               'missedCleavages', 'MS8_feature_7', 'MS8_feature_13',
+               'MS8_feature_156', 'MS8_feature_157', 'MS8_feature_158',
+               'Peptide', 'Proteins', 'ModifiedPeptide', 'PCM', 'PeptideGroup']
+    level_columns = [('SpecId', 'ScanNr'), 'Peptide', 'Proteins',
+                     'ModifiedPeptide', 'PCM', 'PeptideGroup']
+    assert (utils.map_columns_to_indices(level_columns, columns) ==
+            [(0, 2), 12, 13, 14, 15, 16])
