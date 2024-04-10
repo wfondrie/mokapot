@@ -18,6 +18,7 @@ One of more instance of this class are required to use the
 """
 
 import logging
+import pyarrow.parquet as pq
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from . import qvalues
 from . import utils
 from .parsers.fasta import read_fasta
 from .proteins import Proteins
+from .constants import Format
 
 LOGGER = logging.getLogger(__name__)
 
@@ -276,7 +278,9 @@ class PsmDataset(ABC):
                 best_desc = desc
 
         if best_feat is None:
-            raise RuntimeError(f"No PSMs found below the 'eval_fdr' {eval_fdr}.")
+            raise RuntimeError(
+                f"No PSMs found below the 'eval_fdr' {eval_fdr}."
+            )
 
         return best_feat, best_positives, new_labels, best_desc
 
@@ -583,7 +587,7 @@ class OnDiskPsmDataset:
     @typechecked
     def __init__(
         self,
-        filename : Path | None,
+        filename: Path | None,
         columns,
         target_column,
         spectrum_columns,
@@ -621,14 +625,27 @@ class OnDiskPsmDataset:
         self.charge_column = charge_column
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
+        if str(filename).endswith("parquet"):
+            self.read_file = read_file_parquet
+        else:
+            self.read_file = read_file
 
         # todo: check that if filename is given all column specs are really  columns of the file
         # todo: btw: should not get the filename but a reader object or something, in order to parse other filetypes without if's
         if filename:
-            columns = list(pd.read_csv(filename, sep="\t", nrows=0).columns)
+            if str(filename).endswith("parquet"):
+                columns = pq.ParquetFile(filename).schema.names
+            else:
+                columns = list(
+                    pd.read_csv(filename, sep="\t", nrows=0).columns
+                )
+
             def check_column(column):
                 if column and column not in columns:
-                    raise ValueError(f"Column '{column}' not found in data columns of file '{filename}' ({columns})")
+                    raise ValueError(
+                        f"Column '{column}' not found in data columns of file '{filename}' ({columns})"
+                    )
+
             def check_columns(columns):
                 if columns:
                     for column in columns:
@@ -650,7 +667,6 @@ class OnDiskPsmDataset:
             check_column(self.rt_column)
             check_column(self.charge_column)
             check_column(self.specId_column)
-
 
     def calibrate_scores(self, scores, eval_fdr, desc=True):
         """
@@ -693,7 +709,7 @@ class OnDiskPsmDataset:
         return (scores - target_score) / (target_score - decoy_score)
 
     def _targets_count_by_feature(self, column, eval_fdr, desc):
-        df = read_file(
+        df = self.read_file(
             file_name=self.filename,
             use_cols=[column] + [self.target_column],
             target_column=self.target_column,
@@ -732,7 +748,7 @@ class OnDiskPsmDataset:
             if num_passing > best_positives:
                 best_positives = num_passing
                 best_feat = feat_idx
-                df = read_file(
+                df = self.read_file(
                     file_name=self.filename,
                     use_cols=[best_feat, self.target_column],
                 )
@@ -746,7 +762,9 @@ class OnDiskPsmDataset:
                 best_desc = desc
 
         if best_feat is None:
-            raise RuntimeError(f"No PSMs found below the 'eval_fdr' {eval_fdr}.")
+            raise RuntimeError(
+                f"No PSMs found below the 'eval_fdr' {eval_fdr}."
+            )
 
         return best_feat, best_positives, new_labels, best_desc
 
@@ -786,7 +804,9 @@ class OnDiskPsmDataset:
         spectra = self.spectra_dataframe[self.spectrum_columns].values
         del self.spectra_dataframe
         spectra = np.apply_along_axis(
-            lambda x: crc32(str((x[0], x[1])).encode()),  # fixme: why not just str(x) or str(tuple(x))
+            lambda x: crc32(
+                str((x[0], x[1])).encode()
+            ),  # fixme: why not just str(x) or str(tuple(x))
             1,
             spectra,
         )
@@ -819,9 +839,12 @@ class OnDiskPsmDataset:
 
 
 @typechecked
-def _update_labels(scores: np.ndarray[float] | pd.Series,
-                   targets: np.ndarray[bool] | pd.Series,
-                   eval_fdr: float = 0.01, desc: bool = True):
+def _update_labels(
+    scores: np.ndarray[float] | pd.Series,
+    targets: np.ndarray[bool] | pd.Series,
+    eval_fdr: float = 0.01,
+    desc: bool = True,
+):
     """Return the label for each PSM, given it's score.
 
     This method is used during model training to define positive examples,
@@ -895,8 +918,19 @@ def calibrate_scores(scores, targets, eval_fdr, desc=True):
 
 
 @typechecked
-def update_labels(file_name : Path, scores, target_column, eval_fdr=0.01, desc=True):
-    df = read_file(
+def update_labels(
+    file_name: Path,
+    scores,
+    target_column,
+    eval_fdr=0.01,
+    desc=True,
+    format=Format.csv,
+):
+    if format == Format.parquet:
+        read_file_unchunked_func = read_file_parquet
+    else:
+        read_file_unchunked_func = read_file
+    df = read_file_unchunked_func(
         file_name=file_name,
         use_cols=[target_column],
         target_column=target_column,
@@ -908,10 +942,28 @@ def update_labels(file_name : Path, scores, target_column, eval_fdr=0.01, desc=T
         desc=desc,
     )
 
+
 @typechecked
 def read_file(file_name: Path, use_cols=None, target_column=None):
-    df = pd.read_csv(file_name, sep="\t", usecols=use_cols, index_col=False,
-                     on_bad_lines="skip")
+    df = pd.read_csv(
+        file_name,
+        sep="\t",
+        usecols=use_cols,
+        index_col=False,
+        on_bad_lines="skip",
+    )
+    if target_column:
+        return utils.convert_targets_column(df, target_column)
+    else:
+        return df
+
+
+def read_file_parquet(file_name, use_cols=None, target_column=None):
+    df = (
+        pq.read_table(file_name, columns=use_cols)
+        .to_pandas()
+        .apply(pd.to_numeric, errors="ignore")
+    )
     if target_column:
         return utils.convert_targets_column(df, target_column)
     else:

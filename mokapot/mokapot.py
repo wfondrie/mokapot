@@ -14,6 +14,7 @@ import numpy as np
 
 from . import __version__
 from .config import Config
+from .parsers.parquet import read_parquet
 from .parsers.pin import read_pin, read_data_for_rescale
 from .parsers.pepxml import read_pepxml
 from .parsers.fasta import read_fasta
@@ -21,6 +22,7 @@ from .brew import brew
 from .model import PercolatorModel, load_model
 from .confidence import assign_confidence
 from .plugins import get_plugins
+from .constants import Format
 
 
 def main(main_args=None):
@@ -151,6 +153,7 @@ def main(main_args=None):
         subset_max_train=config.subset_max_train,
         ensemble=config.ensemble,
         rng=config.seed,
+        format=Format(config.format),
     )
     logging.info("")
 
@@ -162,21 +165,24 @@ def main(main_args=None):
     else:
         file_root = ""
 
-    assign_confidence(psms=psms,
-                      max_workers=config.max_workers,
-                      scores=scores,
-                      descs=desc,
-                      eval_fdr=config.test_fdr,
-                      dest_dir=config.dest_dir,
-                      file_root=file_root,
-                      prefixes=prefixes,
-                      decoys=config.keep_decoys,
-                      do_rollup=not config.skip_rollup,
-                      proteins=proteins,
-                      peps_error=config.peps_error,
-                      peps_algorithm=config.peps_algorithm,
-                      qvalue_algorithm=config.qvalue_algorithm
-                      )
+    assign_confidence(
+        psms=psms,
+        max_workers=config.max_workers,
+        scores=scores,
+        descs=desc,
+        eval_fdr=config.test_fdr,
+        dest_dir=config.dest_dir,
+        file_root=file_root,
+        prefixes=prefixes,
+        decoys=config.keep_decoys,
+        do_rollup=not config.skip_rollup,
+        proteins=proteins,
+        peps_error=config.peps_error,
+        peps_algorithm=config.peps_algorithm,
+        qvalue_algorithm=config.qvalue_algorithm,
+        format=Format(config.format),
+        sqlite_path=config.sqlite_db_path,
+    )
 
     if config.save_models:
         logging.info("Saving models...")
@@ -219,6 +225,7 @@ def get_parser(config):
     """
     pepxml_ext = {".pep.xml", ".pepxml", ".xml"}
     num_pepxml = 0
+    num_parquet = 0
     for psm_file in config.psm_files:
         ext = Path(psm_file).suffixes
         if len(ext) > 2:
@@ -228,6 +235,8 @@ def get_parser(config):
 
         if ext.lower() in pepxml_ext:
             num_pepxml += 1
+        if ext.lower() in [".parquet"]:
+            num_parquet += 1
 
     if num_pepxml == len(config.psm_files):
         return partial(
@@ -235,7 +244,10 @@ def get_parser(config):
             open_modification_bin_size=config.open_modification_bin_size,
             decoy_prefix=config.decoy_prefix,
         )
-
+    elif num_parquet == len(config.psm_files):
+        config.args["format"] = "parquet"
+        return read_parquet
+    config.args["format"] = "csv"
     return read_pin
 
 

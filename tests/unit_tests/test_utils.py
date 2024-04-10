@@ -6,6 +6,7 @@ import pandas as pd
 from pandas.testing import assert_series_equal
 
 from mokapot import utils
+from mokapot.constants import Format
 
 
 @pytest.fixture
@@ -90,6 +91,17 @@ def test_tuplize():
     assert utils.tuplize(tuple_in) == tuple_out
 
 
+def test_merge_sort(merge_sort_data):
+    files_csv, files_parquet = merge_sort_data
+    iterable_csv = utils.merge_sort(files_csv, "score")
+    iterable_parquet = utils.merge_sort(
+        files_parquet, "score", format=Format.parquet
+    )
+    assert list(iterable_csv) == list(
+        iterable_parquet
+    ), "Merge sort ids vary between parquet and csv"
+
+
 def test_create_chunks():
     # Case 1: Chunk size is less than data length
     assert utils.create_chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]
@@ -108,12 +120,22 @@ def test_create_chunks():
 
 
 def test_convert_targets_column(psms_iterator):
-    df = pd.DataFrame(psms_iterator,
-                      columns=["PSMId", "Label", "Peptide", "score", "q-value",
-                               "posterior_error_prob", "proteinIds"])
+    df = pd.DataFrame(
+        psms_iterator,
+        columns=[
+            "PSMId",
+            "Label",
+            "Peptide",
+            "score",
+            "q-value",
+            "posterior_error_prob",
+            "proteinIds",
+        ],
+    )
     labels = df["Label"].astype(int)
-    expect = pd.Series([True, False, False, True, True, False, True],
-                       name="Label")
+    expect = pd.Series(
+        [True, False, False, True, True, False, True], name="Label"
+    )
 
     # Test with values in [0, 1] as strings
     df_out = utils.convert_targets_column(df, "Label")
@@ -137,7 +159,7 @@ def test_convert_targets_column(psms_iterator):
     assert_series_equal(df["Label"], expect)
 
     # Test with bool values (should be idempotent)
-    df["Label"] = (labels == 1)
+    df["Label"] = labels == 1
     utils.convert_targets_column(df, "Label")
     assert_series_equal(df["Label"], expect)
 
@@ -153,25 +175,52 @@ def test_map_columns_to_indices():
     assert utils.map_columns_to_indices((), []) == ()
 
     # Test with dict
-    assert (utils.map_columns_to_indices(
-        {"key1": 'a', "key2": 'c'}, ['a', 'b', 'c']) ==
-            {"key1": 0, "key2": 2})
+    assert utils.map_columns_to_indices(
+        {"key1": "a", "key2": "c"}, ["a", "b", "c"]
+    ) == {"key1": 0, "key2": 2}
 
     # Test recursive
-    assert (utils.map_columns_to_indices(
-        [('a', ('b', ['c'], ('b',), 'c')), ('c', 'b')], ['a', 'b', 'c']) ==
-            [(0, (1, [2], (1,), 2)), (2, 1)])
+    assert utils.map_columns_to_indices(
+        [("a", ("b", ["c"], ("b",), "c")), ("c", "b")], ["a", "b", "c"]
+    ) == [(0, (1, [2], (1,), 2)), (2, 1)]
 
     # Test that an assertion is raised if a value isn't found
     with pytest.raises(ValueError):
-        utils.map_columns_to_indices(['a', 'b', 'c', 'd'], ['a', 'b', 'c'])
+        utils.map_columns_to_indices(["a", "b", "c", "d"], ["a", "b", "c"])
 
     # Test with a real world case
-    columns = ['SpecId', 'Label', 'ScanNr', 'ExpMass', 'Mass', 'MS8_feature_5',
-               'missedCleavages', 'MS8_feature_7', 'MS8_feature_13',
-               'MS8_feature_156', 'MS8_feature_157', 'MS8_feature_158',
-               'Peptide', 'Proteins', 'ModifiedPeptide', 'PCM', 'PeptideGroup']
-    level_columns = [('SpecId', 'ScanNr'), 'Peptide', 'Proteins',
-                     'ModifiedPeptide', 'PCM', 'PeptideGroup']
-    assert (utils.map_columns_to_indices(level_columns, columns) ==
-            [(0, 2), 12, 13, 14, 15, 16])
+    columns = [
+        "SpecId",
+        "Label",
+        "ScanNr",
+        "ExpMass",
+        "Mass",
+        "MS8_feature_5",
+        "missedCleavages",
+        "MS8_feature_7",
+        "MS8_feature_13",
+        "MS8_feature_156",
+        "MS8_feature_157",
+        "MS8_feature_158",
+        "Peptide",
+        "Proteins",
+        "ModifiedPeptide",
+        "PCM",
+        "PeptideGroup",
+    ]
+    level_columns = [
+        ("SpecId", "ScanNr"),
+        "Peptide",
+        "Proteins",
+        "ModifiedPeptide",
+        "PCM",
+        "PeptideGroup",
+    ]
+    assert utils.map_columns_to_indices(level_columns, columns) == [
+        (0, 2),
+        12,
+        13,
+        14,
+        15,
+        16,
+    ]
