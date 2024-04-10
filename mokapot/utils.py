@@ -96,21 +96,6 @@ def create_chunks(
     return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
-def get_unique_peptides_from_psms(
-    iterable, peptide_col_index, out_peptides, sep
-):
-    f_peptide = open(out_peptides, "a")
-    seen_peptide = set()
-    for line_list in iterable:
-        line_hash_peptide = line_list[peptide_col_index]
-        if line_hash_peptide not in seen_peptide:
-            seen_peptide.add(line_hash_peptide)
-            f_peptide.write(f"{sep.join(line_list[:4] + [line_list[-1]])}")
-
-    f_peptide.close()
-    return len(seen_peptide)
-
-
 def get_next_row(file_handles, current_rows, col_index, sep="\t"):
     max_key = max_row = None
     max_score = None
