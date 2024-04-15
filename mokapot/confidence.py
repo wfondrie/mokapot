@@ -37,14 +37,11 @@ from .utils import (
     merge_sort,
     map_columns_to_indices,
 )
-from .dataset import read_file, OnDiskPsmDataset, read_file_parquet
+from .dataset import OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
-from .file_io import TabbedFileWriter, TabbedFileReader
-from .parsers.pin import read_file_in_chunks
-from .constants import CONFIDENCE_CHUNK_SIZE, Format
-from .brew import get_file_reader
-import sqlite3
+from .file_io import TabbedFileWriter, TabbedFileReader, ConfidenceWriter
+from .constants import CONFIDENCE_CHUNK_SIZE
 
 LOGGER = logging.getLogger(__name__)
 
@@ -103,16 +100,11 @@ class GroupedConfidence:
         sqlite_path=None,
     ):
         """Initialize a GroupedConfidence object"""
-        if str(psms.filename).endswith("parquet"):
-            self.read_file = read_file_parquet
-            self.format = Format.parquet
-            group_file = Path(f"{dest_dir}{prefixes}group_psms.parquet")
-        else:
-            self.read_file = read_file
-            self.format = Format.csv
-            group_file = Path(f"{dest_dir}{prefixes}group_psms.csv")
+        group_file = Path(f"{dest_dir}{prefixes}group_psms.csv")
         self.sqlite_path = sqlite_path
-        data = self.read_file(psms.filename, use_cols=list(psms.columns))
+        data = TabbedFileReader.from_path(psms.filename).read(
+            list(psms.columns)
+        )
         self.group_column = psms.group_column
         psms.group_column = None
         # Do TDC to eliminate multiples PSMs for a spectrum that may occur
@@ -133,10 +125,7 @@ class GroupedConfidence:
             tdc_winners = group_df.index.intersection(idx)
             group_psms = group_df.loc[tdc_winners, :]
             group_scores = scores.loc[group_psms.index].values
-            if self.format == Format.parquet:
-                group_psms.to_parquet(group_file, index=False)
-            else:
-                group_psms.to_csv(group_file, sep="\t", index=False)
+            group_psms.to_csv(group_file, sep="\t", index=False)
             psms.filename = Path(group_file)
             assign_confidence(
                 [psms],
@@ -154,8 +143,6 @@ class GroupedConfidence:
                 append_to_output_file=append_to_group,
                 rng=rng,
                 peps_error=peps_error,
-                format=self.format,
-                sqlite_path=self.sqlite_path,
             )
             if combine:
                 append_to_group = True
@@ -304,7 +291,16 @@ class Confidence(object):
         """
         return list(self.confidence_estimates.keys())
 
-    def to_txt(self, data_path, columns, level, decoys, sep, out_paths):
+    def write_to_disk(
+        self,
+        data_path,
+        columns,
+        level,
+        decoys,
+        sep,
+        out_paths,
+        sqlite_path=None,
+    ):
         """Save confidence estimates to delimited text files.
         Parameters
         ----------
@@ -327,8 +323,6 @@ class Confidence(object):
             The paths to the saved files.
 
         """
-        # Todo: rename this function (maybe: save_to_disk or something),
-
         # The columns here are usually the metadata_columns from confidence.assign_confidence
         # which are usually ['PSMId', 'Label', 'peptide', 'proteinIds', 'score']
         # Since, those are exactly the columns that are written there to the csv
@@ -343,7 +337,7 @@ class Confidence(object):
         )
 
         # Note: the out_columns need to match those in assign_confidence (out_files)
-        qvalue_column = "q-value"
+        qvalue_column = "q_value"
         pep_column = "posterior_error_prob"
         out_columns = in_columns + [qvalue_column, pep_column]
         protein_column = self._protein_column
@@ -354,115 +348,26 @@ class Confidence(object):
             out_columns.remove(protein_column)
             out_columns.append(protein_column)
 
-        # Create output writers (headers are already written in
-        # assign_confidence, that's also where column defs can be found)
-        target_writer = TabbedFileWriter.from_suffix(out_paths[0], out_columns)
-        decoy_writer = (
-            TabbedFileWriter.from_suffix(out_paths[1], out_columns)
-            if decoys
-            else None
-        )
-
         chunked = lambda list: create_chunks(
             list, chunk_size=CONFIDENCE_CHUNK_SIZE
         )
+        # Replacing csv target and decoys results path with sqlite db path
+        if sqlite_path:
+            out_paths = [sqlite_path]
 
-        for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
+        confidence_writer = ConfidenceWriter(
             chunked_data_iterator,
             chunked(self.qvals),
             chunked(self.peps),
             chunked(self.targets),
-        ):
-            data_chunk[qvalue_column] = qvals_chunk
-            data_chunk[pep_column] = peps_chunk
-
-            target_writer.append_data(
-                data_chunk.loc[targets_chunk, out_columns]
-            )
-            if decoys:
-                decoy_writer.append_data(
-                    data_chunk.loc[~targets_chunk, out_columns]
-                )
-        os.remove(data_path)
+            out_paths,
+            decoys,
+            level,
+            out_columns,
+        )
+        confidence_writer.write()
+        confidence_writer.commit_data()
         return out_paths
-
-    def to_sqlite(self, data_path, columns, level, decoys, sqlite_path):
-        """Save confidence estimates to sqlite database.
-        Parameters
-        ----------
-        data_path : Path
-            File of unique psms or peptides.
-        columns : List
-            columns that will be used
-        level : str
-            the level at which confidence estimation was performed
-        decoys : bool, optional
-            Save decoys confidence estimates as well?
-        sqlite_path : List(Path)
-            The output path of sqlite db where the results will be written
-
-        Returns
-        -------
-        list of str
-            The paths to the saved files.
-
-        """
-        # level_cols holds in order the table name, id column name in the table
-        # and the id column name in the mokapot results for a particular level
-        level_cols = {
-            "precursors": ["PRECURSOR_VALIDATION", "PCM_ID", "Precursor"],
-            "modifiedpeptides": [
-                "MODIFIED_PEPTIDE_VALIDATION",
-                "MODIFIED_PEPTIDE_ID",
-                "ModifiedPeptide",
-            ],
-            "peptides": ["PEPTIDE_VALIDATION", "PEPTIDE_ID", "peptide"],
-            "peptidegroups": [
-                "PEPTIDE_GROUP_VALIDATION",
-                "PEPTIDE_GROUP_ID",
-                "PeptideGroup",
-            ],
-        }
-        qvalue_column = "qvalue"
-        pep_column = "posterior_error_prob"
-        data_chunk_reader = read_file_in_chunks(
-            file=data_path,
-            chunk_size=CONFIDENCE_CHUNK_SIZE,
-            use_cols=[i for i in columns if i != self._target_column],
-        )
-        chunked = lambda list: create_chunks(
-            list, chunk_size=CONFIDENCE_CHUNK_SIZE
-        )
-
-        conn = sqlite3.connect(sqlite_path)
-        if level == "psms":
-            query = f"UPDATE CANDIDATE SET PSM_FDR = :{qvalue_column}, SVM_SCORE = :score, PSM_PEP = :{pep_column} WHERE CANDIDATE_ID = :PSMId;"
-        else:
-            table_name, table_id_col, mokapot_id_col = level_cols[level]
-            query = f"INSERT INTO {table_name}({table_id_col},FDR,PEP,SVM_SCORE) VALUES(:{mokapot_id_col},:{qvalue_column},:{pep_column},:score)"
-        for data_in, qvals_in, pep_in, target_in in zip(
-            data_chunk_reader,
-            chunked(self.qvals),
-            chunked(self.peps),
-            chunked(self.targets),
-        ):
-            data_in = data_in.apply(pd.to_numeric, errors="ignore")
-            data_in[qvalue_column] = qvals_in
-            data_in[pep_column] = pep_in
-            if level != "proteins" and self._protein_column is not None:
-                data_in[self._protein_column] = data_in.pop(
-                    self._protein_column
-                )
-            if ~decoys:
-                data_in = data_in.loc[target_in, :].to_dict("records")
-            else:
-                data_in = data_in.to_dict("records")
-            for row in data_in:
-                conn.execute(query, row)
-        conn.commit()
-        conn.close()
-        os.remove(data_path)
-        return sqlite_path
 
     def _perform_tdc(self, psms, psm_columns):
         """Perform target-decoy competition.
@@ -650,7 +555,7 @@ class LinearConfidence(Confidence):
         """
 
         if self._proteins:
-            data = read_file(level_paths[1])
+            data = TabbedFileReader.from_path(level_paths[1]).read()
             convert_targets_column(
                 data=data, target_column=self._target_column
             )
@@ -675,7 +580,9 @@ class LinearConfidence(Confidence):
             LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
 
         for level, data_path, out_path in zip(levels, level_paths, out_paths):
-            data = read_file(data_path, target_column=self._target_column)
+            data = TabbedFileReader.from_path(data_path).read()
+            if self._target_column:
+                data = convert_targets_column(data, self._target_column)
             data_columns = list(data.columns)
             self.scores = data.loc[:, self._score_column].values
             self.targets = data.loc[:, self._target_column].astype(bool).values
@@ -725,24 +632,18 @@ class LinearConfidence(Confidence):
                 raise ValueError("PEP values are all equal to 1.")
 
             logging.info(f"Writing {level} results...")
+            self.write_to_disk(
+                data_path,
+                data_columns,
+                level.lower(),
+                decoys,
+                sep,
+                out_path,
+                sqlite_path,
+            )
             if sqlite_path:
-                self.to_sqlite(
-                    data_path,
-                    data_columns,
-                    level.lower(),
-                    decoys,
-                    sqlite_path,
-                )
-                [os.remove(path) for path in out_path]
-            else:
-                self.to_txt(
-                    data_path,
-                    data_columns,
-                    level.lower(),
-                    decoys,
-                    sep,
-                    out_path,
-                )
+                [os.unlink(path) for path in out_path]
+            os.unlink(data_path)
 
     def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
         """Save confidenct peptides for quantification with FlashLFQ.
@@ -845,11 +746,11 @@ class CrossLinkedConfidence(Confidence):
         levels = ("csms", "peptide_pairs")
 
         for level, data_path, out_path in zip(levels, level_paths, out_paths):
-            data = read_file(
-                data_path,
-                use_cols=self._metadata_column + ["score"],
-                target_column=self._target_column,
+            data = TabbedFileReader.from_path(data_path).read(
+                self._metadata_column + ["score"]
             )
+            if self._target_column:
+                data = convert_targets_column(data, self._target_column)
             data_columns = list(data.columns)
             self.scores = data.loc[:, self._score_column].values
             self.targets = data.loc[:, self._target_column].astype(bool).values
@@ -861,7 +762,9 @@ class CrossLinkedConfidence(Confidence):
             if peps_error and all(self.peps == 1):
                 raise ValueError("PEP values are all equal to 1.")
             logging.info(f"Writing {level} results...")
-            self.to_txt(data_path, data_columns, level.lower(), decoys, sep)
+            self.write_to_disk(
+                data_path, data_columns, level.lower(), decoys, sep
+            )
 
 
 # Functions -------------------------------------------------------------------
@@ -889,7 +792,6 @@ def assign_confidence(
     peps_error=False,
     peps_algorithm="qvality",
     qvalue_algorithm="tdc",
-    format=Format("csv"),
     sqlite_path=None,
 ):
     """Assign confidence to PSMs peptides, and optionally, proteins.
@@ -951,15 +853,7 @@ def assign_confidence(
         for _psms in psms:
             feat, _, _, desc = _psms.find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
-            if format == Format.parquet:
-                read_file_unchunked_func = read_file_parquet
-            else:
-                read_file_unchunked_func = read_file
-            scores.append(
-                read_file_unchunked_func(
-                    file_name=_psms.filename, use_cols=[feat]
-                )[feat].values
-            )
+            scores.append(_psms.read_data(columns=[feat])[feat].values)
 
     # just take the first one for info (and make sure the other are the same)
     curr_psms = psms[0]
@@ -1083,7 +977,6 @@ def assign_confidence(
                 max_workers,
                 score,
                 sep,
-                format,
             ) as sorted_file_iterator:
 
                 LOGGER.info("Assigning confidence...")
@@ -1203,25 +1096,17 @@ def create_sorted_file_iterator(
     max_workers: int,
     score: np.ndarray[float],
     sep: str,
-    format=Format.csv,
 ):
     # Read from the input psms (PsmDataset) and write into smaller
     # sorted files, by
 
     # a) Create a reader that only reads columns given in
     #    psms.metadata_columns in chunks of size CONFIDENCE_CHUNK_SIZE
-    if format == Format.parquet:
-        reader = get_file_reader(format)
-        file_iterator = reader(
-            _psms.filename, CONFIDENCE_CHUNK_SIZE, _psms.metadata_columns
-        )
-        outfile_ext = "parquet"
-    else:
-        reader = TabbedFileReader.from_path(_psms.filename)
-        file_iterator = reader.get_chunked_data_iterator(
-            CONFIDENCE_CHUNK_SIZE, _psms.metadata_columns
-        )
-        outfile_ext = "csv"
+    reader = TabbedFileReader.from_path(_psms.filename)
+    file_iterator = reader.get_chunked_data_iterator(
+        CONFIDENCE_CHUNK_SIZE, _psms.metadata_columns
+    )
+    outfile_ext = _psms.filename.suffix
 
     # b) Split the scores in chunks of the same size
     scores_slices = create_chunks(score, chunk_size=CONFIDENCE_CHUNK_SIZE)
@@ -1236,8 +1121,7 @@ def create_sorted_file_iterator(
             score_chunk,
             _psms,
             do_rollup,
-            dest_dir / f"{file_prefix}scores_metadata_{i}.{outfile_ext}",
-            format,
+            dest_dir / f"{file_prefix}scores_metadata_{i}{outfile_ext}",
         )
         for chunk_metadata, score_chunk, i in zip(
             file_iterator, scores_slices, range(len(scores_slices))
@@ -1248,7 +1132,7 @@ def create_sorted_file_iterator(
         dest_dir.glob(f"{file_prefix}scores_metadata_*")
     )
     sorted_file_iterator = merge_sort(
-        scores_metadata_paths, col_score="score", sep=sep, format=format
+        scores_metadata_paths, col_score="score", sep=sep
     )
 
     # Return the sorted iterator and clean up afterwards, regardless of whether
@@ -1267,7 +1151,6 @@ def _save_sorted_metadata_chunks(
     psms,
     deduplication: bool,
     chunk_write_path: Path,
-    format=Format.csv,
 ):
     chunk_metadata = convert_targets_column(
         data=chunk_metadata,
@@ -1279,17 +1162,11 @@ def _save_sorted_metadata_chunks(
 
     if deduplication:
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
-    if format == Format.parquet:
-        chunk_metadata.to_parquet(
-            chunk_write_path,
-            index=False,
-        )
-    else:
-        chunk_writer = TabbedFileWriter.from_suffix(
-            chunk_write_path,
-            columns=psms.metadata_columns + ["score"],
-        )
-        chunk_writer.write(chunk_metadata)
+    chunk_writer = TabbedFileWriter.from_suffix(
+        chunk_write_path,
+        columns=psms.metadata_columns + ["score"],
+    )
+    chunk_writer.write(chunk_metadata)
 
 
 @typechecked
