@@ -6,7 +6,6 @@ import pandas as pd
 from pandas.testing import assert_series_equal
 
 from mokapot import utils
-from mokapot.constants import Format
 
 
 @pytest.fixture
@@ -94,9 +93,7 @@ def test_tuplize():
 def test_merge_sort(merge_sort_data):
     files_csv, files_parquet = merge_sort_data
     iterable_csv = utils.merge_sort(files_csv, "score")
-    iterable_parquet = utils.merge_sort(
-        files_parquet, "score", format=Format.parquet
-    )
+    iterable_parquet = utils.merge_sort(files_parquet, "score")
     assert list(iterable_csv) == list(
         iterable_parquet
     ), "Merge sort ids vary between parquet and csv"

@@ -26,12 +26,12 @@ from zlib import crc32
 import numpy as np
 import pandas as pd
 from typeguard import typechecked
+from .file_io import TabbedFileReader
 
 from . import qvalues
 from . import utils
 from .parsers.fasta import read_fasta
 from .proteins import Proteins
-from .constants import Format
 
 LOGGER = logging.getLogger(__name__)
 
@@ -625,20 +625,13 @@ class OnDiskPsmDataset:
         self.charge_column = charge_column
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
-        if str(filename).endswith("parquet"):
-            self.read_file = read_file_parquet
-        else:
-            self.read_file = read_file
 
         # todo: check that if filename is given all column specs are really  columns of the file
         # todo: btw: should not get the filename but a reader object or something, in order to parse other filetypes without if's
         if filename:
-            if str(filename).endswith("parquet"):
-                columns = pq.ParquetFile(filename).schema.names
-            else:
-                columns = list(
-                    pd.read_csv(filename, sep="\t", nrows=0).columns
-                )
+            columns = TabbedFileReader.from_path(
+                self.filename
+            ).get_column_names()
 
             def check_column(column):
                 if column and column not in columns:
@@ -691,11 +684,8 @@ class OnDiskPsmDataset:
         numpy.ndarray
             An array of calibrated scores.
         """
-        targets = read_file(
-            self.filename,
-            use_cols=self.target_column,
-            target_column=self.target_column,
-        )
+        targets = self.read_data(columns=self.target_column)
+        targets = utils.convert_targets_column(targets, self.target_column)
         labels = _update_labels(scores, targets, eval_fdr, desc)
         pos = labels == 1
         if not pos.sum():
@@ -709,12 +699,10 @@ class OnDiskPsmDataset:
         return (scores - target_score) / (target_score - decoy_score)
 
     def _targets_count_by_feature(self, column, eval_fdr, desc):
-        df = self.read_file(
-            file_name=self.filename,
-            use_cols=[column] + [self.target_column],
-            target_column=self.target_column,
+        df = self.read_data(
+            columns=[column] + [self.target_column],
         )
-
+        df = utils.convert_targets_column(df, self.target_column)
         return (
             _update_labels(
                 df.loc[:, column],
@@ -748,9 +736,8 @@ class OnDiskPsmDataset:
             if num_passing > best_positives:
                 best_positives = num_passing
                 best_feat = feat_idx
-                df = self.read_file(
-                    file_name=self.filename,
-                    use_cols=[best_feat, self.target_column],
+                df = self.read_data(
+                    columns=[best_feat, self.target_column],
                 )
 
                 new_labels = _update_labels(
@@ -769,11 +756,9 @@ class OnDiskPsmDataset:
         return best_feat, best_positives, new_labels, best_desc
 
     def update_labels(self, scores, target_column, eval_fdr=0.01, desc=True):
-        df = read_file(
-            file_name=self.filename,
-            use_cols=[target_column],
-            target_column=target_column,
-        )
+        df = self.read_data(columns=target_column)
+        if target_column:
+            df = utils.convert_targets_column(df, target_column)
         return _update_labels(
             scores=scores,
             targets=df[target_column],
@@ -836,6 +821,15 @@ class OnDiskPsmDataset:
         for indices in spectra_idx:
             rng.shuffle(indices)
         return spectra_idx
+
+    def read_data(self, columns=None, chunk_size=None):
+        reader = TabbedFileReader.from_path(self.filename)
+        if chunk_size:
+            return reader.get_chunked_data_iterator(
+                chunk_size=chunk_size, columns=columns
+            )
+        else:
+            return reader.read(columns=columns)
 
 
 @typechecked
@@ -924,47 +918,12 @@ def update_labels(
     target_column,
     eval_fdr=0.01,
     desc=True,
-    format=Format.csv,
 ):
-    if format == Format.parquet:
-        read_file_unchunked_func = read_file_parquet
-    else:
-        read_file_unchunked_func = read_file
-    df = read_file_unchunked_func(
-        file_name=file_name,
-        use_cols=[target_column],
-        target_column=target_column,
-    )
+    reader = TabbedFileReader.from_path(file_name)
+    df = reader.read(columns=[target_column])
     return _update_labels(
         scores=scores,
         targets=df[target_column],
         eval_fdr=eval_fdr,
         desc=desc,
     )
-
-
-@typechecked
-def read_file(file_name: Path, use_cols=None, target_column=None):
-    df = pd.read_csv(
-        file_name,
-        sep="\t",
-        usecols=use_cols,
-        index_col=False,
-        on_bad_lines="skip",
-    )
-    if target_column:
-        return utils.convert_targets_column(df, target_column)
-    else:
-        return df
-
-
-def read_file_parquet(file_name, use_cols=None, target_column=None):
-    df = (
-        pq.read_table(file_name, columns=use_cols)
-        .to_pandas()
-        .apply(pd.to_numeric, errors="ignore")
-    )
-    if target_column:
-        return utils.convert_targets_column(df, target_column)
-    else:
-        return df

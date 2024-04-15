@@ -9,7 +9,7 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
-from .constants import Format, MERGE_SORT_CHUNK_SIZE
+from .constants import MERGE_SORT_CHUNK_SIZE
 import pyarrow.parquet as pq
 from typeguard import typechecked
 
@@ -144,10 +144,9 @@ def get_row_from_batch(
     return [max_row, max_key]
 
 
-def merge_sort(
-    paths, col_score, target_column=None, sep="\t", format=Format.csv
-):
-    if format == Format.parquet:
+def merge_sort(paths, col_score, target_column=None, sep="\t"):
+
+    if paths[0].suffix == ".parquet":
         file_handles = {
             i: pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
             for i, path in enumerate(paths)

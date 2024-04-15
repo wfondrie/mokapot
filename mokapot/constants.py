@@ -17,9 +17,3 @@ CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS = int(
     os.getenv("MOKAPOT_CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS", 2000000)
 )
 MERGE_SORT_CHUNK_SIZE = int(os.getenv("MOKAPOT_MERGE_SORT_CHUNK_SIZE", 20000))
-
-
-class Format(Enum):
-    parquet = "parquet"
-    sqlite = "sqlite"
-    csv = "csv"

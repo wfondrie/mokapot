@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import copy
 from mokapot import OnDiskPsmDataset, assign_confidence
-from mokapot.constants import Format
 import pyarrow.parquet as pq
 from mokapot.confidence import get_unique_peptides_from_psms
 
@@ -120,7 +119,6 @@ def test_one_group_parquet(psm_df_1000_parquet, tmp_path):
         dest_dir=tmp_path,
         max_workers=4,
         eval_fdr=0.02,
-        format=Format.parquet,
     )
     df_results_group = pd.read_csv(tmp_path / "0.targets.peptides", sep="\t")
 
@@ -133,7 +131,6 @@ def test_one_group_parquet(psm_df_1000_parquet, tmp_path):
         dest_dir=tmp_path,
         max_workers=4,
         eval_fdr=0.02,
-        format=Format.parquet,
     )
     df_results_no_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
 
@@ -229,7 +226,6 @@ def test_multi_groups_parquet(psm_df_100_parquet, tmp_path):
         dest_dir=tmp_path,
         max_workers=4,
         eval_fdr=0.10,
-        format=Format.parquet,
     )
     assert Path(tmp_path, f"{0}.targets.psms").exists()
     assert Path(tmp_path, f"{1}.targets.psms").exists()

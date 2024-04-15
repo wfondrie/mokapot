@@ -7,7 +7,6 @@ import numpy as np
 import mokapot
 from mokapot import PercolatorModel, Model
 from sklearn.ensemble import RandomForestClassifier
-from mokapot.constants import Format
 
 np.random.seed(42)
 
@@ -28,7 +27,7 @@ def test_brew_simple(psms_ondisk, svm):
 def test_brew_simple_parquet(psms_ondisk_from_parquet, svm):
     """Test with mostly default parameters of brew"""
     psms, models, scores, desc = mokapot.brew(
-        psms_ondisk_from_parquet, svm, test_fdr=0.05, format=Format.parquet
+        psms_ondisk_from_parquet, svm, test_fdr=0.05
     )
     assert len(models) == 3
     assert isinstance(models[0], PercolatorModel)
@@ -64,9 +63,7 @@ def test_brew_joint_parquet(psms_ondisk_from_parquet, svm):
         copy.copy(psms_ondisk_from_parquet),
         copy.copy(psms_ondisk_from_parquet),
     ]
-    psms, models, scores, desc = mokapot.brew(
-        collections, svm, test_fdr=0.05, format=Format.parquet
-    )
+    psms, models, scores, desc = mokapot.brew(collections, svm, test_fdr=0.05)
     assert len(scores) == 3
     assert len(psms) == 3
     assert len(models) == 3
@@ -124,7 +121,6 @@ def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
         test_fdr=0.05,
         folds=folds,
         rng=seed,
-        format=Format.parquet,
     )
     assert len(models_a) == folds
 
@@ -134,7 +130,6 @@ def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
         test_fdr=0.05,
         folds=folds,
         rng=seed,
-        format=Format.parquet,
     )
     assert len(models_b) == folds
 
@@ -148,7 +143,6 @@ def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
         test_fdr=0.05,
         folds=folds,
         rng=seed + 2,
-        format=Format.parquet,
     )
     assert len(models_c) == folds
     assert ~(
@@ -171,7 +165,6 @@ def test_brew_test_fdr_error_parquet(psms_ondisk_from_parquet, svm):
             svm,
             test_fdr=0.001,
             rng=2,
-            format=Format.parquet,
         )
     assert "Failed to calibrate" in str(err)
 
@@ -195,7 +188,6 @@ def test_brew_multiprocess_parquet(psms_ondisk_from_parquet, svm):
         svm,
         test_fdr=0.05,
         max_workers=2,
-        format=Format.parquet,
     )
     # The models should not be the same:
     assert_not_close(models[0].estimator.coef_, models[1].estimator.coef_)
