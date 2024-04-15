@@ -13,6 +13,7 @@ from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from triqler.qvality import getQvaluesFromScores
 from mokapot.qvalues import tdc
 import pyarrow.parquet as pq
+from mokapot.utils import convert_targets_column
 
 
 @pytest.fixture(autouse=True)
@@ -309,6 +310,7 @@ def psms_ondisk_from_parquet():
     df_spectra = pq.read_table(
         filename, columns=["ScanNr", "ExpMass", "Label"]
     ).to_pandas()
+    df_spectra = convert_targets_column(df_spectra,"Label")
     columns = pq.ParquetFile(filename).schema.names
     psms = OnDiskPsmDataset(
         filename=filename,

@@ -442,7 +442,7 @@ def read_data_for_rescale(psms, subset_max_rescale):
     return pd.concat(
         [
             TabbedFileReader.from_path(_psms.filename).read(
-                _psms.feature_columns
+                list(_psms.feature_columns)
             )
             for _psms, skip_rows in zip(psms, skip_rows_per_file)
         ]
