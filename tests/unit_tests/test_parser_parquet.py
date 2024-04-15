@@ -44,7 +44,7 @@ def std_parquet(tmp_path):
 
 def test_parquet_parsing(std_parquet):
     """Test pin parsing"""
-    dat = mokapot.read_parquet(
+    dat = mokapot.read_pin(
         std_parquet,
         max_workers=4,
     )
