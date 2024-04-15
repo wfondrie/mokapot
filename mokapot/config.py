@@ -398,7 +398,7 @@ def _parser():
     parser.add_argument(
         "--sqlite_db_path",
         default=None,
-        type=str,
+        type=Path,
         help="Path of sqlite database to write results directly",
     )
 
