@@ -18,11 +18,13 @@ from ..utils import (
     convert_targets_column,
     flatten,
 )
-from ..dataset import OnDiskPsmDataset, read_file
+from ..dataset import OnDiskPsmDataset
 from ..constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
+from ..file_io import TabbedFileReader
+from typing import List
 
 LOGGER = logging.getLogger(__name__)
 
@@ -145,7 +147,7 @@ def create_chunks_with_identifier(data, identifier_column, chunk_size):
 
 
 def read_percolator(
-    perc_file : Path,
+    perc_file: Path,
     max_workers,
     group_column=None,
     filename_column=None,
@@ -173,7 +175,8 @@ def read_percolator(
     """
 
     LOGGER.info("Reading %s...", perc_file)
-    columns = get_column_names_from_file(perc_file)
+    reader = TabbedFileReader.from_path(perc_file)
+    columns = reader.get_column_names()
 
     # Find all the necessary columns, case-insensitive:
     specid = find_required_column("specid", columns)
@@ -233,14 +236,16 @@ def read_percolator(
     df_spectra_list = []
     features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
-            file=perc_file,
+            reader=reader,
             column=c,
             spectra=spectra + [labels],
             df_spectra_list=df_spectra_list,
         )
         for c in feat_slices
     )
-    df_spectra = convert_targets_column(pd.concat(df_spectra_list), target_column=labels)
+    df_spectra = convert_targets_column(
+        pd.concat(df_spectra_list), target_column=labels
+    )
 
     features_to_drop = [drop for drop in features_to_drop if drop]
     features_to_drop = flatten(features_to_drop)
@@ -268,7 +273,7 @@ def read_percolator(
         group_column=group_column,
         feature_columns=_feature_columns,
         metadata_columns=nonfeat,
-        level_columns = level_columns,
+        level_columns=level_columns,
         filename_column=filename,
         scan_column=scan,
         specId_column=specid,
@@ -282,29 +287,31 @@ def read_percolator(
 
 # Utility Functions -----------------------------------------------------------
 def drop_missing_values_and_fill_spectra_dataframe(
-    file, column, spectra, df_spectra_list
+    reader: TabbedFileReader,
+    column: List,
+    spectra: List,
+    df_spectra_list: List[pd.DataFrame],
 ):
     na_mask = pd.DataFrame([], columns=list(set(column) - set(spectra)))
-    with open_file(file) as f:
-        reader = read_file_in_chunks(
-            file=f,
-            use_cols=column,
-            chunk_size=CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
+    file_iterator = reader.get_chunked_data_iterator(
+        chunk_size=CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS, columns=column
+    )
+    for i, feature in enumerate(file_iterator):
+        if set(spectra) <= set(column):
+            df_spectra_list.append(feature[spectra])
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore", category=pd.errors.SettingWithCopyWarning
+                )
+                feature.drop(spectra, axis=1, inplace=True)
+        na_mask = pd.concat(
+            [na_mask, pd.DataFrame([feature.isna().any(axis=0)])],
+            ignore_index=True,
         )
-        for i, feature in enumerate(reader):
-            if set(spectra) <= set(column):
-                df_spectra_list.append(feature[spectra])
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=pd.errors.SettingWithCopyWarning)
-                    feature.drop(spectra, axis=1, inplace=True)
-            na_mask = pd.concat(
-                [na_mask, pd.DataFrame([feature.isna().any(axis=0)])],
-                ignore_index=True,
-            )
-        del reader
-        na_mask = na_mask.any(axis=0)
-        if na_mask.any():
-            return list(na_mask[na_mask].index)
+    del file_iterator
+    na_mask = na_mask.any(axis=0)
+    if na_mask.any():
+        return list(na_mask[na_mask].index)
 
 
 def read_file_in_chunks(file, chunk_size, use_cols):
@@ -354,9 +361,7 @@ def get_rows_from_dataframe(idx, chunk, train_psms, psms, file_idx):
     )
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
-        train_psms[file_idx][k].append(
-            chunk.loc[idx_]
-        )
+        train_psms[file_idx][k].append(chunk.loc[idx_])
 
 
 def concat_and_reindex_chunks(df, orig_idx):
@@ -392,16 +397,15 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
         [[] for _ in range(len(train_idx))] for _ in range(len(psms))
     ]
     for _psms, idx, file_idx in zip(psms, zip(*train_idx), range(len(psms))):
-        reader = read_file_in_chunks(
-            file=_psms.filename,
-            chunk_size=chunk_size,
-            use_cols=_psms.columns,
+        reader = TabbedFileReader.from_path(_psms.filename)
+        file_iterator = reader.get_chunked_data_iterator(
+            chunk_size=chunk_size, columns=_psms.columns
         )
         Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(get_rows_from_dataframe)(
                 idx, chunk, train_psms, _psms, file_idx
             )
-            for chunk in reader
+            for chunk in file_iterator
         )
     train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(concat_and_reindex_chunks)(df=df, orig_idx=orig_idx)
@@ -437,9 +441,8 @@ def read_data_for_rescale(psms, subset_max_rescale):
         ]
     return pd.concat(
         [
-            read_file(
-                _psms.filename,
-                use_cols=_psms.feature_columns,
+            TabbedFileReader.from_path(_psms.filename).read(
+                list(_psms.feature_columns)
             )
             for _psms, skip_rows in zip(psms, skip_rows_per_file)
         ]

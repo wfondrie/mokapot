@@ -65,11 +65,10 @@ def main(main_args=None):
 
     np.random.seed(config.seed)
 
-    # Parse Datasets
-    parse = get_parser(config)
+    # Parse
     enabled_plugins = {p: plugins[p]() for p in config.plugin}
 
-    datasets = parse(config.psm_files, max_workers=config.max_workers)
+    datasets = read_pin(config.psm_files, max_workers=config.max_workers)
     if config.aggregate or len(config.psm_files) == 1:
         for plugin in enabled_plugins.values():
             datasets = plugin.process_data(datasets, config)
@@ -162,21 +161,23 @@ def main(main_args=None):
     else:
         file_root = ""
 
-    assign_confidence(psms=psms,
-                      max_workers=config.max_workers,
-                      scores=scores,
-                      descs=desc,
-                      eval_fdr=config.test_fdr,
-                      dest_dir=config.dest_dir,
-                      file_root=file_root,
-                      prefixes=prefixes,
-                      decoys=config.keep_decoys,
-                      do_rollup=not config.skip_rollup,
-                      proteins=proteins,
-                      peps_error=config.peps_error,
-                      peps_algorithm=config.peps_algorithm,
-                      qvalue_algorithm=config.qvalue_algorithm
-                      )
+    assign_confidence(
+        psms=psms,
+        max_workers=config.max_workers,
+        scores=scores,
+        descs=desc,
+        eval_fdr=config.test_fdr,
+        dest_dir=config.dest_dir,
+        file_root=file_root,
+        prefixes=prefixes,
+        decoys=config.keep_decoys,
+        do_rollup=not config.skip_rollup,
+        proteins=proteins,
+        peps_error=config.peps_error,
+        peps_algorithm=config.peps_algorithm,
+        qvalue_algorithm=config.qvalue_algorithm,
+        sqlite_path=config.sqlite_db_path,
+    )
 
     if config.save_models:
         logging.info("Saving models...")
@@ -197,46 +198,6 @@ def main(main_args=None):
     logging.info("")
     logging.info("=== DONE! ===")
     logging.info("mokapot analysis completed in %s", total_time)
-
-
-def get_parser(config):
-    """Figure out which parser to use.
-
-    Note that this just looks at file extensions, but in the future it might be
-    good to check the contents of the file. I'm just not sure how to do this
-    in an efficient way, particularly for gzipped files.
-
-    Parameters
-    ----------
-    config : argparse object
-         The configuration details.
-
-    Returns
-    -------
-    callable
-         Returns the correct parser for the files.
-
-    """
-    pepxml_ext = {".pep.xml", ".pepxml", ".xml"}
-    num_pepxml = 0
-    for psm_file in config.psm_files:
-        ext = Path(psm_file).suffixes
-        if len(ext) > 2:
-            ext = "".join(ext[-2:])
-        else:
-            ext = "".join(ext)
-
-        if ext.lower() in pepxml_ext:
-            num_pepxml += 1
-
-    if num_pepxml == len(config.psm_files):
-        return partial(
-            read_pepxml,
-            open_modification_bin_size=config.open_modification_bin_size,
-            decoy_prefix=config.decoy_prefix,
-        )
-
-    return read_pin
 
 
 if __name__ == "__main__":

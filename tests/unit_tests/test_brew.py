@@ -24,6 +24,15 @@ def test_brew_simple(psms_ondisk, svm):
     assert isinstance(models[0], PercolatorModel)
 
 
+def test_brew_simple_parquet(psms_ondisk_from_parquet, svm):
+    """Test with mostly default parameters of brew"""
+    psms, models, scores, desc = mokapot.brew(
+        psms_ondisk_from_parquet, svm, test_fdr=0.05
+    )
+    assert len(models) == 3
+    assert isinstance(models[0], PercolatorModel)
+
+
 def test_brew_random_forest(psms_ondisk):
     """Verify there are no dependencies on the SVM."""
     rfm = Model(
@@ -40,6 +49,20 @@ def test_brew_random_forest(psms_ondisk):
 def test_brew_joint(psms_ondisk, svm):
     """Test that the multiple input PSM collections yield multiple out"""
     collections = [psms_ondisk, copy.copy(psms_ondisk), copy.copy(psms_ondisk)]
+    psms, models, scores, desc = mokapot.brew(collections, svm, test_fdr=0.05)
+    assert len(scores) == 3
+    assert len(psms) == 3
+    assert len(models) == 3
+    assert len(desc) == 3
+
+
+def test_brew_joint_parquet(psms_ondisk_from_parquet, svm):
+    """Test that the multiple input PSM collections yield multiple out"""
+    collections = [
+        psms_ondisk_from_parquet,
+        copy.copy(psms_ondisk_from_parquet),
+        copy.copy(psms_ondisk_from_parquet),
+    ]
     psms, models, scores, desc = mokapot.brew(collections, svm, test_fdr=0.05)
     assert len(scores) == 3
     assert len(psms) == 3
@@ -86,10 +109,63 @@ def test_brew_seed(psms_ondisk, svm):
     ), "Results were identical with different seed!"
 
 
+def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
+    """Test that (not) changing the split selection seed works"""
+    folds = 3
+    seed = 0
+    psms_ondisk_b = copy.copy(psms_ondisk_from_parquet)
+    psms_ondisk_c = copy.copy(psms_ondisk_from_parquet)
+    psms_a, models_a, scores_a, desc_a = mokapot.brew(
+        psms_ondisk_from_parquet,
+        svm,
+        test_fdr=0.05,
+        folds=folds,
+        rng=seed,
+    )
+    assert len(models_a) == folds
+
+    psms_b, models_b, scores_b, desc_b = mokapot.brew(
+        psms_ondisk_b,
+        svm,
+        test_fdr=0.05,
+        folds=folds,
+        rng=seed,
+    )
+    assert len(models_b) == folds
+
+    assert np.array_equal(
+        scores_a[0], scores_b[0]
+    ), "Results differed with same seed"
+
+    psms_c, models_c, scores_c, desc_c = mokapot.brew(
+        psms_ondisk_c,
+        svm,
+        test_fdr=0.05,
+        folds=folds,
+        rng=seed + 2,
+    )
+    assert len(models_c) == folds
+    assert ~(
+        np.array_equal(scores_a[0], scores_c[0])
+    ), "Results were identical with different seed!"
+
+
 def test_brew_test_fdr_error(psms_ondisk, svm):
     """Test that we get a sensible error message"""
     with pytest.raises(RuntimeError) as err:
         mokapot.brew(psms_ondisk, svm, test_fdr=0.001, rng=2)
+    assert "Failed to calibrate" in str(err)
+
+
+def test_brew_test_fdr_error_parquet(psms_ondisk_from_parquet, svm):
+    """Test that we get a sensible error message"""
+    with pytest.raises(RuntimeError) as err:
+        mokapot.brew(
+            psms_ondisk_from_parquet,
+            svm,
+            test_fdr=0.001,
+            rng=2,
+        )
     assert "Failed to calibrate" in str(err)
 
 
@@ -98,6 +174,20 @@ def test_brew_multiprocess(psms_ondisk, svm):
     """Test that multiprocessing doesn't yield an error"""
     _, models, _, _ = mokapot.brew(
         psms_ondisk, svm, test_fdr=0.05, max_workers=2
+    )
+    # The models should not be the same:
+    assert_not_close(models[0].estimator.coef_, models[1].estimator.coef_)
+    assert_not_close(models[1].estimator.coef_, models[2].estimator.coef_)
+    assert_not_close(models[2].estimator.coef_, models[0].estimator.coef_)
+
+
+def test_brew_multiprocess_parquet(psms_ondisk_from_parquet, svm):
+    """Test that multiprocessing doesn't yield an error"""
+    _, models, _, _ = mokapot.brew(
+        psms_ondisk_from_parquet,
+        svm,
+        test_fdr=0.05,
+        max_workers=2,
     )
     # The models should not be the same:
     assert_not_close(models[0].estimator.coef_, models[1].estimator.coef_)

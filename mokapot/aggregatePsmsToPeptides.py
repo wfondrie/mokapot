@@ -120,7 +120,6 @@ def main(main_args=None):
         sep=sep,
     )
 
-    peptides_path.unlink()
 
 if __name__ == "__main__":
     try:

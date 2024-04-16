@@ -11,15 +11,14 @@ from pathlib import Path
 
 import pandas as pd
 import mokapot
+from mokapot.file_io import TabbedFileReader
 
 logging.basicConfig(level=logging.INFO)
 
 
 def test_compare_to_percolator(tmp_path):
     """Test that mokapot get almost the same answer as Percolator"""
-    dat = mokapot.read_pin(
-        Path("data", "phospho_rep1.pin"), max_workers=3
-    )
+    dat = mokapot.read_pin(Path("data", "phospho_rep1.pin"), max_workers=3)
     proteins = mokapot.read_fasta(Path("data", "human_sp_td.fasta"))
     psms, models, scores, desc = mokapot.brew(dat)
     mokapot.assign_confidence(
@@ -34,12 +33,16 @@ def test_compare_to_percolator(tmp_path):
 
     perc_path = Path("data", "percolator.{p}.txt")
     moka_path = tmp_path / "targets.{p}"
-    format_name = lambda path, **kwargs: path.with_name(path.name.format(**kwargs))
+    format_name = lambda path, **kwargs: path.with_name(
+        path.name.format(**kwargs)
+    )
     perc_res = {
-        p: mokapot.read_file(format_name(perc_path, p=p)) for p in ["proteins"]
+        p: TabbedFileReader.from_path(format_name(perc_path, p=p)).read()
+        for p in ["proteins"]
     }
     moka_res = {
-        p: mokapot.read_file(format_name(moka_path, p=p)) for p in ["proteins"]
+        p: TabbedFileReader.from_path(format_name(moka_path, p=p)).read()
+        for p in ["proteins"]
     }
 
     for level in ["proteins"]:

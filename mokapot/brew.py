@@ -15,12 +15,8 @@ from .dataset import (
     LinearPsmDataset,
     calibrate_scores,
     update_labels,
-    read_file,
 )
-from .parsers.pin import (
-    parse_in_chunks,
-    read_file_in_chunks,
-)
+from .parsers.pin import parse_in_chunks
 from .constants import (
     CHUNK_SIZE_ROWS_PREDICTION,
     CHUNK_SIZE_READ_ALL_DATA,
@@ -196,7 +192,9 @@ def brew(
         scores = [
             _psms.calibrate_scores(
                 _predict_with_ensemble(
-                    psms=_psms, models=[model], max_workers=max_workers
+                    psms=_psms,
+                    models=[model],
+                    max_workers=max_workers,
                 ),
                 test_fdr,
             )
@@ -208,7 +206,9 @@ def brew(
         if ensemble:
             scores = [
                 _predict_with_ensemble(
-                    psms=_psms, models=models, max_workers=max_workers
+                    psms=_psms,
+                    models=models,
+                    max_workers=max_workers,
                 )
                 for _psms in psms
             ]
@@ -253,7 +253,12 @@ def brew(
         feat_total = 0
 
     preds = [
-        update_labels(_psms.filename, s, _psms.target_column, test_fdr)
+        update_labels(
+            _psms.filename,
+            s,
+            _psms.target_column,
+            test_fdr,
+        )
         for _psms, s in zip(psms, scores)
     ]
 
@@ -265,9 +270,8 @@ def brew(
         feat, _, desc = best_feats[best_feat_idx]
         descs = [desc] * len(psms)
         scores = [
-            read_file(
-                _psms.filename,
-                use_cols=[feat],
+            _psms.read_data(
+                columns=[feat],
             ).values
             for _psms in psms
         ]
@@ -404,19 +408,17 @@ def _predict(models_idx, psms, models, test_fdr, max_workers):
     for _psms, mod_idx in zip(psms, models_idx):
         scores = []
 
-        model_test_idx = utils.create_chunks(
-            data=mod_idx, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
-        )
         n_folds = len(models)
         fold_scores = [[] for _ in range(n_folds)]
         targets = [[] for _ in range(n_folds)]
         orig_idx = [[] for _ in range(n_folds)]
-        reader = read_file_in_chunks(
-            file=_psms.filename,
-            chunk_size=CHUNK_SIZE_ROWS_PREDICTION,
-            use_cols=_psms.columns,
+        file_iterator = _psms.read_data(
+            columns=_psms.columns, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
         )
-        for i, psms_slice in enumerate(reader):
+        model_test_idx = utils.create_chunks(
+            data=mod_idx, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
+        )
+        for i, psms_slice in enumerate(file_iterator):
             psms_slice["fold"] = model_test_idx.pop(0)
             psms_slice = [
                 get_index_values(psms_slice, "fold", i, orig_idx)
@@ -441,7 +443,7 @@ def _predict(models_idx, psms, models, test_fdr, max_workers):
                 for mod_idx, _psms in enumerate(psms_slice)
             )
             del psms_slice
-        del reader
+        del file_iterator
         del model_test_idx
         for mod in models:
             try:
@@ -481,12 +483,10 @@ def _predict_with_ensemble(psms, models, max_workers):
         was reset or not.
     """
     scores = [[] for _ in range(len(models))]
-    reader = read_file_in_chunks(
-        file=psms.filename,
-        chunk_size=CHUNK_SIZE_ROWS_PREDICTION,
-        use_cols=psms.columns,
+    file_iterator = psms.read_data(
+        columns=psms.columns, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
     )
-    for data in reader:
+    for data in file_iterator:
         data = _create_psms(psms, data, enforce_checks=False)
         fold_scores = Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(mod.predict)(psms=data) for mod in models

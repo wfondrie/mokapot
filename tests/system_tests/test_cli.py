@@ -12,6 +12,7 @@ from ..helpers.cli import run_mokapot_cli
 import pytest
 import pandas as pd
 
+
 @pytest.fixture
 def scope_files():
     """Get the scope-ms files"""
@@ -24,6 +25,7 @@ def phospho_files():
     pin = Path("data", "phospho_rep1.pin")
     fasta = Path("data", "human_sp_td.fasta")
     return pin, fasta
+
 
 def count_lines(path: Path):
     """Count the number of lines in a file.
@@ -50,8 +52,17 @@ def test_basic_cli(tmp_path, scope_files):
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
 
-    targets_psms_df = pd.read_csv(Path(tmp_path, "targets.psms"), sep="\t", index_col=None, nrows=1)
-    assert targets_psms_df.columns.values.tolist() == ["PSMId", "peptide", "score", "q-value", "posterior_error_prob", "proteinIds"]
+    targets_psms_df = pd.read_csv(
+        Path(tmp_path, "targets.psms"), sep="\t", index_col=None, nrows=1
+    )
+    assert targets_psms_df.columns.values.tolist() == [
+        "PSMId",
+        "peptide",
+        "score",
+        "q-value",
+        "posterior_error_prob",
+        "proteinIds",
+    ]
     assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
     assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
 
@@ -125,7 +136,6 @@ def test_cli_aggregate(tmp_path, scope_files):
     assert count_lines(Path(tmp_path, "blah.targets.psms")) == 10256
     assert count_lines(Path(tmp_path, "blah.targets.peptides")) == 9663
 
-
     # Test that decoys are also in the output when --keep_decoys is used
     params += ["--keep_decoys"]
     run_mokapot_cli(params)
@@ -190,16 +200,16 @@ def test_cli_plugins(tmp_path, phospho_files):
     ]
 
     res = run_mokapot_cli(params + ["--help"], capture_output=True)
-    assert "--yell" in res['stderr']
+    assert "--yell" in res["stderr"]
 
     # Make sure it does not yell when the plugin is not loaded explicitly
     res = run_mokapot_cli(params, capture_output=True)
-    assert "Yelling at the user" not in res['stderr']
+    assert "Yelling at the user" not in res["stderr"]
 
     # Check that it does yell when the plugin is loaded and arg is requested
     params += ["--plugin", "mokapot_ctree", "--yell"]
     res = run_mokapot_cli(params, capture_output=True)
-    assert "Yelling at the user" in res['stderr']
+    assert "Yelling at the user" in res["stderr"]
 
 
 def test_cli_skip_rollup(tmp_path, phospho_files):
@@ -243,7 +253,7 @@ def test_cli_rescale(tmp_path, scope_files):
         tmp_path,
         "--test_fdr",
         "0.01",
-        "--save_models"
+        "--save_models",
     ]
 
     run_mokapot_cli(params)
