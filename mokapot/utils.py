@@ -261,7 +261,7 @@ def map_columns_to_indices(
     """
     assert all(item is not None for item in search)
     if isinstance(search, dict):
-        return {
+        result = {
             k: (
                 columns.index(s)
                 if isinstance(s, str)
@@ -270,7 +270,7 @@ def map_columns_to_indices(
             for k, s in search.items()
         }
     else:
-        return type(search)(
+        result = type(search)(
             (
                 columns.index(s)
                 if isinstance(s, str)
@@ -278,3 +278,4 @@ def map_columns_to_indices(
             )
             for s in search
         )
+    return result
