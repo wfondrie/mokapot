@@ -297,7 +297,7 @@ class SqliteWriter(TabbedFileWriter):
 
     def get_query(self, level, qvalue_column, pep_column):
         if level == "psms":
-            query = f"UPDATE CANDIDATE SET PSM_FDR = :{qvalue_column}, SVM_SCORE = :score, PSM_PEP = :{pep_column} WHERE CANDIDATE_ID = :PSMId;"
+            query = f"UPDATE CANDIDATE SET PSM_FDR = :{qvalue_column}, SVM_SCORE = :score, POSTERIOR_ERROR_PROBABILITY = :{pep_column} WHERE CANDIDATE_ID = :PSMId;"
         else:
             table_name, table_id_col, mokapot_id_col = self.level_cols[level]
             query = f"INSERT INTO {table_name}({table_id_col},FDR,PEP,SVM_SCORE) VALUES(:{mokapot_id_col},:{qvalue_column},:{pep_column},:score)"
