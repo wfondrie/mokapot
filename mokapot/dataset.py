@@ -626,7 +626,6 @@ class OnDiskPsmDataset:
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
 
-        # todo: check that if filename is given all column specs are really  columns of the file
         # todo: btw: should not get the filename but a reader object or something, in order to parse other filetypes without if's
         if filename:
             columns = TabbedFileReader.from_path(

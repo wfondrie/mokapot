@@ -70,10 +70,10 @@ Alternatively, the Python API can be used to perform analyses in the Python
 interpreter and affords greater flexibility:
 
 ```Python
->>> import mokapot
->>> psms = mokapot.read_pin("psms.pin")
->>> results, models = mokapot.brew(psms)
->>> results.to_txt()
+import mokapot
+psms = mokapot.read_pin("psms.pin")
+results, models = mokapot.brew(psms)
+results.to_txt()
 ```
 
 Check out our [documentation](https://mokapot.readthedocs.io) for more details

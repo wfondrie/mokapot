@@ -68,7 +68,8 @@ def read_pin(
     ----------
     pin_files : str, tuple of str, or pandas.DataFrame
         One or more PIN files to read or a :py:class:`pandas.DataFrame`.
-    folds :
+    max_workers: int
+        Maximum number of parallel processes to use.
     group_column : str, optional
         A factor to by which to group PSMs for grouped confidence
         estimation.
@@ -94,14 +95,6 @@ def read_pin(
         :code:`None`, mokapot will look for a column called "charge" (case
         insensitive). This is required for some output formats, such as
         FlashLFQ.
-    to_df : bool, optional
-        Return a :py:class:`pandas.DataFrame` instead of a
-        :py:class:`~mokapot.dataset.LinearPsmDataset`.
-    copy_data : bool, optional
-        If true, a deep copy of the data is created. This uses more memory, but
-        is safer because it prevents accidental modification of the underlying
-        data. This argument only has an effect when `pin_files` is a
-        :py:class:`pandas.DataFrame`
 
     Returns
     -------
@@ -415,8 +408,13 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
 
 
 def read_data_for_rescale(psms, subset_max_rescale):
+    # fixme: This is superfluous when subset_max_rescale is not used, and should
+    #        be inside an if statement. BTW data_sizes should be rather
+    #        something like lines_per_psmfile or something.
+    # fixme: the whole thing won't work anymore when input data does not come
+    #        from csv files anymore
     data_sizes = [
-        sum(1 for line in open(_psms.filename)) - 1 for _psms in psms
+        sum(1 for _ in open(_psms.filename)) - 1 for _psms in psms
     ]
     skip_rows_per_file = [None for _ in psms]
     if subset_max_rescale and subset_max_rescale < sum(data_sizes):
@@ -439,6 +437,10 @@ def read_data_for_rescale(psms, subset_max_rescale):
                 data_sizes, subset_max_rescale_per_file
             )
         ]
+    # fixme: This can't possibly work, when `skip_rows` isn't even used. Then
+    #        the whole computation thingy above was completely superfluous.
+    #        Would need to tell the reader to skip skip_rows lines (however,
+    #        that was already broken, before readers were introduced).
     return pd.concat(
         [
             TabbedFileReader.from_path(_psms.filename).read(

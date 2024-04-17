@@ -84,7 +84,6 @@ def main(main_args=None):
     ]
 
     # Find unique peptides and write to a temporary file (used later on)
-    # todo: should be a Path object, no string
     peptides_path = Path(args.dest_dir) / "peptides.csv"
     with open(peptides_path, "w") as f_peptide:
         f_peptide.write(f"{sep.join(metadata_columns)}\n")
