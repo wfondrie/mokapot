@@ -19,15 +19,17 @@ cache:
     - pip install setuptools wheel twine build pip-licenses
 
 
-license_dump:
+gather-licences:
   extends: .with_twine
   stage: publish
   script:
-    - pip-licenses --from=mixed --order=license --with-system --format=csv  > licenses.csv
+    - pip-licenses --from=mixed --order=license --with-system -f markdown --output-file LICENSES.md
   artifacts:
+    when: always
     paths:
-      - licenses.csv
-    expire_in: 1 week
+      - LICENSES.md
+    expire_in: 4 week
+
 
 publish:
   extends: .with_twine
