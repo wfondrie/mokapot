@@ -23,7 +23,7 @@ from ..constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
-from ..file_io import TabbedFileReader
+from ..tabular_data import TabularDataReader
 from typing import List
 
 LOGGER = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ def read_percolator(
     """
 
     LOGGER.info("Reading %s...", perc_file)
-    reader = TabbedFileReader.from_path(perc_file)
+    reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
 
     # Find all the necessary columns, case-insensitive:
@@ -280,7 +280,7 @@ def read_percolator(
 
 # Utility Functions -----------------------------------------------------------
 def drop_missing_values_and_fill_spectra_dataframe(
-    reader: TabbedFileReader,
+    reader: TabularDataReader,
     column: List,
     spectra: List,
     df_spectra_list: List[pd.DataFrame],
@@ -390,7 +390,7 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
         [[] for _ in range(len(train_idx))] for _ in range(len(psms))
     ]
     for _psms, idx, file_idx in zip(psms, zip(*train_idx), range(len(psms))):
-        reader = TabbedFileReader.from_path(_psms.filename)
+        reader = TabularDataReader.from_path(_psms.filename)
         file_iterator = reader.get_chunked_data_iterator(
             chunk_size=chunk_size, columns=_psms.columns
         )

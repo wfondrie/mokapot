@@ -26,7 +26,7 @@ from zlib import crc32
 import numpy as np
 import pandas as pd
 from typeguard import typechecked
-from .file_io import TabbedFileReader
+from .tabular_data import TabularDataReader
 
 from . import qvalues
 from . import utils
@@ -628,7 +628,7 @@ class OnDiskPsmDataset:
 
         # todo: btw: should not get the filename but a reader object or something, in order to parse other filetypes without if's
         if filename:
-            columns = TabbedFileReader.from_path(
+            columns = TabularDataReader.from_path(
                 self.filename
             ).get_column_names()
 
@@ -822,7 +822,7 @@ class OnDiskPsmDataset:
         return spectra_idx
 
     def read_data(self, columns=None, chunk_size=None):
-        reader = TabbedFileReader.from_path(self.filename)
+        reader = TabularDataReader.from_path(self.filename)
         if chunk_size:
             return reader.get_chunked_data_iterator(
                 chunk_size=chunk_size, columns=columns
@@ -918,7 +918,7 @@ def update_labels(
     eval_fdr=0.01,
     desc=True,
 ):
-    reader = TabbedFileReader.from_path(file_name)
+    reader = TabularDataReader.from_path(file_name)
     df = reader.read(columns=[target_column])
     return _update_labels(
         scores=scores,

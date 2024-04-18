@@ -40,7 +40,7 @@ from .utils import (
 from .dataset import OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
-from .file_io import TabbedFileWriter, TabbedFileReader, ConfidenceWriter
+from .tabular_data import TabularDataWriter, TabularDataReader, ConfidenceWriter
 from .constants import CONFIDENCE_CHUNK_SIZE
 
 LOGGER = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ class GroupedConfidence:
         """Initialize a GroupedConfidence object"""
         group_file = Path(f"{dest_dir}{prefixes}group_psms.csv")
         self.sqlite_path = sqlite_path
-        data = TabbedFileReader.from_path(psms.filename).read(
+        data = TabularDataReader.from_path(psms.filename).read(
             list(psms.columns)
         )
         self.group_column = psms.group_column
@@ -328,7 +328,7 @@ class Confidence(object):
         # Since, those are exactly the columns that are written there to the csv
         # files, it's not exactly clear, why they are passed along here anyway
         # (but let's assert that here)
-        reader = TabbedFileReader.from_path(data_path)
+        reader = TabularDataReader.from_path(data_path)
         assert reader.get_column_names() == columns
 
         in_columns = [i for i in columns if i != self._target_column]
@@ -555,7 +555,7 @@ class LinearConfidence(Confidence):
         """
 
         if self._proteins:
-            data = TabbedFileReader.from_path(level_paths[1]).read()
+            data = TabularDataReader.from_path(level_paths[1]).read()
             convert_targets_column(
                 data=data, target_column=self._target_column
             )
@@ -580,7 +580,7 @@ class LinearConfidence(Confidence):
             LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
 
         for level, data_path, out_path in zip(levels, level_paths, out_paths):
-            data = TabbedFileReader.from_path(data_path).read()
+            data = TabularDataReader.from_path(data_path).read()
             if self._target_column:
                 data = convert_targets_column(data, self._target_column)
             data_columns = list(data.columns)
@@ -746,7 +746,7 @@ class CrossLinkedConfidence(Confidence):
         levels = ("csms", "peptide_pairs")
 
         for level, data_path, out_path in zip(levels, level_paths, out_paths):
-            data = TabbedFileReader.from_path(data_path).read(
+            data = TabularDataReader.from_path(data_path).read(
                 self._metadata_column + ["score"]
             )
             if self._target_column:
@@ -951,7 +951,7 @@ def assign_confidence(
                 outfile_targets = (
                     dest_dir / f"{file_prefix_group}targets.{level}"
                 )
-                writer = TabbedFileWriter.from_suffix(
+                writer = TabularDataWriter.from_suffix(
                     outfile_targets, output_columns
                 )
                 if not append_to_output_file:
@@ -962,7 +962,7 @@ def assign_confidence(
                     outfile_decoys = (
                         dest_dir / f"{file_prefix_group}decoys.{level}"
                     )
-                    writer = TabbedFileWriter.from_suffix(
+                    writer = TabularDataWriter.from_suffix(
                         outfile_decoys, output_columns
                     )
                     if not append_to_output_file:
@@ -990,7 +990,7 @@ def assign_confidence(
                 iterator_columns = _psms.metadata_columns + ["score"]
 
                 writers = {
-                    level: TabbedFileWriter.from_suffix(
+                    level: TabularDataWriter.from_suffix(
                         level_data_path[level], out_metadata_columns
                     )
                     for level in levels
@@ -1102,7 +1102,7 @@ def create_sorted_file_iterator(
 
     # a) Create a reader that only reads columns given in
     #    psms.metadata_columns in chunks of size CONFIDENCE_CHUNK_SIZE
-    reader = TabbedFileReader.from_path(_psms.filename)
+    reader = TabularDataReader.from_path(_psms.filename)
     file_iterator = reader.get_chunked_data_iterator(
         CONFIDENCE_CHUNK_SIZE, _psms.metadata_columns
     )
@@ -1162,7 +1162,7 @@ def _save_sorted_metadata_chunks(
 
     if deduplication:
         chunk_metadata = chunk_metadata.drop_duplicates(psms.spectrum_columns)
-    chunk_writer = TabbedFileWriter.from_suffix(
+    chunk_writer = TabularDataWriter.from_suffix(
         chunk_write_path,
         columns=psms.metadata_columns + ["score"],
     )

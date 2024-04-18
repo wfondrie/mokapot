@@ -24,7 +24,7 @@ SQLITE_SUFFIXES = [".db"]
 
 
 @typechecked
-class TabbedFileReader(ABC):
+class TabularDataReader(ABC):
     @abstractmethod
     def get_column_names(self) -> list[str]:
         raise NotImplementedError
@@ -44,7 +44,7 @@ class TabbedFileReader(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def from_path(file_name: Path, **kwargs) -> "TabbedFileReader":
+    def from_path(file_name: Path, **kwargs) -> "TabularDataReader":
         # Currently, we look only at the suffix, however, in the future we could
         # also look into the file itself (is it ascii? does it have some "magic
         # bytes"? ...)
@@ -61,7 +61,7 @@ class TabbedFileReader(ABC):
 
 
 @typechecked
-class CSVFileReader(TabbedFileReader):
+class CSVFileReader(TabularDataReader):
     def __init__(self, file_name: Path, sep: str = "\t"):
         self.file_name = file_name
         self.stdargs = {"sep": sep, "index_col": False}
@@ -97,7 +97,7 @@ class CSVFileReader(TabbedFileReader):
 
 
 @typechecked
-class ParquetFileReader(TabbedFileReader):
+class ParquetFileReader(TabularDataReader):
     def __init__(self, file_name: Path):
         self.file_name = file_name
 
@@ -135,7 +135,7 @@ class ParquetFileReader(TabbedFileReader):
 
 
 @typechecked
-class TabbedFileWriter(ABC):
+class TabularDataWriter(ABC):
     @abstractmethod
     def get_column_names(self) -> list[str]:
         raise NotImplementedError
@@ -165,7 +165,7 @@ class TabbedFileWriter(ABC):
     @staticmethod
     def from_suffix(
         file_name: Path, columns: list[str], **kwargs
-    ) -> "TabbedFileWriter":
+    ) -> "TabularDataWriter":
         suffix = file_name.suffix
         if suffix in CSV_SUFFIXES:
             return CSVFileWriter(file_name, columns, **kwargs)
@@ -182,7 +182,7 @@ class TabbedFileWriter(ABC):
 
 
 @typechecked
-class CSVFileWriter(TabbedFileWriter):
+class CSVFileWriter(TabularDataWriter):
     def __init__(
         self,
         file_name: Path,
@@ -220,7 +220,7 @@ class CSVFileWriter(TabbedFileWriter):
 
 
 @typechecked
-class ParquetFileWriter(TabbedFileWriter):
+class ParquetFileWriter(TabularDataWriter):
     def __init__(
         self,
         file_name: Path,
@@ -254,7 +254,7 @@ class ParquetFileWriter(TabbedFileWriter):
         data.to_parquet(self.file_name, index=False)
 
 
-class SqliteWriter(TabbedFileWriter):
+class SqliteWriter(TabularDataWriter):
     def __init__(
         self,
         file_name: Path,
@@ -339,7 +339,7 @@ class ConfidenceWriter:
         if not self.decoys and len(self.out_paths) > 1:
             self.out_paths.pop(1)
         self.writers = [
-            TabbedFileWriter.from_suffix(path, self.out_columns)
+            TabularDataWriter.from_suffix(path, self.out_columns)
             for path in self.out_paths
         ]
         self.data_out = []
