@@ -14,7 +14,7 @@ import numpy as np
 
 from . import __version__
 from .config import Config
-from .parsers.pin import read_pin, read_data_for_rescale
+from .parsers.pin import read_pin
 from .parsers.pepxml import read_pepxml
 from .parsers.fasta import read_fasta
 from .brew import brew
@@ -97,16 +97,7 @@ def main(main_args=None):
     # Define a model:
     model = None
     if config.load_models:
-        data_to_rescale = None
-        if config.rescale:
-            data_to_rescale = read_data_for_rescale(
-                psms=datasets,
-                subset_max_rescale=config.subset_max_rescale,
-            )
-        model = [
-            load_model(model_file, data_to_rescale)
-            for model_file in config.load_models
-        ]
+        model = [load_model(model_file) for model_file in config.load_models]
     elif enabled_plugins:
         plugin_models = {}
         for plugin_name, plugin in enabled_plugins.items():

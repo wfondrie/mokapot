@@ -243,35 +243,4 @@ def test_cli_ensemble(tmp_path, phospho_files):
     run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
-
-
-def test_cli_rescale(tmp_path, scope_files):
-    """Test that rescale works"""
-    params = [
-        scope_files[1],
-        "--dest_dir",
-        tmp_path,
-        "--test_fdr",
-        "0.01",
-        "--save_models",
-    ]
-
-    run_mokapot_cli(params)
-
-    params = [
-        scope_files[0],
-        "--dest_dir",
-        tmp_path,
-        "--test_fdr",
-        "0.01",
-        "--load_models",
-        *list(Path(tmp_path).glob("*.pkl")),
-        "--rescale",
-    ]
-    run_mokapot_cli(params)
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
-
-    run_mokapot_cli(params + ["--subset_max_rescale", "5000"])
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
+    # fixme: should also test the *contents* of the files
