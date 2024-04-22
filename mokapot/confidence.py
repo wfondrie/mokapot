@@ -40,7 +40,8 @@ from .utils import (
 from .dataset import OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
-from .tabular_data import TabularDataWriter, TabularDataReader, ConfidenceWriter
+from .tabular_data import TabularDataWriter, TabularDataReader
+from confidence_writer import ConfidenceWriter
 from .constants import CONFIDENCE_CHUNK_SIZE
 
 LOGGER = logging.getLogger(__name__)
