@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from tabular_data import TabularDataWriter, SqliteWriter
+from .tabular_data import TabularDataWriter, SqliteWriter
 
 
 class ConfidenceSqliteWriter(SqliteWriter):
