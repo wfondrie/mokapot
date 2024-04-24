@@ -51,6 +51,10 @@ def main(main_args=None):
     )
     logging.captureWarnings(True)
 
+    # Suppress warning if asked for
+    if config.suppress_warnings:
+        warnings.filterwarnings("ignore")
+
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
     logging.info(
