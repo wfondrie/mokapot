@@ -58,7 +58,7 @@ def test_one_group(psm_df_1000, tmp_path):
         np.random.seed(42)
         # We need to fully qualified path name to modify the constants
         old_chunk_size = mokapot.constants.CONFIDENCE_CHUNK_SIZE
-        mokapot.constants.CONFIDENCE_CHUNK_SIZE = 10000
+        mokapot.constants.CONFIDENCE_CHUNK_SIZE = 100
         assign_confidence(
             [copy.copy(psms_disk)],
             prefixes=[None],
