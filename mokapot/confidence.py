@@ -41,7 +41,7 @@ from .dataset import OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq, to_txt
 from .file_io import TabbedFileWriter, TabbedFileReader, ConfidenceWriter
-from .constants import CONFIDENCE_CHUNK_SIZE
+from . import constants
 
 LOGGER = logging.getLogger(__name__)
 
@@ -333,7 +333,7 @@ class Confidence(object):
 
         in_columns = [i for i in columns if i != self._target_column]
         chunked_data_iterator = reader.get_chunked_data_iterator(
-            CONFIDENCE_CHUNK_SIZE, in_columns
+            constants.CONFIDENCE_CHUNK_SIZE, in_columns
         )
 
         # Note: the out_columns need to match those in assign_confidence (out_files)
@@ -349,7 +349,7 @@ class Confidence(object):
             out_columns.append(protein_column)
 
         chunked = lambda list: create_chunks(
-            list, chunk_size=CONFIDENCE_CHUNK_SIZE
+            list, chunk_size=constants.CONFIDENCE_CHUNK_SIZE
         )
         # Replacing csv target and decoys results path with sqlite db path
         if sqlite_path:
@@ -1104,12 +1104,12 @@ def create_sorted_file_iterator(
     #    psms.metadata_columns in chunks of size CONFIDENCE_CHUNK_SIZE
     reader = TabbedFileReader.from_path(_psms.filename)
     file_iterator = reader.get_chunked_data_iterator(
-        CONFIDENCE_CHUNK_SIZE, _psms.metadata_columns
+        constants.CONFIDENCE_CHUNK_SIZE, _psms.metadata_columns
     )
     outfile_ext = _psms.filename.suffix
 
     # b) Split the scores in chunks of the same size
-    scores_slices = create_chunks(score, chunk_size=CONFIDENCE_CHUNK_SIZE)
+    scores_slices = create_chunks(score, chunk_size=constants.CONFIDENCE_CHUNK_SIZE)
 
     # c) Write those chunks in parallel, where the columns are given
     #    by psms.metadata plus the "scores" column
