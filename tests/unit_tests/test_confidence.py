@@ -57,8 +57,7 @@ def test_one_group(psm_df_1000, tmp_path):
     try:
         np.random.seed(42)
         # We need to fully qualified path name to modify the constants
-        old_chunk_size = mokapot.constants.CONFIDENCE_CHUNK_SIZE
-        mokapot.constants.CONFIDENCE_CHUNK_SIZE = 100
+        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = 100
         assign_confidence(
             [copy.copy(psms_disk)],
             prefixes=[None],
@@ -68,7 +67,7 @@ def test_one_group(psm_df_1000, tmp_path):
             eval_fdr=0.02,
         )
     finally:
-        mokapot.constants.CONFIDENCE_CHUNK_SIZE = old_chunk_size
+        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = mokapot.constants.CONFIDENCE_CHUNK_SIZE
 
     df_results_group = pd.read_csv(tmp_path / "0.targets.peptides", sep="\t")
     assert len(df_results_group) == 500
