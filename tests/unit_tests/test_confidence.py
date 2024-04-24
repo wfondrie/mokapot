@@ -1,11 +1,15 @@
 """Test that Confidence classes are working correctly"""
 
-from pathlib import Path
 import numpy as np
+import pyarrow.parquet as pq
 import pandas as pd
 import copy
+from pathlib import Path
+from pytest import approx
+
+
+import mokapot
 from mokapot import OnDiskPsmDataset, assign_confidence
-import pyarrow.parquet as pq
 from mokapot.confidence import get_unique_peptides_from_psms
 
 
@@ -50,16 +54,30 @@ def test_one_group(psm_df_1000, tmp_path):
         specId_column="specid",
         spectra_dataframe=df_spectra,
     )
-    np.random.seed(42)
-    assign_confidence(
-        [copy.copy(psms_disk)],
-        prefixes=[None],
-        descs=[True],
-        dest_dir=tmp_path,
-        max_workers=4,
-        eval_fdr=0.02,
-    )
+    try:
+        np.random.seed(42)
+        # We need to fully qualified path name to modify the constants
+        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = 100
+        assign_confidence(
+            [copy.copy(psms_disk)],
+            prefixes=[None],
+            descs=[True],
+            dest_dir=tmp_path,
+            max_workers=4,
+            eval_fdr=0.02,
+        )
+    finally:
+        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = mokapot.constants.CONFIDENCE_CHUNK_SIZE
+
     df_results_group = pd.read_csv(tmp_path / "0.targets.peptides", sep="\t")
+    assert len(df_results_group) == 500
+    assert df_results_group.columns.tolist() == ['PSMId', 'peptide', 'score', 'q-value', 'posterior_error_prob', 'proteinIds']
+    df = df_results_group.head(3)
+    assert df['PSMId'].tolist() == [98, 187, 176]
+    assert df['peptide'].tolist() == ['PELPK', 'IYFCK', 'CGQGK']
+    assert df['score'].tolist() == approx([5.857438, 5.703985, 5.337845])
+    assert df['q-value'].tolist() == approx([0.01020408, 0.01020408, 0.01020408])
+    assert df['posterior_error_prob'].tolist() == approx([1.635110e-05, 2.496682e-05, 6.854064e-05])
 
     np.random.seed(42)
     psms_disk.group_column = None

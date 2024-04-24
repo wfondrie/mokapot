@@ -342,7 +342,6 @@ class ConfidenceWriter:
             TabbedFileWriter.from_suffix(path, self.out_columns)
             for path in self.out_paths
         ]
-        self.data_out = []
         self.qvalue_column = "q_value"
         self.pep_column = "posterior_error_prob"
 
@@ -355,22 +354,23 @@ class ConfidenceWriter:
         ):
             data_chunk[self.qvalue_column] = qvals_chunk
             data_chunk[self.pep_column] = peps_chunk
+            data_out = []
             if not self.is_sqlite:
-                self.data_out.append(
+                data_out.append(
                     data_chunk.loc[targets_chunk, self.out_columns]
                 )
                 if self.decoys:
-                    self.data_out.append(
+                    data_out.append(
                         data_chunk.loc[~targets_chunk, self.out_columns]
                     )
             else:
                 if self.decoys:
-                    self.data_out.append(data_chunk)
+                    data_out.append(data_chunk)
                 else:
-                    self.data_out.append(
+                    data_out.append(
                         data_chunk.loc[targets_chunk, self.out_columns]
                     )
-            for writer, data in zip(self.writers, self.data_out):
+            for writer, data in zip(self.writers, data_out):
                 if self.is_sqlite:
                     writer.append_data(
                         data,
