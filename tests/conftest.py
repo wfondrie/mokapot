@@ -310,7 +310,7 @@ def psms_ondisk_from_parquet():
     df_spectra = pq.read_table(
         filename, columns=["ScanNr", "ExpMass", "Label"]
     ).to_pandas()
-    df_spectra = convert_targets_column(df_spectra,"Label")
+    df_spectra = convert_targets_column(df_spectra, "Label")
     columns = pq.ParquetFile(filename).schema.names
     psms = OnDiskPsmDataset(
         filename=filename,
@@ -579,6 +579,24 @@ def merge_sort_data(tmp_path):
         df[i::3].to_csv(file_csv, sep="\t", index=False)
         df[i::3].to_parquet(file_parquet, index=False)
     return filenames_csv, filenames_parquet
+
+
+@pytest.fixture
+def confidence_write_data():
+    filename = Path("data/confidence_results_test.tsv")
+    psm_df = pd.read_csv(filename, sep="\t")
+    precursor_df = psm_df.drop_duplicates(subset=["Precursor"])
+    mod_pep_df = psm_df.drop_duplicates(subset=["ModifiedPeptide"])
+    peptide_df = psm_df.drop_duplicates(subset=["peptide"])
+    peptide_grp_df = psm_df.drop_duplicates(subset=["PeptideGroup"])
+    df_dict = {
+        "psms": psm_df,
+        "precursors": precursor_df,
+        "modifiedpeptides": mod_pep_df,
+        "peptides": peptide_df,
+        "peptidegroups": peptide_grp_df,
+    }
+    return df_dict
 
 
 @pytest.fixture
