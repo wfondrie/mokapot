@@ -254,17 +254,22 @@ class ParquetFileWriter(TabularDataWriter):
         data.to_parquet(self.file_name, index=False)
 
 
+@typechecked
 class SqliteWriter(TabularDataWriter):
     def __init__(
         self,
-        file_name: Path,
+        database: str | Path | sqlite3.Connection,
         columns: list[str],
         column_types: list | None = None,
     ) -> None:
-        self.file_name = file_name
+        if isinstance(database, sqlite3.Connection):
+            self.file_name = None
+            self.connection = database
+        else:
+            self.file_name = database
+            self.connection = sqlite3.connect(self.file_name)
         self.columns = columns
         self.column_types = column_types
-        self.connection = sqlite3.connect(self.file_name)
 
     def __str__(self):
         return f"SqliteFileWriter({self.file_name=},{self.columns=})"

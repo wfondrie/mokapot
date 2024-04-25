@@ -1,21 +1,24 @@
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
+from typeguard import typechecked
 
 from .tabular_data import TabularDataWriter, SqliteWriter
 
 
+@typechecked
 class ConfidenceSqliteWriter(SqliteWriter):
     def __init__(
         self,
-        file_name: Path,
+        database: str | Path | sqlite3.Connection,
         columns: list[str],
         column_types: list | None = None,
         level: str = "psms",
-        qvalue_column: str = "",
-        pep_column: str="",
+        qvalue_column: str = "q_value",
+        pep_column: str="posterior_error_prob",
     ) -> None:
-        super.__init__(self, file_name, columns, column_types)
+        super().__init__(database, columns, column_types)
         self.level_cols = {
             "precursors": ["PRECURSOR_VALIDATION", "PCM_ID", "Precursor"],
             "modifiedpeptides": [
@@ -80,7 +83,6 @@ class ConfidenceWriter:
         else:
             create_writer = lambda path: TabularDataWriter.from_suffix(path, self.out_columns)
         self.writers = [create_writer(path)for path in self.out_paths]
-        self.data_out = []
 
     def write(self):
         for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
@@ -91,22 +93,23 @@ class ConfidenceWriter:
         ):
             data_chunk[self.qvalue_column] = qvals_chunk
             data_chunk[self.pep_column] = peps_chunk
+            data_out = []
             if not self.is_sqlite:
-                self.data_out.append(
+                data_out.append(
                     data_chunk.loc[targets_chunk, self.out_columns]
                 )
                 if self.decoys:
-                    self.data_out.append(
+                    data_out.append(
                         data_chunk.loc[~targets_chunk, self.out_columns]
                     )
             else:
                 if self.decoys:
-                    self.data_out.append(data_chunk)
+                    data_out.append(data_chunk)
                 else:
-                    self.data_out.append(
+                    data_out.append(
                         data_chunk.loc[targets_chunk, self.out_columns]
                     )
-            for writer, data in zip(self.writers, self.data_out):
+            for writer, data in zip(self.writers, data_out):
                 writer.append_data(data)
 
     def commit_data(self):
