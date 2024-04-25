@@ -379,6 +379,16 @@ def _parser():
     )
 
     parser.add_argument(
+        "--suppress_warnings",
+        default=False,
+        action="store_true",
+        help=(
+            "Suppress warning messages when running mokapot. "
+            "Should only be used when running mokapot in production."
+        ),
+    )
+
+    parser.add_argument(
         "--sqlite_db_path",
         default=None,
         type=Path,

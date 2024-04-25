@@ -1,11 +1,5 @@
-<img src="https://raw.githubusercontent.com/wfondrie/mokapot/master/static/mokapot_logo_dark.svg" width=300>  
 
----  
-[![conda](https://img.shields.io/conda/vn/bioconda/mokapot?color=green)](http://bioconda.github.io/recipes/mokapot/README.html)
-[![PyPI](https://img.shields.io/pypi/v/mokapot?color=green)](https://pypi.org/project/mokapot/)
-[![tests](https://github.com/wfondrie/mokapot/workflows/tests/badge.svg)](https://github.com/wfondrie/mokapot/actions?query=workflow%3Atests)
-[![docs](https://readthedocs.org/projects/mokapot/badge/?version=latest)](https://mokapot.readthedocs.io/en/latest/?badge=latest)
-
+[![pipeline status](https://gitlab.com/msaid/inferys/mokapot/badges/main/pipeline.svg)](https://gitlab.com/msaid/inferys/mokapot/-/commits/main)
 
 
 Fast and flexible semi-supervised learning for peptide detection.  
