@@ -48,200 +48,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Classes ---------------------------------------------------------------------
-class GroupedConfidence:
-    """Perform grouped confidence estimation for a collection of PSMs.
-
-    Groups are defined by the :py:class:`~mokapot.dataset.LinearPsmDataset`.
-    Confidence estimates for each group can be retrieved by using the group
-    name as an attribute, or from the
-    :py:meth:`~GroupedConfidence.group_confidence_estimates` property.
-
-    Parameters
-    ----------
-    psms : OnDiskPsmDataset
-        A collection of PSMs.
-    rng : int or np.random.Generator, optional
-        A seed or generator used for cross-validation split creation and to
-        break ties, or ``None`` to use the default random number generator
-        state.
-    scores : np.ndarray
-        A vector containing the score of each PSM.
-    desc : bool
-        Are higher scores better?
-    eval_fdr : float
-        The FDR threshold at which to report performance. This parameter
-        has no affect on the analysis itself, only logging messages.
-    dest_dir : str or None, optional
-        The directory in which to save the files. :code:`None` will use the
-        current working directory.
-    sep : str, optional
-        The delimiter to use.
-    decoys : bool, optional
-        Save decoys confidence estimates as well?
-    combine : bool, optional
-            Should groups be combined into a single file?
-    """
-
-    @typechecked
-    def __init__(
-        self,
-        psms,
-        scores,
-        max_workers,
-        desc=True,
-        eval_fdr=0.01,
-        decoys=False,
-        dest_dir: Path | None = None,
-        sep="\t",
-        proteins=None,
-        combine=False,
-        prefixes=None,
-        rng=0,
-        peps_error=False,
-        sqlite_path=None,
-    ):
-        """Initialize a GroupedConfidence object"""
-        group_file = Path(f"{dest_dir}{prefixes}group_psms.csv")
-        self.sqlite_path = sqlite_path
-        data = TabularDataReader.from_path(psms.filename).read(
-            list(psms.columns)
-        )
-        self.group_column = psms.group_column
-        psms.group_column = None
-        # Do TDC to eliminate multiples PSMs for a spectrum that may occur
-        # in different groups.
-        keep = "last" if desc else "first"
-        scores = (
-            pd.Series(scores, index=data.index).sample(frac=1).sort_values()
-        )
-
-        idx = (
-            data.loc[scores.index, :]
-            .drop_duplicates(psms.spectrum_columns, keep=keep)
-            .index
-        )
-        append_to_group = False
-        for group, group_df in data.groupby(self.group_column):
-            LOGGER.info("Group: %s == %s", self.group_column, group)
-            tdc_winners = group_df.index.intersection(idx)
-            group_psms = group_df.loc[tdc_winners, :]
-            group_scores = scores.loc[group_psms.index].values
-            group_psms.to_csv(group_file, sep="\t", index=False)
-            psms.filename = Path(group_file)
-            assign_confidence(
-                [psms],
-                max_workers,
-                [group_scores],
-                descs=[desc],
-                eval_fdr=eval_fdr,
-                dest_dir=dest_dir,
-                sep=sep,
-                decoys=decoys,
-                proteins=proteins,
-                group_column=group,
-                combine=combine,
-                prefixes=prefixes,
-                append_to_output_file=append_to_group,
-                rng=rng,
-                peps_error=peps_error,
-            )
-            if combine:
-                append_to_group = True
-            group_file.unlink()
-
-    @property
-    def group_confidence_estimates(self):
-        """A dictionary of the confidence estimates for each group."""
-        return self._group_confidence_estimates
-
-    @property
-    def groups(self):
-        """The groups for confidence estimation"""
-        return list(self._group_confidence_estimates.keys())
-
-    def to_txt(
-        self,
-        dest_dir=None,
-        file_root=None,
-        sep="\t",
-        decoys=False,
-        combine=False,
-    ):
-        """Save confidence estimates to delimited text files.
-
-        Parameters
-        ----------
-        dest_dir : str or None, optional
-            The directory in which to save the files. `None` will use the
-            current working directory.
-        file_root : str or None, optional
-            An optional prefix for the confidence estimate files. The suffix
-            will be "mokapot.{level}.txt", where "{level}" indicates the level
-            at which confidence estimation was performed (i.e. PSMs, peptides,
-            proteins) if :code:`combine=True`. If :code:`combine=False` (the
-            default), additionally the group value is prepended, yeilding a
-            suffix "{group}.mokapot.{level}.txt".
-        sep : str, optional
-            The delimiter to use.
-        decoys : bool, optional
-            Save decoys confidence estimates as well?
-        combine : bool, optional
-            Should groups be combined into a single file?
-
-        Returns
-        -------
-        list of str
-            The paths to the saved files.
-
-        """
-        if combine:
-            res = self.group_confidence_estimates.values()
-            ret_files = to_txt(
-                res,
-                dest_dir=dest_dir,
-                file_root=file_root,
-                sep=sep,
-                decoys=decoys,
-            )
-            return ret_files
-
-        ret_files = []
-        for group, res in self.group_confidence_estimates.items():
-            prefix = file_root + f".{group}"
-            new_files = res.to_txt(
-                dest_dir=dest_dir, file_root=prefix, sep=sep, decoys=decoys
-            )
-            ret_files.append(new_files)
-
-        return ret_files
-
-    def __repr__(self):
-        """Nice printing."""
-        ngroups = len(self.group_confidence_estimates)
-        lines = [
-            "A mokapot.confidence.GroupedConfidence object with "
-            f"{ngroups} groups:\n"
-        ]
-
-        for group, conf in self.group_confidence_estimates.items():
-            lines += [f"Group: {self.group_column} == {group}"]
-            lines += ["-" * len(lines[-1])]
-            lines += [str(conf)]
-
-        return "\n".join(lines)
-
-    def __getattr__(self, attr):
-        """Make groups accessible easily"""
-        try:
-            return self.group_confidence_estimates[attr]
-        except KeyError:
-            raise AttributeError
-
-    def __len__(self):
-        """Report the number of groups"""
-        return len(self.group_confidence_estimates)
-
-
 class Confidence(object):
     """Estimate and store the statistical confidence for a collection of PSMs.
 
@@ -262,7 +68,6 @@ class Confidence(object):
         self._target_column = psms.target_column
         self._protein_column = "proteinIds"
         self._rng = rng
-        self._group_column = psms.group_column
         self._metadata_column = psms.metadata_columns
 
         self.scores = None
@@ -786,7 +591,6 @@ def assign_confidence(
     deduplication=True,
     do_rollup=True,
     proteins=None,
-    group_column=None,
     combine=False,
     append_to_output_file=False,
     rng=0,
@@ -835,9 +639,6 @@ def assign_confidence(
         collection of proteins
     combine : bool, optional
             Should groups be combined into a single file?
-    group_column : str, optional
-        A factor to by which to group PSMs for grouped confidence
-        estimation.
     append_to_output_file: bool
         do we append results to file ?
     sqlite_path: Path to the sqlite database to write mokapot results
@@ -930,161 +731,135 @@ def assign_confidence(
             "score",
         ]
 
-        if _psms.group_column is None:
-            file_prefix = file_root
-            if prefix:
-                file_prefix = f"{file_prefix}{prefix}."
+        file_prefix = file_root
+        if prefix:
+            file_prefix = f"{file_prefix}{prefix}."
 
-            out_files = {}
-            for level in levels_or_proteins:
-                if (
-                    group_column is not None and not combine
-                ):  # fixme: What is the relation between group_column and psms.group_column and why can one be None and the other not? And what would that mean?
-                    file_prefix_group = f"{file_prefix}{group_column}."
-                else:
-                    file_prefix_group = file_prefix
+        out_files = {}
+        for level in levels_or_proteins:
+            if level == "proteins":
+                output_columns = out_columns_proteins
+            else:
+                output_columns = out_columns_psms_peps
 
-                if level == "proteins":
-                    output_columns = out_columns_proteins
-                else:
-                    output_columns = out_columns_psms_peps
+            outfile_targets = (
+                dest_dir / f"{file_prefix}targets.{level}"
+            )
+            writer = TabularDataWriter.from_suffix(
+                outfile_targets, output_columns
+            )
+            if not append_to_output_file:
+                writer.write_header()
+            out_files[level] = [outfile_targets]
 
-                outfile_targets = (
-                    dest_dir / f"{file_prefix_group}targets.{level}"
+            if decoys:
+                outfile_decoys = (
+                    dest_dir / f"{file_prefix}decoys.{level}"
                 )
                 writer = TabularDataWriter.from_suffix(
-                    outfile_targets, output_columns
+                    outfile_decoys, output_columns
                 )
                 if not append_to_output_file:
                     writer.write_header()
-                out_files[level] = [outfile_targets]
+                out_files[level].append(outfile_decoys)
 
-                if decoys:
-                    outfile_decoys = (
-                        dest_dir / f"{file_prefix_group}decoys.{level}"
-                    )
-                    writer = TabularDataWriter.from_suffix(
-                        outfile_decoys, output_columns
-                    )
-                    if not append_to_output_file:
-                        writer.write_header()
-                    out_files[level].append(outfile_decoys)
+        with create_sorted_file_iterator(
+            _psms,
+            dest_dir,
+            file_prefix,
+            do_rollup,
+            max_workers,
+            score,
+            sep,
+        ) as sorted_file_iterator:
 
-            with create_sorted_file_iterator(
-                _psms,
-                dest_dir,
-                file_prefix,
-                do_rollup,
-                max_workers,
-                score,
-                sep,
-            ) as sorted_file_iterator:
+            LOGGER.info("Assigning confidence...")
+            LOGGER.info("Performing target-decoy competition...")
+            LOGGER.info(
+                "Keeping the best match per %s columns...",
+                "+".join(_psms.spectrum_columns),
+            )
 
-                LOGGER.info("Assigning confidence...")
-                LOGGER.info("Performing target-decoy competition...")
-                LOGGER.info(
-                    "Keeping the best match per %s columns...",
-                    "+".join(_psms.spectrum_columns),
+            # The columns we get from the sorted file iterator
+            iterator_columns = _psms.metadata_columns + ["score"]
+
+            writers = {
+                level: TabularDataWriter.from_suffix(
+                    level_data_path[level], out_metadata_columns
                 )
+                for level in levels
+            }
+            for writer in writers.values():
+                writer.write_header()
 
-                # The columns we get from the sorted file iterator
-                iterator_columns = _psms.metadata_columns + ["score"]
+            # fixme: The writers are currently too slow, for single line io,
+            # so we go back to low level (furthermore, the merge_sort is
+            # also a bit crappy, and needs some fixing)
+            handles = {
+                level: open(level_data_path[level], "a")
+                for level in levels
+            }
 
-                writers = {
-                    level: TabularDataWriter.from_suffix(
-                        level_data_path[level], out_metadata_columns
-                    )
-                    for level in levels
-                }
-                for writer in writers.values():
-                    writer.write_header()
+            seen_level_entities = {level: set() for level in levels}
 
-                # fixme: The writers are currently too slow, for single line io,
-                # so we go back to low level (furthermore, the merge_sort is
-                # also a bit crappy, and needs some fixing)
-                handles = {
-                    level: open(level_data_path[level], "a")
-                    for level in levels
-                }
+            level_hash_colidx: dict = map_columns_to_indices(
+                level_hash_columns, iterator_columns
+            )
+            input_colidx = map_columns_to_indices(
+                in_metadata_columns, iterator_columns
+            )
 
-                seen_level_entities = {level: set() for level in levels}
-
-                level_hash_colidx: dict = map_columns_to_indices(
-                    level_hash_columns, iterator_columns
-                )
-                input_colidx = map_columns_to_indices(
-                    in_metadata_columns, iterator_columns
-                )
-
-                psm_count = 0
-                for data_row in sorted_file_iterator:
-                    line_list = np.array(data_row)
-                    psm_count += 1
-                    for level in levels:
-                        if level != "psms" or deduplication:
-                            psm_hash = str(line_list[level_hash_colidx[level]])
-                            if psm_hash in seen_level_entities[level]:
-                                if level == "psms":
-                                    break
-                                continue
-                            seen_level_entities[level].add(psm_hash)
-                        line = line_list[input_colidx]
-                        handles[level].write("\t".join(line))
-
+            psm_count = 0
+            for data_row in sorted_file_iterator:
+                line_list = np.array(data_row)
+                psm_count += 1
                 for level in levels:
-                    handles[level].close()
-                    count = len(seen_level_entities[level])
-                    if level == "psms":
-                        if deduplication:
-                            LOGGER.info(
-                                f"\t- Found {count} PSMs from unique spectra."
-                            )
-                        else:
-                            LOGGER.info(f"\t- Found {psm_count} PSMs.")
+                    if level != "psms" or deduplication:
+                        psm_hash = str(line_list[level_hash_colidx[level]])
+                        if psm_hash in seen_level_entities[level]:
+                            if level == "psms":
+                                break
+                            continue
+                        seen_level_entities[level].add(psm_hash)
+                    line = line_list[input_colidx]
+                    handles[level].write("\t".join(line))
+
+            for level in levels:
+                handles[level].close()
+                count = len(seen_level_entities[level])
+                if level == "psms":
+                    if deduplication:
+                        LOGGER.info(
+                            f"\t- Found {count} PSMs from unique spectra."
+                        )
                     else:
-                        LOGGER.info(f"\t- Found {count} unique {level}.")
+                        LOGGER.info(f"\t- Found {psm_count} PSMs.")
+                else:
+                    LOGGER.info(f"\t- Found {count} unique {level}.")
 
-            LinearConfidence(
-                psms=_psms,
-                levels=levels_or_proteins,
-                level_paths=[
-                    level_data_path[level] for level in levels_or_proteins
-                ],
-                out_paths=[out_files[level] for level in levels_or_proteins],
-                eval_fdr=eval_fdr,
-                desc=desc,
-                sep=sep,
-                decoys=decoys,
-                deduplication=deduplication,
-                do_rollup=do_rollup,
-                proteins=proteins,
-                rng=rng,
-                peps_error=peps_error,
-                peps_algorithm=peps_algorithm,
-                qvalue_algorithm=qvalue_algorithm,
-                sqlite_path=sqlite_path,
-            )
-            if not prefix:
-                append_to_output_file = True
+        LinearConfidence(
+            psms=_psms,
+            levels=levels_or_proteins,
+            level_paths=[
+                level_data_path[level] for level in levels_or_proteins
+            ],
+            out_paths=[out_files[level] for level in levels_or_proteins],
+            eval_fdr=eval_fdr,
+            desc=desc,
+            sep=sep,
+            decoys=decoys,
+            deduplication=deduplication,
+            do_rollup=do_rollup,
+            proteins=proteins,
+            rng=rng,
+            peps_error=peps_error,
+            peps_algorithm=peps_algorithm,
+            qvalue_algorithm=qvalue_algorithm,
+            sqlite_path=sqlite_path,
+        )
+        if not prefix:
+            append_to_output_file = True
 
-        else:
-            LOGGER.info("Assigning confidence within groups...")
-            GroupedConfidence(
-                _psms,
-                score,
-                max_workers,
-                eval_fdr=eval_fdr,
-                desc=desc,
-                dest_dir=dest_dir,
-                sep=sep,
-                decoys=decoys,
-                proteins=proteins,
-                combine=combine,
-                prefixes=[prefix],
-                rng=rng,
-                peps_error=peps_error,
-                sqlite_path=sqlite_path,
-            )
 
 
 @contextmanager

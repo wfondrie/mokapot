@@ -41,7 +41,6 @@ def test_one_group(psm_df_1000, tmp_path):
         charge_column="charge",
         columns=columns,
         protein_column="proteins",
-        group_column="group",
         metadata_columns=[
             "specid",
             "scannr",
@@ -69,7 +68,7 @@ def test_one_group(psm_df_1000, tmp_path):
     finally:
         mokapot.confidence.CONFIDENCE_CHUNK_SIZE = mokapot.constants.CONFIDENCE_CHUNK_SIZE
 
-    df_results_group = pd.read_csv(tmp_path / "0.targets.peptides", sep="\t")
+    df_results_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
     assert len(df_results_group) == 500
     assert df_results_group.columns.tolist() == ['PSMId', 'peptide', 'score', 'q-value', 'posterior_error_prob', 'proteinIds']
     df = df_results_group.head(3)
@@ -80,7 +79,6 @@ def test_one_group(psm_df_1000, tmp_path):
     assert df['posterior_error_prob'].tolist() == approx([1.635110e-05, 2.496682e-05, 6.854064e-05])
 
     np.random.seed(42)
-    psms_disk.group_column = None
     assign_confidence(
         [psms_disk],
         prefixes=[None],
@@ -116,7 +114,6 @@ def test_one_group_parquet(psm_df_1000_parquet, tmp_path):
         charge_column="charge",
         columns=columns,
         protein_column="proteins",
-        group_column="group",
         metadata_columns=[
             "specid",
             "scannr",
@@ -138,10 +135,9 @@ def test_one_group_parquet(psm_df_1000_parquet, tmp_path):
         max_workers=4,
         eval_fdr=0.02,
     )
-    df_results_group = pd.read_csv(tmp_path / "0.targets.peptides", sep="\t")
+    df_results_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
 
     np.random.seed(42)
-    psms_disk.group_column = None
     assign_confidence(
         [psms_disk],
         prefixes=[None],
@@ -153,102 +149,6 @@ def test_one_group_parquet(psm_df_1000_parquet, tmp_path):
     df_results_no_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
 
     pd.testing.assert_frame_equal(df_results_group, df_results_no_group)
-
-
-def test_multi_groups(psm_df_100, tmp_path):
-    """Test that group results are saved"""
-    pin_file = psm_df_100
-    columns = list(pd.read_csv(pin_file, sep="\t").columns)
-    df_spectra = pd.read_csv(
-        pin_file, sep="\t", usecols=["scannr", "expmass", "target"]
-    )
-    psms_disk = OnDiskPsmDataset(
-        filename=pin_file,
-        target_column="target",
-        spectrum_columns=["scannr", "expmass"],
-        peptide_column="peptide",
-        feature_columns=["score"],
-        filename_column="filename",
-        scan_column="scannr",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
-        columns=columns,
-        protein_column="proteins",
-        group_column="group",
-        metadata_columns=[
-            "specid",
-            "scannr",
-            "expmass",
-            "peptide",
-            "proteins",
-            "target",
-        ],
-        level_columns=["peptide"],
-        specId_column="specid",
-        spectra_dataframe=df_spectra,
-    )
-    assign_confidence(
-        [psms_disk],
-        prefixes=[None],
-        descs=[True],
-        dest_dir=tmp_path,
-        max_workers=4,
-        eval_fdr=0.10,
-    )
-    assert Path(tmp_path, f"{0}.targets.psms").exists()
-    assert Path(tmp_path, f"{1}.targets.psms").exists()
-    assert Path(tmp_path, f"{0}.targets.peptides").exists()
-    assert Path(tmp_path, f"{1}.targets.peptides").exists()
-
-
-def test_multi_groups_parquet(psm_df_100_parquet, tmp_path):
-    """Test that group results are saved"""
-    pq_file = psm_df_100_parquet
-    columns = pq.ParquetFile(pq_file).schema.names
-    df_spectra = pq.read_table(
-        pq_file, columns=["scannr", "expmass", "target"]
-    ).to_pandas()
-    psms_disk = OnDiskPsmDataset(
-        filename=pq_file,
-        target_column="target",
-        spectrum_columns=["scannr", "expmass"],
-        peptide_column="peptide",
-        feature_columns=["score"],
-        filename_column="filename",
-        scan_column="scannr",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
-        columns=columns,
-        protein_column="proteins",
-        group_column="group",
-        metadata_columns=[
-            "specid",
-            "scannr",
-            "expmass",
-            "peptide",
-            "proteins",
-            "target",
-        ],
-        level_columns=["peptide"],
-        specId_column="specid",
-        spectra_dataframe=df_spectra,
-    )
-    assign_confidence(
-        [psms_disk],
-        prefixes=[None],
-        descs=[True],
-        dest_dir=tmp_path,
-        max_workers=4,
-        eval_fdr=0.10,
-    )
-    assert Path(tmp_path, f"{0}.targets.psms").exists()
-    assert Path(tmp_path, f"{1}.targets.psms").exists()
-    assert Path(tmp_path, f"{0}.targets.peptides").exists()
-    assert Path(tmp_path, f"{1}.targets.peptides").exists()
 
 
 def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):

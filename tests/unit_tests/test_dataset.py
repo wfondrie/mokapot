@@ -16,7 +16,6 @@ def test_linear_init(psm_df_6):
         spectrum_columns="spectrum",
         peptide_column="peptide",
         protein_column="protein",
-        group_column="group",
         feature_columns=None,
         copy_data=True,
     )
@@ -30,13 +29,12 @@ def test_linear_init(psm_df_6):
 
     # Check the public attributes
     features = ["feature_1", "feature_2"]
-    metadata = ["target", "spectrum", "group", "peptide", "protein"]
+    metadata = ["target", "spectrum", "peptide", "protein"]
 
     pd.testing.assert_frame_equal(dset.spectra, psm_df_6.loc[:, ["spectrum"]])
     pd.testing.assert_series_equal(dset.peptides, psm_df_6.loc[:, "peptide"])
     pd.testing.assert_frame_equal(dset.features, psm_df_6.loc[:, features])
     pd.testing.assert_frame_equal(dset.metadata, psm_df_6.loc[:, metadata])
-    pd.testing.assert_series_equal(dset.groups, psm_df_6.loc[:, "group"])
     assert dset.columns == psm_df_6.columns.tolist()
     assert np.array_equal(dset.targets, psm_df_6["target"].values)
     assert not dset.has_proteins
@@ -50,7 +48,6 @@ def test_update_labels(psm_df_6):
         spectrum_columns="spectrum",
         peptide_column="peptide",
         protein_column="protein",
-        group_column="group",
         feature_columns=None,
         copy_data=True,
     )

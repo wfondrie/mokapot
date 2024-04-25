@@ -361,7 +361,6 @@ def _create_psms(psms, data, enforce_checks=True):
         spectrum_columns=psms.spectrum_columns,
         peptide_column=psms.peptide_column,
         protein_column=psms.protein_column,
-        group_column=psms.group_column,
         feature_columns=psms.feature_columns,
         filename_column=psms.filename_column,
         scan_column=psms.scan_column,

@@ -53,7 +53,6 @@ def main(main_args=None):
         columns=None,
         spectrum_columns=None,
         protein_column=None,
-        group_column=None,
         feature_columns=None,
         metadata_columns=None,
         level_columns=None,

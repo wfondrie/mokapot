@@ -33,7 +33,6 @@ LOGGER = logging.getLogger(__name__)
 def read_pin(
     pin_files,
     max_workers,
-    group_column=None,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
@@ -70,9 +69,6 @@ def read_pin(
         One or more PIN files to read or a :py:class:`pandas.DataFrame`.
     max_workers: int
         Maximum number of parallel processes to use.
-    group_column : str, optional
-        A factor to by which to group PSMs for grouped confidence
-        estimation.
     filename_column : str, optional
         The column specifying the MS data file. If :code:`None`, mokapot will
         look for a column called "filename" (case insensitive). This is
@@ -107,7 +103,6 @@ def read_pin(
         read_percolator(
             pin_file,
             max_workers=max_workers,
-            group_column=group_column,
             filename_column=filename_column,
             calcmass_column=calcmass_column,
             expmass_column=expmass_column,
@@ -142,7 +137,6 @@ def create_chunks_with_identifier(data, identifier_column, chunk_size):
 def read_percolator(
     perc_file: Path,
     max_workers,
-    group_column=None,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
@@ -201,12 +195,6 @@ def read_percolator(
     if charge is not None and len(alt_charge) > 1:
         nonfeat.append(charge)
 
-    # Add the grouping column
-    if group_column is not None:
-        nonfeat += [group_column]
-        if group_column not in columns:
-            raise ValueError(f"The '{group_column} column was not found.")
-
     for col in [filename, calcmass, expmass, ret_time]:
         if col is not None:
             nonfeat.append(col)
@@ -263,7 +251,6 @@ def read_percolator(
         spectrum_columns=spectra,
         peptide_column=peptides,
         protein_column=proteins,
-        group_column=group_column,
         feature_columns=_feature_columns,
         metadata_columns=nonfeat,
         level_columns=level_columns,

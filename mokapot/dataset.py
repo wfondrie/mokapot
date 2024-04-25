@@ -83,7 +83,6 @@ class PsmDataset(ABC):
         psms,
         spectrum_columns,
         feature_columns,
-        group_column,
         other_columns,
         copy_data,
         rng,
@@ -95,21 +94,15 @@ class PsmDataset(ABC):
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
-        self._group_column = group_column
 
         if other_columns is not None:
             other_columns = utils.tuplize(other_columns)
         else:
             other_columns = ()
 
-        if group_column is not None:
-            group_column = (group_column,)
-        else:
-            group_column = ()
-
         # Check that all of the columns exist:
         used_columns = sum(
-            [other_columns, self._spectrum_columns, group_column], tuple()
+            [other_columns, self._spectrum_columns], tuple()
         )
 
         missing_columns = [c not in self.data.columns for c in used_columns]
@@ -160,13 +153,6 @@ class PsmDataset(ABC):
         identify a mass spectrum.
         """
         return self.data.loc[:, self._spectrum_columns]
-
-    @property
-    def groups(self):
-        """
-        A :py:class:`pandas.Series` of the groups for confidence estimation.
-        """
-        return self.data.loc[:, self._group_column]
 
     @property
     def columns(self):
@@ -318,8 +304,6 @@ class LinearPsmDataset(PsmDataset):
         The column that specifies which protein(s) the detected peptide might
         have originated from. This column is not used to compute protein-level
         confidence estimates (see :py:meth:`add_proteins()`).
-    group_column : str, optional
-        A factor by which to group PSMs for grouped confidence estimation.
     feature_columns : str or tuple of str, optional
         The column(s) specifying the feature(s) for mokapot analysis. If
         :code:`None`, these are assumed to be all of the columns that were not
@@ -366,7 +350,6 @@ class LinearPsmDataset(PsmDataset):
     features : pandas.DataFrame
     spectra : pandas.DataFrame
     peptides : pandas.Series
-    groups : pandas.Series
     targets : numpy.ndarray
     columns : list of str
     has_proteins : bool
@@ -381,7 +364,6 @@ class LinearPsmDataset(PsmDataset):
         spectrum_columns,
         peptide_column,
         protein_column=None,
-        group_column=None,
         feature_columns=None,
         filename_column=None,
         scan_column=None,
@@ -420,7 +402,6 @@ class LinearPsmDataset(PsmDataset):
             psms=psms,
             spectrum_columns=spectrum_columns,
             feature_columns=feature_columns,
-            group_column=group_column,
             other_columns=other_columns,
             copy_data=copy_data,
             rng=rng,
@@ -593,7 +574,6 @@ class OnDiskPsmDataset:
         spectrum_columns,
         peptide_column,
         protein_column,
-        group_column,
         feature_columns,
         metadata_columns,
         level_columns,
@@ -613,7 +593,6 @@ class OnDiskPsmDataset:
         self.peptide_column = peptide_column
         self.protein_column = protein_column
         self.spectrum_columns = spectrum_columns
-        self.group_column = group_column
         self.feature_columns = feature_columns
         self.metadata_columns = metadata_columns
         self.level_columns = level_columns
@@ -648,7 +627,6 @@ class OnDiskPsmDataset:
             check_column(self.peptide_column)
             check_column(self.protein_column)
             check_columns(self.spectrum_columns)
-            check_column(self.group_column)
             # check_columns(self.feature_columns)  # fixme: we don't check these for now, otherwise strange things happen
             check_columns(self.metadata_columns)
             check_columns(self.level_columns)
