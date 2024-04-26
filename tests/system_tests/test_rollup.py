@@ -78,28 +78,6 @@ def test_rollup_10000(tmp_path, percolator_extended_file_small,
     assert Path(path, "targets.peptidegroups").exists()
 
 
-@pytest.mark.skip
-def test_cli_fasta_copy(tmp_path):
-    """Test that proteins happen"""
-    # copied from test_cli for convenience, remove later before committing
-    pin = Path("data", "phospho_rep1.pin")
-    fasta = Path("data", "human_sp_td.fasta")
-    params = [
-        pin,
-        "--dest_dir",
-        tmp_path,
-        "--proteins",
-        fasta,
-        "--max_iter",
-        "1",
-    ]
-
-    run_mokapot_cli(params)
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
-    assert Path(tmp_path, "targets.proteins").exists()
-
-
 def test_extra_cols(tmp_path):
     """Test that two identical mokapot runs produce same results."""
 
