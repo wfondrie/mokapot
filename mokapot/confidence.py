@@ -58,7 +58,6 @@ class Confidence(object):
         "psms": "PSMs",
         "peptides": "Peptides",
         "proteins": "Proteins",
-        "csms": "Cross-Linked PSMs",
         "peptide_pairs": "Peptide Pairs",
     }
 
@@ -479,103 +478,7 @@ class LinearConfidence(Confidence):
         return to_flashlfq(self, out_file)
 
 
-class CrossLinkedConfidence(Confidence):
-    """
-    Assign confidence estimates to a set of cross-linked PSMs
-
-    Estimate q-values and posterior error probabilities (PEPs) for
-    cross-linked PSMs (CSMs) and the peptide pairs when ranked by the
-    provided scores.
-
-    Parameters
-    ----------
-    psms : OnDiskPsmDataset
-        A collection of PSMs.
-    level_paths : List(Path)
-            Files with unique psms and unique peptides.
-    out_paths : List(Path)
-            The output files where the results will be written
-    desc : bool
-        Are higher scores better?
-    """
-
-    def __init__(
-        self,
-        psms,
-        level_paths,
-        out_paths,
-        desc=True,
-        decoys=None,
-        peps_error=False,
-        sep="\t",
-    ):
-        """Initialize a CrossLinkedConfidence object"""
-        super().__init__(psms)
-        self._target_column = psms.target_column
-        self._peptide_column = "peptide"
-
-        self._assign_confidence(
-            level_paths=level_paths,
-            out_paths=out_paths,
-            desc=desc,
-            decoys=decoys,
-            sep=sep,
-            peps_error=peps_error,
-        )
-
-    def _assign_confidence(
-        self,
-        level_paths,
-        out_paths,
-        desc=True,
-        decoys=False,
-        peps_error=False,
-        sep="\t",
-    ):
-        """
-        Assign confidence to PSMs and peptides.
-
-        Parameters
-        ----------
-        level_paths : List(Path)
-            Files with unique psms and unique peptides.
-        out_paths : List(Path)
-            The output files where the results will be written
-        desc : bool
-            Are higher scores better?
-        sep : str, optional
-            The delimiter to use.
-        decoys : bool, optional
-            Save decoys confidence estimates as well?
-        """
-
-        levels = ("csms", "peptide_pairs")
-
-        for level, data_path, out_path in zip(levels, level_paths, out_paths):
-            data = TabularDataReader.from_path(data_path).read(
-                self._metadata_column + ["score"]
-            )
-            if self._target_column:
-                data = convert_targets_column(data, self._target_column)
-            data_columns = list(data.columns)
-            self.scores = data.loc[:, self._score_column].values
-            self.targets = data.loc[:, self._target_column].astype(bool).values
-            self.qvals = qvalues.crosslink_tdc(self.scores, self.targets, desc)
-
-            _, self.peps = qvality.getQvaluesFromScores(
-                self.scores[self.targets == 2], self.scores[~self.targets]
-            )
-            if peps_error and all(self.peps == 1):
-                raise ValueError("PEP values are all equal to 1.")
-            logging.info(f"Writing {level} results...")
-            self.write_to_disk(
-                data_path, data_columns, level.lower(), decoys, sep
-            )
-
-
 # Functions -------------------------------------------------------------------
-
-
 @typechecked
 def assign_confidence(
     psms: list[OnDiskPsmDataset],
