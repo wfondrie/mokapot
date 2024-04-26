@@ -278,14 +278,6 @@ def _parser():
     )
 
     parser.add_argument(
-        "--plugin",
-        type=str,
-        action="append",
-        default=[],
-        help=("The names of the plugins to use."),
-    )
-
-    parser.add_argument(
         "--keep_decoys",
         default=False,
         action="store_true",

@@ -20,20 +20,14 @@ from .parsers.fasta import read_fasta
 from .brew import brew
 from .model import PercolatorModel, load_model
 from .confidence import assign_confidence
-from .plugins import get_plugins
 
 
 def main(main_args=None):
     """The CLI entry point"""
     start = time.time()
-    plugins = get_plugins()
 
     # Get command line arguments
     parser = Config().parser
-    for plugin_name, plugin in plugins.items():
-        parsergroup = parser.add_argument_group(plugin_name)
-        plugin.add_arguments(parsergroup)
-
     config = Config(parser, main_args=main_args)
 
     # Setup logging
@@ -65,21 +59,14 @@ def main(main_args=None):
     logging.info("")
     logging.info("Starting Analysis")
     logging.info("=================")
-    logging.debug("Loaded plugins: %s", plugins.keys())
 
     np.random.seed(config.seed)
 
     # Parse
-    enabled_plugins = {p: plugins[p]() for p in config.plugin}
-
     datasets = read_pin(config.psm_files, max_workers=config.max_workers)
     if config.aggregate or len(config.psm_files) == 1:
-        for plugin in enabled_plugins.values():
-            datasets = plugin.process_data(datasets, config)
         prefixes = ["" for f in config.psm_files]
     else:
-        for plugin in enabled_plugins.values():
-            datasets = [plugin.process_data(ds, config) for ds in datasets]
         prefixes = [f.stem for f in config.psm_files]
 
     # Parse FASTA, if required:
@@ -102,28 +89,6 @@ def main(main_args=None):
     model = None
     if config.load_models:
         model = [load_model(model_file) for model_file in config.load_models]
-    elif enabled_plugins:
-        plugin_models = {}
-        for plugin_name, plugin in enabled_plugins.items():
-            model = plugin.get_model(config)
-            if model is not None:
-                logging.debug(f"Loaded model for {plugin_name}")
-                plugin_models[plugin_name] = model
-
-        if not plugin_models:
-            logging.info(
-                "No models were defined by plugins. Using default model."
-            )
-            model = None
-        else:
-            first_mod_name = list(plugin_models.keys())[0]
-            if len(plugin_models) > 1:
-                logging.warning(
-                    "More than one model was defined by plugins."
-                    " Using the first one. (%s)",
-                    first_mod_name,
-                )
-            model = list(plugin_models.values())[0]
 
     if model is None:
         logging.debug(f"Loading Percolator model.")
