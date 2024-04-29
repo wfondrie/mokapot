@@ -103,7 +103,6 @@ class CSVFileReader(TabularDataReader):
             yield chunk if columns is None else chunk[columns]
 
 
-
 @typechecked
 class DataFrameReader(TabularDataReader):
     def __init__(self, df: pd.DataFrame):
@@ -128,8 +127,9 @@ class DataFrameReader(TabularDataReader):
         self, chunk_size: int, columns: list[str] | None = None
     ) -> Generator[pd.DataFrame, None, None]:
         for pos in range(0, len(self.df), chunk_size):
-            chunk = self.df.iloc[pos : pos + chunk_size]
+            chunk = self.df.iloc[pos:pos + chunk_size]
             yield chunk if columns is None else chunk[columns]
+
 
 @typechecked
 class ParquetFileReader(TabularDataReader):
