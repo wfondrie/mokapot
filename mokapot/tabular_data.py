@@ -103,6 +103,34 @@ class CSVFileReader(TabularDataReader):
             yield chunk if columns is None else chunk[columns]
 
 
+
+@typechecked
+class DataFrameReader(TabularDataReader):
+    def __init__(self, df: pd.DataFrame):
+        self.df = df
+
+    def __str__(self):
+        return f"DataFrameReader({self.df.columns=})"
+
+    def __repr__(self):
+        return f"DataFrameReader({self.df=})"
+
+    def get_column_names(self) -> list[str]:
+        return self.df.columns.tolist()
+
+    def get_column_types(self) -> list[dtype]:
+        return _types_from_dataframe(self.df)
+
+    def read(self, columns: list[str] | None = None) -> pd.DataFrame:
+        return self.df
+
+    def get_chunked_data_iterator(
+        self, chunk_size: int, columns: list[str] | None = None
+    ) -> Generator[pd.DataFrame, None, None]:
+        for pos in range(0, len(self.df), chunk_size):
+            chunk = self.df.iloc[pos : pos + chunk_size]
+            yield chunk if columns is None else chunk[columns]
+
 @typechecked
 class ParquetFileReader(TabularDataReader):
     def __init__(self, file_name: Path):

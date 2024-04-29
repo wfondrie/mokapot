@@ -1,10 +1,10 @@
 import pytest
 from pathlib import Path
-
+import pandas as pd
 from numpy import dtype
 
 from mokapot.tabular_data import TabularDataReader, CSVFileReader, \
-    ParquetFileReader
+    ParquetFileReader, DataFrameReader
 
 
 def test_from_path(tmp_path):
@@ -98,3 +98,17 @@ def test_parquet_file_reader():
     chunks = [chunk for chunk in chunk_iterator]
     sizes = [len(chunk) for chunk in chunks]
     assert sizes == [3300, 3300, 3300, 100]
+
+
+def test_dataframe_reader(psm_df_6):
+    reader = DataFrameReader(psm_df_6)
+    assert reader.get_column_names() == ["target", "spectrum", "peptide", "protein", "feature_1", "feature_2"]
+    assert reader.get_column_types() == [dtype('bool'), dtype('int64'), dtype('O'), dtype('O'), dtype('int64'), dtype('int64')]
+
+    assert len(reader.read()) == 6
+    chunk_iterator = reader.get_chunked_data_iterator(chunk_size=4, columns=["peptide"])
+    chunks = [chunk for chunk in chunk_iterator]
+    sizes = [len(chunk) for chunk in chunks]
+    assert sizes == [4, 2]
+    pd.testing.assert_frame_equal(chunks[0], pd.DataFrame({"peptide": ["a", "b", "a", "c"]}))
+    pd.testing.assert_frame_equal(chunks[1], pd.DataFrame({"peptide": ["d", "e"]}, index=[4, 5]))
