@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import pyarrow.parquet as pq
 from typeguard import typechecked
+from numpy import dtype
 
 CSV_SUFFIXES = [
     ".csv",
@@ -30,7 +31,7 @@ class TabularDataReader(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_column_types(self) -> list:
+    def get_column_types(self) -> list[dtype]:
         raise NotImplementedError
 
     @abstractmethod
@@ -60,6 +61,12 @@ class TabularDataReader(ABC):
         return CSVFileReader(file_name, **kwargs)
 
 
+def _types_from_dataframe(df: pd.DataFrame) -> list[dtype]:
+    type_map = df.dtypes
+    column_names = df.columns.tolist()
+    return [type_map[column_name] for column_name in column_names]
+
+
 @typechecked
 class CSVFileReader(TabularDataReader):
     def __init__(self, file_name: Path, sep: str = "\t"):
@@ -73,12 +80,12 @@ class CSVFileReader(TabularDataReader):
         return f"CSVFileReader({self.file_name=},{self.stdargs=})"
 
     def get_column_names(self) -> list[str]:
-        return pd.read_csv(
-            self.file_name, **self.stdargs, nrows=0
-        ).columns.tolist()
+        df = pd.read_csv(self.file_name, **self.stdargs, nrows=0)
+        return df.columns.tolist()
 
-    def get_column_types(self) -> list:
-        raise NotImplementedError
+    def get_column_types(self) -> list[dtype]:
+        df = pd.read_csv(self.file_name, **self.stdargs, nrows=2)
+        return _types_from_dataframe(df)
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         result = pd.read_csv(self.file_name, usecols=columns, **self.stdargs)
@@ -111,7 +118,9 @@ class ParquetFileReader(TabularDataReader):
         return pq.ParquetFile(self.file_name).schema.names
 
     def get_column_types(self) -> list:
-        raise NotImplementedError
+        iterator = self.get_chunked_data_iterator(chunk_size=2)
+        first_rows = next(iterator)
+        return _types_from_dataframe(first_rows)
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         result = (
