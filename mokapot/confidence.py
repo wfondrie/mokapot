@@ -23,7 +23,6 @@ from contextlib import contextmanager
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from triqler import qvality
 from joblib import Parallel, delayed
 from typeguard import typechecked
 import os
@@ -39,7 +38,7 @@ from .utils import (
 )
 from .dataset import OnDiskPsmDataset
 from .picked_protein import picked_protein
-from .writers import to_flashlfq, to_txt
+from .writers import to_flashlfq
 from .tabular_data import TabularDataWriter, TabularDataReader
 from .confidence_writer import ConfidenceWriter
 from .constants import CONFIDENCE_CHUNK_SIZE
@@ -102,7 +101,6 @@ class Confidence(object):
         columns,
         level,
         decoys,
-        sep,
         out_paths,
         sqlite_path=None,
     ):
@@ -115,8 +113,6 @@ class Confidence(object):
             columns that will be used
         level : str
             the level at which confidence estimation was performed
-        sep : str, optional
-            The delimiter to use.
         decoys : bool, optional
             Save decoys confidence estimates as well?
         out_paths : List(Path)
@@ -187,7 +183,7 @@ class Confidence(object):
         psm_columns : str or list of str
             The columns that define a PSM.
         """
-        psm_idx = groupby_max(psms, psm_columns, self._score_column)
+        psm_idx = groupby_max(psms, psm_columns, self._score_column, rng=self._rng)
         return psms.loc[psm_idx, :]
 
     def plot_qvalues(self, level="psms", threshold=0.1, ax=None, **kwargs):
@@ -442,7 +438,6 @@ class LinearConfidence(Confidence):
                 data_columns,
                 level.lower(),
                 decoys,
-                sep,
                 out_path,
                 sqlite_path,
             )

@@ -15,7 +15,6 @@ import numpy as np
 from . import __version__
 from .config import Config
 from .parsers.pin import read_pin
-from .parsers.pepxml import read_pepxml
 from .parsers.fasta import read_fasta
 from .brew import brew
 from .model import PercolatorModel, load_model

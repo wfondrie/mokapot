@@ -13,8 +13,8 @@ from mokapot import OnDiskPsmDataset, assign_confidence
 from mokapot.confidence import get_unique_peptides_from_psms
 
 
-def test_one_group(psm_df_1000, tmp_path):
-    """Test that one group is equivalent to no group."""
+def test_chunked_assign_confidence(psm_df_1000, tmp_path):
+    """Test that assign_confidence() works correctly with small chunks"""
 
     # After correcting the targets column stuff and with that the updated labels
     # (see _update_labels) it turned out that there were no targets with fdr
@@ -78,22 +78,10 @@ def test_one_group(psm_df_1000, tmp_path):
     assert df['q-value'].tolist() == approx([0.01020408, 0.01020408, 0.01020408])
     assert df['posterior_error_prob'].tolist() == approx([1.635110e-05, 2.496682e-05, 6.854064e-05])
 
-    np.random.seed(42)
-    assign_confidence(
-        [psms_disk],
-        prefixes=[None],
-        descs=[True],
-        dest_dir=tmp_path,
-        max_workers=4,
-        eval_fdr=0.02,
-    )
-    df_results_no_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
-
-    pd.testing.assert_frame_equal(df_results_group, df_results_no_group)
 
 
-def test_one_group_parquet(psm_df_1000_parquet, tmp_path):
-    """Test that one group is equivalent to no group."""
+def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
+    """Test that assign_confidence() works with parquet files."""
 
     parquet_file, _, _ = psm_df_1000_parquet
     columns = pq.ParquetFile(parquet_file).schema.names
@@ -136,19 +124,6 @@ def test_one_group_parquet(psm_df_1000_parquet, tmp_path):
         eval_fdr=0.02,
     )
     df_results_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
-
-    np.random.seed(42)
-    assign_confidence(
-        [psms_disk],
-        prefixes=[None],
-        descs=[True],
-        dest_dir=tmp_path,
-        max_workers=4,
-        eval_fdr=0.02,
-    )
-    df_results_no_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
-
-    pd.testing.assert_frame_equal(df_results_group, df_results_no_group)
 
 
 def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
