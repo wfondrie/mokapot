@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 from pathlib import Path
 import pandas as pd
@@ -112,3 +113,19 @@ def test_dataframe_reader(psm_df_6):
     assert sizes == [4, 2]
     pd.testing.assert_frame_equal(chunks[0], pd.DataFrame({"peptide": ["a", "b", "a", "c"]}))
     pd.testing.assert_frame_equal(chunks[1], pd.DataFrame({"peptide": ["d", "e"]}, index=[4, 5]))
+
+    # Test whether we can create a reader from a Series
+    reader = DataFrameReader.from_series(pd.Series(data=[1, 2, 3], name="test"))
+    pd.testing.assert_frame_equal(reader.read(), pd.DataFrame({"test": [1, 2, 3]}))
+
+    reader = DataFrameReader.from_series(pd.Series(data=[1, 2, 3]), name="test")
+    pd.testing.assert_frame_equal(reader.read(), pd.DataFrame({"test": [1, 2, 3]}))
+
+    # Test whether we can create a reader from an array
+    reader = DataFrameReader.from_array([1, 2, 3], name="test")
+    pd.testing.assert_frame_equal(reader.read(), pd.DataFrame({"test": [1, 2, 3]}))
+
+    reader = DataFrameReader.from_array(np.array([1, 2, 3]), name="test")
+    pd.testing.assert_frame_equal(reader.read(), pd.DataFrame({"test": [1, 2, 3]}))
+
+

@@ -2,6 +2,7 @@ import sqlite3
 import warnings
 from typing import Generator
 
+import numpy as np
 import pandas as pd
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -105,6 +106,7 @@ class CSVFileReader(TabularDataReader):
 
 @typechecked
 class DataFrameReader(TabularDataReader):
+    df: pd.DataFrame
     def __init__(self, df: pd.DataFrame):
         self.df = df
 
@@ -130,6 +132,16 @@ class DataFrameReader(TabularDataReader):
             chunk = self.df.iloc[pos:pos + chunk_size]
             yield chunk if columns is None else chunk[columns]
 
+    @staticmethod
+    def from_series(series: pd.Series, name=None) -> "DataFrameReader":
+        if name is not None:
+            return DataFrameReader(series.to_frame(name=name))
+        else:
+            return DataFrameReader(series.to_frame())
+
+    @staticmethod
+    def from_array(array: list | np.ndarray, name: str) -> "DataFrameReader":
+        return DataFrameReader(pd.DataFrame({name: array}))
 
 @typechecked
 class ParquetFileReader(TabularDataReader):
