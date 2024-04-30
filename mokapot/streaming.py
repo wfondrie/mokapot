@@ -55,8 +55,14 @@ class MergedTabularDataReader(TabularDataReader):
                     chunk_dfs[chunk_index] = next(chunk_iterators[chunk_index])
                     chunk_lengths[chunk_index] = len(chunk_dfs[chunk_index])
                     chunk_row_indices[chunk_index] = 0
-                    values[chunk_index] = chunk_dfs[chunk_index][self.priority_column].iloc[chunk_row_indices[chunk_index]]
-                values[chunk_index] = chunk_dfs[chunk_index][self.priority_column].iloc[chunk_row_indices[chunk_index]]
+
+                new_value = chunk_dfs[chunk_index][self.priority_column].iloc[chunk_row_indices[chunk_index]]
+                if self.descending and new_value > values[chunk_index]:
+                    raise ValueError(f"Value {new_value} exceeds {self.priority_column} but should be descending")
+                if not self.descending and new_value < values[chunk_index]:
+                    raise ValueError(f"Value {new_value} lower than {self.priority_column} but should be ascending")
+
+                values[chunk_index] = new_value
             except StopIteration:
                 del chunk_iterators[chunk_index]
                 del chunk_dfs[chunk_index]
