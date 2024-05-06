@@ -114,6 +114,8 @@ def test_dataframe_reader(psm_df_6):
     pd.testing.assert_frame_equal(chunks[0], pd.DataFrame({"peptide": ["a", "b", "a", "c"]}))
     pd.testing.assert_frame_equal(chunks[1], pd.DataFrame({"peptide": ["d", "e"]}, index=[4, 5]))
 
+    assert reader.read(["feature_1", "spectrum"]).columns.tolist() == ["feature_1", "spectrum"]
+
     # Test whether we can create a reader from a Series
     reader = DataFrameReader.from_series(pd.Series(data=[1, 2, 3], name="test"))
     pd.testing.assert_frame_equal(reader.read(), pd.DataFrame({"test": [1, 2, 3]}))
@@ -129,3 +131,4 @@ def test_dataframe_reader(psm_df_6):
     pd.testing.assert_frame_equal(reader.read(), pd.DataFrame({"test": [1, 2, 3]}))
 
 
+# todo: tests for writers are still missing

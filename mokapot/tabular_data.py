@@ -123,7 +123,7 @@ class DataFrameReader(TabularDataReader):
         return _types_from_dataframe(self.df)
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
-        return self.df
+        return self.df if columns is None else self.df[columns]
 
     def get_chunked_data_iterator(
         self, chunk_size: int, columns: list[str] | None = None
