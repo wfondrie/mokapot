@@ -144,7 +144,7 @@ def test_column_renaming(psm_df_6):
             orig_reader.read(["peptide", "protein", "target", "feature_1"]).values).all()
 
     renamed_chunk = next(reader.get_chunked_data_iterator(chunk_size=4, columns=["Pep", "protein", "T", "feature_1"]))
-    orig_chunk = next(reader.get_chunked_data_iterator(chunk_size=4, columns=["peptide", "protein", "target", "feature_1"]))
+    orig_chunk = next(orig_reader.get_chunked_data_iterator(chunk_size=4, columns=["peptide", "protein", "target", "feature_1"]))
     assert (renamed_chunk.values == orig_chunk.values).all()
 
 

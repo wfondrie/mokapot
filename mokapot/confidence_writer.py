@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
+from typing import Iterator
 
+import numpy as np
 import pandas as pd
 from typeguard import typechecked
 
@@ -53,65 +55,52 @@ class ConfidenceSqliteWriter(SqliteWriter):
             self.connection.execute(query, row)
 
 
-class ConfidenceWriter:
-    def __init__(
-        self,
-        data_iterator,
-        q_value_iterator,
-        pep_iterator,
-        target_iterator,
-        out_paths,
-        decoys,
-        level,
-        out_columns,
-    ):
-        self.data_iterator = data_iterator
-        self.q_value_iterator = q_value_iterator
-        self.pep_iterator = pep_iterator
-        self.target_iterator = target_iterator
-        self.out_paths = out_paths
-        self.decoys = decoys
-        self.level = level
-        self.out_columns = out_columns
-        self.qvalue_column = "q_value"
-        self.pep_column = "posterior_error_prob"
-        if not self.decoys and len(self.out_paths) > 1:
-            self.out_paths.pop(1)
-        self.is_sqlite = True if self.out_paths[0].suffix == ".db" else False
-        if self.is_sqlite:
-            create_writer = lambda path: ConfidenceSqliteWriter(path, self.out_columns, level=self.level, qvalue_column=self.qvalue_column, pep_column=self.pep_column)
+@typechecked
+def write_confidences(
+    data_iterator: Iterator[pd.DataFrame],
+    q_value_iterator: list[np.array],
+    pep_iterator: list[np.array],
+    target_iterator: list[np.array],
+    out_paths: list[Path],
+    decoys: bool,
+    level: str,
+    out_columns: list[str],
+    qvalue_column: str="q_value",
+    pep_column: str="posterior_error_prob",
+):
+    if not decoys and len(out_paths) > 1:
+        out_paths.pop(1)
+    is_sqlite = True if out_paths[0].suffix == ".db" else False
+
+    # Create the writers
+    if is_sqlite:
+        create_writer = lambda path: ConfidenceSqliteWriter(path, out_columns, level=level, qvalue_column=qvalue_column, pep_column=pep_column)
+    else:
+        create_writer = lambda path: TabularDataWriter.from_suffix(path, out_columns)
+    writers = [create_writer(path) for path in out_paths]
+    # for writer in writers:
+    #     writer.initialize()
+
+    # Now write the confidence data
+    for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
+        data_iterator, q_value_iterator, pep_iterator, target_iterator):
+
+        data_chunk[qvalue_column] = qvals_chunk
+        data_chunk[pep_column] = peps_chunk
+        data_out = []
+        if not is_sqlite:
+            data_out.append(data_chunk.loc[targets_chunk, out_columns])
+            if decoys:
+                data_out.append(data_chunk.loc[~targets_chunk, out_columns])
         else:
-            create_writer = lambda path: TabularDataWriter.from_suffix(path, self.out_columns)
-        self.writers = [create_writer(path)for path in self.out_paths]
-
-    def write(self):
-        for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
-            self.data_iterator,
-            self.q_value_iterator,
-            self.pep_iterator,
-            self.target_iterator,
-        ):
-            data_chunk[self.qvalue_column] = qvals_chunk
-            data_chunk[self.pep_column] = peps_chunk
-            data_out = []
-            if not self.is_sqlite:
-                data_out.append(
-                    data_chunk.loc[targets_chunk, self.out_columns]
-                )
-                if self.decoys:
-                    data_out.append(
-                        data_chunk.loc[~targets_chunk, self.out_columns]
-                    )
+            if decoys:
+                data_out.append(data_chunk)
             else:
-                if self.decoys:
-                    data_out.append(data_chunk)
-                else:
-                    data_out.append(
-                        data_chunk.loc[targets_chunk, self.out_columns]
-                    )
-            for writer, data in zip(self.writers, data_out):
-                writer.append_data(data)
+                data_out.append(data_chunk.loc[targets_chunk, out_columns])
 
-    def commit_data(self):
-        for writer in self.writers:
-            writer.commit_data()
+        for writer, data in zip(writers, data_out):
+            writer.append_data(data)
+
+    # Finalize writer (clear buffers etc.)
+    for writer in writers:
+        writer.finalize()

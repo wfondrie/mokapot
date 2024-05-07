@@ -40,7 +40,7 @@ from .dataset import OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq
 from .tabular_data import TabularDataWriter, TabularDataReader
-from .confidence_writer import ConfidenceWriter
+from .confidence_writer import write_confidences
 from .constants import CONFIDENCE_CHUNK_SIZE
 
 LOGGER = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ class Confidence(object):
         if sqlite_path:
             out_paths = [sqlite_path]
 
-        confidence_writer = ConfidenceWriter(
+        write_confidences(
             chunked_data_iterator,
             chunked(self.qvals),
             chunked(self.peps),
@@ -166,8 +166,6 @@ class Confidence(object):
             level,
             out_columns,
         )
-        confidence_writer.write()
-        confidence_writer.commit_data()
         return out_paths
 
     def _perform_tdc(self, psms, psm_columns):
@@ -647,7 +645,7 @@ def assign_confidence(
                 outfile_targets, output_columns
             )
             if not append_to_output_file:
-                writer.write_header()
+                writer.initialize()
             out_files[level] = [outfile_targets]
 
             if decoys:
@@ -658,7 +656,7 @@ def assign_confidence(
                     outfile_decoys, output_columns
                 )
                 if not append_to_output_file:
-                    writer.write_header()
+                    writer.initialize()
                 out_files[level].append(outfile_decoys)
 
         with create_sorted_file_iterator(
@@ -688,7 +686,7 @@ def assign_confidence(
                 for level in levels
             }
             for writer in writers.values():
-                writer.write_header()
+                writer.initialize()
 
             # fixme: The writers are currently too slow, for single line io,
             # so we go back to low level (furthermore, the merge_sort is

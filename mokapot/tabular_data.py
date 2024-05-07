@@ -96,7 +96,6 @@ class ColumnMappedReader(TabularDataReader):
         orig_columns = [reverse_column_map[column] for column in columns]
         return orig_columns
 
-
     def _get_mapped_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         # if self._returned_dataframe_is_mutable():
         #     df.rename(columns=self.column_map, inplace=True, copy=False)
@@ -104,7 +103,6 @@ class ColumnMappedReader(TabularDataReader):
         #     df = df.rename(columns=self.column_map, inplace=False, copy=False)
         df = df.rename(columns=self.column_map, inplace=False)
         return df
-
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         df = self.reader.read(columns=self._get_orig_columns(columns))
@@ -246,31 +244,53 @@ class ParquetFileReader(TabularDataReader):
 
 @typechecked
 class TabularDataWriter(ABC):
-    @abstractmethod
+    def __init__(
+        self,
+        columns: list[str],
+        column_types: list | None = None,
+    ):
+        self.columns = columns
+        self.column_types = column_types
+
     def get_column_names(self) -> list[str]:
-        raise NotImplementedError
+        return self.columns
 
-    @abstractmethod
     def get_column_types(self) -> list:
-        raise NotImplementedError
-
-    @abstractmethod
-    def write_header(self):
-        raise NotImplementedError
+        return self.column_types
 
     @abstractmethod
     def append_data(self, data: pd.DataFrame):
         raise NotImplementedError
 
     def check_valid_data(self, data: pd.DataFrame):
-        assert all(data.columns.to_numpy() == self.get_column_names())
+        # todo: maybe an exception would be better suited than an assert
+        columns = data.columns.tolist()
+        if not columns == self.get_column_names():
+            raise ValueError(f"Column names {columns} do not match {self.get_column_names()}")
+
+        if self.column_types is not None:
+            column_types = _types_from_dataframe(data)
+            if not column_types == self.get_column_types():
+                raise ValueError(f"Column types {column_types} do not match {self.get_column_types()}")
 
     def write(self, data: pd.DataFrame):
-        self.write_header()
+        self.check_valid_data(data)
+        self.initialize()
         self.append_data(data)
+        self.finalize()
 
-    def commit_data(self):
+    def initialize(self):
         pass
+
+    def finalize(self):
+        pass
+
+    def __enter__(self):
+        self.initialize()
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.finalize()
 
     @staticmethod
     def from_suffix(
@@ -294,6 +314,9 @@ class TabularDataWriter(ABC):
 
 @typechecked
 class CSVFileWriter(TabularDataWriter):
+
+    file_name: Path
+
     def __init__(
         self,
         file_name: Path,
@@ -301,10 +324,8 @@ class CSVFileWriter(TabularDataWriter):
         column_types: list | None = None,
         sep: str = "\t",
     ):
-        super().__init__()
+        super().__init__(columns, column_types)
         self.file_name = file_name
-        self.columns = columns
-        self.column_types = column_types
         self.stdargs = {"sep": sep, "index": False}
 
     def __str__(self):
@@ -315,15 +336,14 @@ class CSVFileWriter(TabularDataWriter):
             f"CSVFileWriter({self.file_name=},{self.columns=},{self.stdargs=})"
         )
 
-    def get_column_names(self):
-        return self.columns
-
-    def get_column_types(self):
-        return self.column_types
-
-    def write_header(self):
+    def initialize(self):
+        # Just write header information
         df = pd.DataFrame(columns=self.columns)
         df.to_csv(self.file_name, **self.stdargs)
+
+    def finalize(self):
+        # no need to do anything here
+        pass
 
     def append_data(self, data: pd.DataFrame):
         self.check_valid_data(data)
@@ -332,16 +352,17 @@ class CSVFileWriter(TabularDataWriter):
 
 @typechecked
 class ParquetFileWriter(TabularDataWriter):
+
+    file_name: Path
+
     def __init__(
         self,
         file_name: Path,
         columns: list[str],
         column_types: list | None = None,
     ):
-        super().__init__()
+        super().__init__(columns, column_types)
         self.file_name = file_name
-        self.columns = columns
-        self.column_types = column_types
 
     def __str__(self):
         return f"ParquetFileWriter({self.file_name=},{self.columns=})"
@@ -349,16 +370,16 @@ class ParquetFileWriter(TabularDataWriter):
     def __repr__(self):
         return f"ParquetFileWriter({self.file_name=},{self.columns=})"
 
-    def get_column_names(self):
-        return self.columns
+    def initialize(self):
+        # todo: Probably needs to do something with the column and type information
+        pass
 
-    def get_column_types(self):
-        return self.column_types
-
-    def write_header(self):
-        raise NotImplementedError
+    def finalize(self):
+        # todo: Close if necessary
+        pass
 
     def append_data(self, data: pd.DataFrame):
+        # todo: implement
         raise NotImplementedError
 
     def write(self, data: pd.DataFrame):
@@ -366,21 +387,23 @@ class ParquetFileWriter(TabularDataWriter):
 
 
 @typechecked
-class SqliteWriter(TabularDataWriter):
+class SqliteWriter(TabularDataWriter, ABC):
+
+    connection: sqlite3.Connection
+
     def __init__(
         self,
         database: str | Path | sqlite3.Connection,
         columns: list[str],
         column_types: list | None = None,
     ) -> None:
+        super().__init__(columns, column_types)
         if isinstance(database, sqlite3.Connection):
             self.file_name = None
             self.connection = database
         else:
             self.file_name = database
             self.connection = sqlite3.connect(self.file_name)
-        self.columns = columns
-        self.column_types = column_types
 
     def __str__(self):
         return f"SqliteFileWriter({self.file_name=},{self.columns=})"
@@ -388,15 +411,16 @@ class SqliteWriter(TabularDataWriter):
     def __repr__(self):
         return f"SqliteFileWriter({self.file_name=},{self.columns=})"
 
-    def get_column_names(self):
-        return self.columns
+    def initialize(self):
+        # Nothing to do here, we expect the table(s) to already exist
+        pass
 
-    def get_column_types(self):
-        return self.column_types
-
-    def write_header(self):
-        raise NotImplementedError
-
-    def commit_data(self):
+    def finalize(self):
         self.connection.commit()
         self.connection.close()
+
+    def append_data(self, data: pd.DataFrame):
+        # Must be implemented in derived class
+        # todo: maybe we can supply also a default implementation in this class
+        #       given the table name and sql column names
+        raise NotImplementedError
