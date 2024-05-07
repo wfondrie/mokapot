@@ -829,7 +829,7 @@ def _save_sorted_metadata_chunks(
         target_column=psms.target_column,
     )
 
-    chunk_metadata["score"] = score_chunk
+    chunk_metadata.loc[:, "score"] = score_chunk
     chunk_metadata.sort_values(by="score", ascending=False, inplace=True)
 
     if deduplication:

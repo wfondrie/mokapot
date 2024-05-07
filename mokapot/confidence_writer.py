@@ -49,7 +49,7 @@ class ConfidenceSqliteWriter(SqliteWriter):
 
     def append_data(self, data):
         query = self.get_query(self.level, self.qvalue_column, self.pep_column)
-        data = data.apply(pd.to_numeric, errors="ignore")  # fixme: this should be
+        # todo: what about using connection.executemany()? Should be faster...
         data = data.to_dict("records")
         for row in data:
             self.connection.execute(query, row)

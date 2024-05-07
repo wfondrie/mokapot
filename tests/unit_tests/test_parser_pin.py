@@ -10,7 +10,7 @@ from mokapot.parsers import pin
 @pytest.fixture
 def std_pin(tmp_path):
     """Create a standard pin file"""
-    out_file = tmp_path / "std_pin"
+    out_file = tmp_path / "std.pin"
     with open(str(out_file), "w+") as pin:
         dat = (
             "sPeCid\tLaBel\tpepTide\tsCore\tscanNR\tpRoteins\n"

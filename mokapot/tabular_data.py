@@ -225,7 +225,6 @@ class ParquetFileReader(TabularDataReader):
         result = (
             pq.read_table(self.file_name, columns=columns)
             .to_pandas()
-            .apply(pd.to_numeric, errors="ignore")
         )
         return result
 

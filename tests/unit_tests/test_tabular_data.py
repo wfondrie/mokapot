@@ -4,7 +4,6 @@ from pathlib import Path
 import pandas as pd
 from numpy import dtype
 
-import tabular_data
 from mokapot.tabular_data import TabularDataReader, CSVFileReader, \
     ParquetFileReader, DataFrameReader, ColumnMappedReader
 
@@ -21,7 +20,11 @@ def test_from_path(tmp_path):
     assert isinstance(reader, CSVFileReader)
 
 
+@pytest.mark.filterwarnings("ignore::pandas.errors.ParserWarning")
 def test_csv_file_reader():
+    # Note: this pin file is kinda "non-standard" which is why I put the
+    # filterwarnings decorator before the test function
+
     path = Path("data", "phospho_rep1.pin")
     reader = TabularDataReader.from_path(path)
     names = reader.get_column_names()
