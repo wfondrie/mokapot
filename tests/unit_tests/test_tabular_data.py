@@ -4,8 +4,9 @@ from pathlib import Path
 import pandas as pd
 from numpy import dtype
 
+import tabular_data
 from mokapot.tabular_data import TabularDataReader, CSVFileReader, \
-    ParquetFileReader, DataFrameReader
+    ParquetFileReader, DataFrameReader, ColumnMappedReader
 
 
 def test_from_path(tmp_path):
@@ -129,6 +130,22 @@ def test_dataframe_reader(psm_df_6):
 
     reader = DataFrameReader.from_array(np.array([1, 2, 3]), name="test")
     pd.testing.assert_frame_equal(reader.read(), pd.DataFrame({"test": [1, 2, 3]}))
+
+
+def test_column_renaming(psm_df_6):
+    orig_reader = DataFrameReader(psm_df_6)
+    reader = ColumnMappedReader(orig_reader, {"target": "T", "peptide": "Pep", "Targ": "T"})
+
+    assert reader.get_column_names() == ["T", "spectrum", "Pep", "protein", "feature_1", "feature_2"]
+    assert reader.get_column_types() == [dtype('bool'), dtype('int64'), dtype('O'), dtype('O'), dtype('int64'), dtype('int64')]
+
+    assert (reader.read().values == orig_reader.read().values).all()
+    assert (reader.read(["Pep", "protein", "T", "feature_1"]).values ==
+            orig_reader.read(["peptide", "protein", "target", "feature_1"]).values).all()
+
+    renamed_chunk = next(reader.get_chunked_data_iterator(chunk_size=4, columns=["Pep", "protein", "T", "feature_1"]))
+    orig_chunk = next(reader.get_chunked_data_iterator(chunk_size=4, columns=["peptide", "protein", "target", "feature_1"]))
+    assert (renamed_chunk.values == orig_chunk.values).all()
 
 
 # todo: tests for writers are still missing

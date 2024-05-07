@@ -45,21 +45,77 @@ class TabularDataReader(ABC):
     ) -> Generator[pd.DataFrame, None, None]:
         raise NotImplementedError
 
+    def _returned_dataframe_is_mutable(self):
+        return True
+
     @staticmethod
-    def from_path(file_name: Path, **kwargs) -> "TabularDataReader":
+    def from_path(file_name: Path, column_map: dict[str, str] | None = None,
+                  **kwargs) -> "TabularDataReader":
         # Currently, we look only at the suffix, however, in the future we could
         # also look into the file itself (is it ascii? does it have some "magic
         # bytes"? ...)
         suffix = file_name.suffix
         if suffix in CSV_SUFFIXES:
-            return CSVFileReader(file_name, **kwargs)
+            reader = CSVFileReader(file_name, **kwargs)
         elif suffix in PARQUET_SUFFIXES:
-            return ParquetFileReader(file_name)
-        # Fallback
-        warnings.warn(
-            f"Suffix '{suffix}' not recognized in file name '{file_name}'. Falling back to CSV..."
-        )
-        return CSVFileReader(file_name, **kwargs)
+            reader = ParquetFileReader(file_name, **kwargs)
+        else:
+            # Fallback
+            warnings.warn(
+                f"Suffix '{suffix}' not recognized in file name '{file_name}'."
+                " Falling back to CSV..."
+            )
+            reader = CSVFileReader(file_name, **kwargs)
+
+        if column_map is not None:
+            reader = ColumnMappedReader(reader, column_map)
+
+        return reader
+
+
+@typechecked
+class ColumnMappedReader(TabularDataReader):
+    def __init__(self, reader: TabularDataReader, column_map: dict[str, str]):
+        self.reader = reader
+        self.column_map = column_map
+
+    def get_column_names(self) -> list[str]:
+        return [self.column_map.get(column, column)
+                for column in self.reader.get_column_names()]
+
+    def get_column_types(self) -> list[dtype]:
+        return self.reader.get_column_types()
+
+    def _get_orig_columns(self, columns: list[str] | None) -> list[str] | None:
+        if columns is None:
+            return None
+
+        all_orig_columns = self.reader.get_column_names()
+        all_columns = self.get_column_names()
+        reverse_column_map = dict(zip(all_columns, all_orig_columns))
+        orig_columns = [reverse_column_map[column] for column in columns]
+        return orig_columns
+
+
+    def _get_mapped_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        # if self._returned_dataframe_is_mutable():
+        #     df.rename(columns=self.column_map, inplace=True, copy=False)
+        # else:
+        #     df = df.rename(columns=self.column_map, inplace=False, copy=False)
+        df = df.rename(columns=self.column_map, inplace=False)
+        return df
+
+
+    def read(self, columns: list[str] | None = None) -> pd.DataFrame:
+        df = self.reader.read(columns=self._get_orig_columns(columns))
+        return self._get_mapped_dataframe(df)
+
+    def get_chunked_data_iterator(
+        self, chunk_size: int, columns: list[str] | None = None
+    ) -> Generator[pd.DataFrame, None, None]:
+        orig_columns = self._get_orig_columns(columns)
+        for chunk in self.reader.get_chunked_data_iterator(chunk_size, columns=orig_columns):
+            yield self._get_mapped_dataframe(chunk)
 
 
 def _types_from_dataframe(df: pd.DataFrame) -> list[dtype]:
@@ -107,6 +163,7 @@ class CSVFileReader(TabularDataReader):
 @typechecked
 class DataFrameReader(TabularDataReader):
     df: pd.DataFrame
+
     def __init__(self, df: pd.DataFrame):
         self.df = df
 
@@ -132,6 +189,9 @@ class DataFrameReader(TabularDataReader):
             chunk = self.df.iloc[pos:pos + chunk_size]
             yield chunk if columns is None else chunk[columns]
 
+    def _returned_dataframe_is_mutable(self):
+        return False
+
     @staticmethod
     def from_series(series: pd.Series, name=None) -> "DataFrameReader":
         if name is not None:
@@ -142,6 +202,7 @@ class DataFrameReader(TabularDataReader):
     @staticmethod
     def from_array(array: list | np.ndarray, name: str) -> "DataFrameReader":
         return DataFrameReader(pd.DataFrame({name: array}))
+
 
 @typechecked
 class ParquetFileReader(TabularDataReader):
@@ -225,7 +286,8 @@ class TabularDataWriter(ABC):
 
         # Fallback
         warnings.warn(
-            f"Suffix '{suffix}' not recognized in file name '{file_name}'. Falling back to CSV..."
+            f"Suffix '{suffix}' not recognized in file name '{file_name}'."
+            " Falling back to CSV..."
         )
         return CSVFileWriter(file_name, columns, **kwargs)
 
