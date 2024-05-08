@@ -5,7 +5,8 @@ import pandas as pd
 from numpy import dtype
 
 from mokapot.tabular_data import TabularDataReader, CSVFileReader, \
-    ParquetFileReader, DataFrameReader, ColumnMappedReader
+    ParquetFileReader, DataFrameReader, ColumnMappedReader, TabularDataWriter, \
+    CSVFileWriter, auto_finalize
 
 
 def test_from_path(tmp_path):
@@ -152,3 +153,60 @@ def test_column_renaming(psm_df_6):
 
 
 # todo: tests for writers are still missing
+def test_tabular_writer_context_manager(tmp_path):
+    # Create a mock class that checks whether it will be correctly initialized
+    # and finalized
+    class MockWriter(CSVFileWriter):
+        initialized = False
+        finalized = False
+        def initialize(self):
+            super().initialize()
+            self.initialized = True
+        def finalize(self):
+            super().finalize()
+            self.finalized = True
+
+    # Check that context manager works for one file
+    with MockWriter(tmp_path / "test.csv", columns=["a", "b"]) as writer:
+        assert writer.initialized
+        assert not writer.finalized
+    assert writer.finalized
+
+    # Check that it works when an exception is thrown
+    try:
+        with MockWriter(tmp_path / "test.csv", columns=["a", "b"]) as writer:
+            assert writer.initialized
+            assert not writer.finalized
+            raise RuntimeError("Just testing")
+    except RuntimeError:
+        pass # ignore the exception
+    finally:
+        assert writer.finalized
+
+    # Check that context manager convenience method (auto_finalize) works for
+    # multiple files
+    writers = [MockWriter(tmp_path / "test1.csv", columns=["a", "b"]),
+               MockWriter(tmp_path / "test2.csv", columns=["a", "b"])]
+
+    assert not writers[0].initialized
+    assert not writers[1].initialized
+    with auto_finalize(writers):
+        assert writers[0].initialized
+        assert writers[1].initialized
+        assert not writers[0].finalized
+        assert not writers[1].finalized
+    assert writers[0].finalized
+    assert writers[1].finalized
+
+    # Now with an exception
+    writers = [MockWriter(tmp_path / "test1.csv", columns=["a", "b"]),
+               MockWriter(tmp_path / "test2.csv", columns=["a", "b"])]
+
+    try:
+        with auto_finalize(writers):
+            raise RuntimeError("Just testing")
+    except RuntimeError:
+        pass
+    finally:
+        assert writers[0].finalized
+        assert writers[1].finalized

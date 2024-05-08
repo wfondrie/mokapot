@@ -1,5 +1,6 @@
 import sqlite3
 import warnings
+from contextlib import contextmanager
 from typing import Generator
 
 import numpy as np
@@ -310,6 +311,16 @@ class TabularDataWriter(ABC):
         )
         return CSVFileWriter(file_name, columns, **kwargs)
 
+@typechecked
+@contextmanager
+def auto_finalize(writers: list[TabularDataWriter]):
+    for writer in writers:
+        writer.__enter__()
+    try:
+        yield writers
+    finally:
+        for writer in writers:
+            writer.__exit__(None, None, None)
 
 @typechecked
 class CSVFileWriter(TabularDataWriter):
