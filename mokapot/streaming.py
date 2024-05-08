@@ -94,6 +94,7 @@ class MergedTabularDataReader(TabularDataReader):
             else:
                 chunk_index = np.argmin(values)
             row = chunk_dfs[chunk_index].iloc[[chunk_row_indices[chunk_index]]]
+            row.reset_index(drop=True, inplace=True)  # Necessary for so that row's index is 0
             yield row
             chunk_row_indices[chunk_index] += 1
             try:
@@ -133,7 +134,9 @@ class MergedTabularDataReader(TabularDataReader):
             except StopIteration:
                 finished = True
             if (finished and len(rows) > 0) or len(rows) == chunk_size:
-                yield pd.concat(rows)
+                df = pd.concat(rows)
+                df.reset_index(drop=True, inplace=True)
+                yield df
                 rows = []
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
