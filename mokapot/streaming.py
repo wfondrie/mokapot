@@ -1,4 +1,4 @@
-from typing import Generator
+from typing import Generator, Callable
 
 import pandas as pd
 import numpy as np
@@ -53,6 +53,45 @@ class JoinedTabularDataReader(TabularDataReader):
             yield df if columns is None else df[columns]
 
 
+
+@typechecked
+class ComputedTabularDataReader(TabularDataReader):
+
+    def __init__(self, reader: TabularDataReader, column: str, dtype: np.dtype, func: Callable):
+        self.reader = reader
+        self.dtype = dtype
+        self.func = func
+        self.column = column
+
+    def get_column_names(self) -> list[str]:
+        return self.reader.get_column_names() + [self.column]
+
+    def get_column_types(self) -> list[dtype]:
+        return self.reader.get_column_types() + [self.dtype]
+
+    def _reader_columns(self, columns: list[str]):
+        return [column for column in columns if column != self.column]
+    def read(self, columns: list[str] | None = None) -> pd.DataFrame:
+        df = self.reader.read(self._reader_columns(columns))
+        if columns is not None or self.column in columns:
+            df[self.column] = self.func(df)
+        return df if columns is None else df[columns]
+
+    def get_chunked_data_iterator(self, chunk_size: int,
+                                  columns: list[str] | None = None) -> \
+            Generator[pd.DataFrame, None, None]:
+        iterator = self.reader.get_chunked_data_iterator(
+            chunk_size=chunk_size, columns=self._reader_columns(columns))
+
+        while True:
+            try:
+                df = next(iterator)
+            except StopIteration:
+                break
+            if columns is not None or self.column in columns:
+                df[self.column] = self.func(df)
+            yield df if columns is None else df[columns]
+
 @typechecked
 class MergedTabularDataReader(TabularDataReader):
     def __init__(self, readers: list[TabularDataReader], priority_column: str,
@@ -74,7 +113,7 @@ class MergedTabularDataReader(TabularDataReader):
     def get_column_names(self) -> list[str]:
         return self.column_names
 
-    def get_column_types(self) -> list:
+    def get_column_types(self) -> list[np.dtype]:
         return self.column_types
 
     def get_row_iterator(self, columns: list[str] | None = None) -> Generator[
