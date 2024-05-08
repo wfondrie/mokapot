@@ -24,7 +24,7 @@ def run_brew_rollup(params: List[Any], run_in_subprocess=None,
 def test_rollup_10000(tmp_path):
     """Test that basic cli works."""
     path = tmp_path
-    path = Path("scratch", "testing")
+    # path = Path("scratch", "testing")
 
     retrain = False
     recompute = False
