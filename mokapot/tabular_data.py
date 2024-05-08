@@ -98,6 +98,7 @@ class ColumnMappedReader(TabularDataReader):
         return orig_columns
 
     def _get_mapped_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        # todo: enable this again...
         # if self._returned_dataframe_is_mutable():
         #     df.rename(columns=self.column_map, inplace=True, copy=False)
         # else:
@@ -295,9 +296,13 @@ class TabularDataWriter(ABC):
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.finalize()
 
+    @abstractmethod
+    def get_associated_reader(self):
+        raise NotImplementedError
+
     @staticmethod
     def from_suffix(
-        file_name: Path, columns: list[str], buffer_size: int = 1000, **kwargs
+        file_name: Path, columns: list[str], buffer_size: int = 0, **kwargs
     ) -> "TabularDataWriter":
         suffix = file_name.suffix
         if suffix in CSV_SUFFIXES:
@@ -381,6 +386,8 @@ class BufferedWriter(TabularDataWriter):
     def finalize(self):
         self._write_buffer(force=True)
         self.writer.finalize()
+    def get_associated_reader(self):
+        return self.writer.get_associated_reader()
 
 
 @typechecked
@@ -420,6 +427,8 @@ class CSVFileWriter(TabularDataWriter):
         self.check_valid_data(data)
         data.to_csv(self.file_name, mode="a", header=False, **self.stdargs)
 
+    def get_associated_reader(self):
+        return CSVFileReader(self.file_name, sep=self.stdargs["sep"])
 
 @typechecked
 class ParquetFileWriter(TabularDataWriter):
@@ -456,6 +465,8 @@ class ParquetFileWriter(TabularDataWriter):
     def write(self, data: pd.DataFrame):
         data.to_parquet(self.file_name, index=False)
 
+    def get_associated_reader(self):
+        return CSVFileReader(self.file_name)
 
 @typechecked
 class SqliteWriter(TabularDataWriter, ABC):
@@ -494,4 +505,8 @@ class SqliteWriter(TabularDataWriter, ABC):
         # Must be implemented in derived class
         # todo: maybe we can supply also a default implementation in this class
         #       given the table name and sql column names
+        raise NotImplementedError
+
+    def get_associated_reader(self):
+        # todo: need an sqlite reader first...
         raise NotImplementedError
