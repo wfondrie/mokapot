@@ -251,6 +251,9 @@ class TabularDataWriter(ABC):
     ):
         self.columns = columns
         self.column_types = column_types
+        # todo: I think the TDW should have a field/option that says whether
+        #  data should be appended or whether the file should be cleared first
+        #  if it already contains data
 
     def get_column_names(self) -> list[str]:
         return self.columns
@@ -294,33 +297,91 @@ class TabularDataWriter(ABC):
 
     @staticmethod
     def from_suffix(
-        file_name: Path, columns: list[str], **kwargs
+        file_name: Path, columns: list[str], buffer_size: int = 1000, **kwargs
     ) -> "TabularDataWriter":
         suffix = file_name.suffix
         if suffix in CSV_SUFFIXES:
-            return CSVFileWriter(file_name, columns, **kwargs)
+            writer = CSVFileWriter(file_name, columns, **kwargs)
         elif suffix in PARQUET_SUFFIXES:
-            return ParquetFileWriter(file_name, columns)
+            writer = ParquetFileWriter(file_name, columns, **kwargs)
         elif suffix in SQLITE_SUFFIXES:
-            return SqliteWriter(file_name, columns)
+            writer =  SqliteWriter(file_name, columns, **kwargs)
+        else:  # Fallback
+            warnings.warn(
+                f"Suffix '{suffix}' not recognized in file name '{file_name}'."
+                " Falling back to CSV..."
+            )
+            writer = CSVFileWriter(file_name, columns, **kwargs)
 
-        # Fallback
-        warnings.warn(
-            f"Suffix '{suffix}' not recognized in file name '{file_name}'."
-            " Falling back to CSV..."
-        )
-        return CSVFileWriter(file_name, columns, **kwargs)
+        if buffer_size > 1:
+            writer = BufferedWriter(writer, buffer_size)
+        return writer
+
 
 @typechecked
 @contextmanager
 def auto_finalize(writers: list[TabularDataWriter]):
+    # todo: this method should actually (to be really secure), check which
+    #  writers were correctly initialized and if some initialization throws an
+    #  error, finalize all that already have been initialized. Similar with
+    #  errors during finalization.
     for writer in writers:
         writer.__enter__()
     try:
-        yield writers
+        yield None
     finally:
         for writer in writers:
             writer.__exit__(None, None, None)
+
+
+@typechecked
+class BufferedWriter(TabularDataWriter):
+
+    writer: TabularDataWriter
+    buffer_size: int
+    buffer: pd.DataFrame | None
+
+    def __init__(
+        self,
+        writer: TabularDataWriter,
+        buffer_size: int = 1000,
+    ):
+        super().__init__(writer.columns, writer.column_types)
+        self.writer = writer
+        self.buffer_size = buffer_size
+        self.buffer = None
+
+    def _write_buffer(self, force=False):
+        if self.buffer is None:
+            return
+        while len(self.buffer) >= self.buffer_size:
+            self.writer.append_data(self.buffer.iloc[:self.buffer_size])
+            self.buffer = self.buffer[self.buffer_size:]
+        if force and len(self.buffer) > 0:
+            self.writer.append_data(self.buffer)
+            self.buffer = None
+
+    def append_data(self, data: pd.DataFrame):
+        if self.buffer is None:
+            self.buffer = data.copy(deep=True)
+        else:
+            # This is supposed to be faster than pre-allocating, but we should check
+            self.buffer = pd.concat([self.buffer, data], axis=0, ignore_index=True)
+        self._write_buffer()
+
+    def check_valid_data(self, data: pd.DataFrame):
+        return self.writer.check_valid_data(data)
+
+    def write(self, data: pd.DataFrame):
+        self.writer.write(data)
+
+    def initialize(self):
+        self.writer.initialize()
+
+    def finalize(self):
+        self._write_buffer(force=True)
+        self.writer.finalize()
+
 
 @typechecked
 class CSVFileWriter(TabularDataWriter):
