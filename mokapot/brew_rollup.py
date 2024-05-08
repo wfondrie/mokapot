@@ -200,9 +200,9 @@ def output_end_message(config, start_time):
 
 DEFAULT_PARENT_LEVELS = {
     "precursor": "psm",
-    "modifiedpeptide": "precursor",
-    "peptide": "modifiedpeptide",
-    "peptidegroup": "precursor", # due to "unknown nature" of peptide groups
+    "modified_peptide": "precursor",
+    "peptide": "modified_peptide",
+    "peptide_group": "precursor", # due to "unknown nature" of peptide groups
 }
 
 @typechecked

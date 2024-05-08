@@ -85,12 +85,12 @@ def test_rollup_10000(tmp_path):
 
 def test_compute_rollup_levels():
     assert (sorted(compute_rollup_levels('psm')) ==
-            ['modifiedpeptide', 'peptide', 'peptidegroup', 'precursor', 'psm'])
+            ['modified_peptide', 'peptide', 'peptide_group', 'precursor', 'psm'])
     assert (sorted(compute_rollup_levels('precursor')) ==
-            ['modifiedpeptide', 'peptide', 'peptidegroup', 'precursor'])
-    assert (sorted(compute_rollup_levels('modifiedpeptide')) ==
-            ['modifiedpeptide', 'peptide'])
+            ['modified_peptide', 'peptide', 'peptide_group', 'precursor'])
+    assert (sorted(compute_rollup_levels('modified_peptide')) ==
+            ['modified_peptide', 'peptide'])
     assert (sorted(compute_rollup_levels('peptide')) ==
             ['peptide'])
-    assert (sorted(compute_rollup_levels('peptidegroup')) ==
-            ['peptidegroup'])
+    assert (sorted(compute_rollup_levels('peptide_group')) ==
+            ['peptide_group'])
