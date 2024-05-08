@@ -324,7 +324,7 @@ class TabularDataWriter(ABC):
 
 
 @contextmanager
-@typechecked
+# @typechecked
 def auto_finalize(writers: list[TabularDataWriter]):
     # todo: this method should actually (to be really secure), check which
     #  writers were correctly initialized and if some initialization throws an
