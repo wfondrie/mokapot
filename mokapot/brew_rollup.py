@@ -65,19 +65,23 @@ def add_main_options(parser: ArgumentGroup) -> None:
         ),
     )
 
+    parser.add_argument(
+        "-s",
+        "--src_dir",
+        type=Path,
+        default="./",
+        help=(
+            "The directory in which to look for the files to rollup."
+        ),
+    )
 
 
 def add_output_options(parser: ArgumentGroup) -> None:
     parser.add_argument(
-        "--keep_decoys",
-        default=False,
-        action="store_true",
-        help=("Keep the decoys in the output .txt files"),
-    )
-    parser.add_argument(
         "-d",
         "--dest_dir",
         type=Path,
+        default="./",
         help=(
             "The directory in which to write the result files. Defaults to "
             "the current working directory"
@@ -103,12 +107,6 @@ def add_confidence_options(parser: ArgumentGroup) -> None:
         ),
     )
     parser.add_argument(
-        "--peps_error",
-        default=False,
-        action="store_true",
-        help=("raise error when all PEPs values are equal to 1."),
-    )
-    parser.add_argument(
         "--qvalue_algorithm",
         default="tdc",
         choices=["tdc", "from_peps", "from_counts"],
@@ -124,17 +122,6 @@ def add_misc_options(parser: ArgumentGroup) -> None:
         type=int,
         default=1,
         help=("An integer to use as the random seed."),
-    )
-    parser.add_argument(
-        "-w",
-        "--max_workers",
-        default=1,
-        type=int,
-        help=(
-            "The number of processes to use for model training. Note that "
-            "using more than one worker will result in garbled logging "
-            "messages."
-        ),
     )
     parser.add_argument(
         "-v",
@@ -235,15 +222,27 @@ STANDARD_COLUMN_NAME_MAP = {
 
 
 @typechecked
+def remove_columns(column_names: list[str], column_types: list[np.dtype],
+                   columns_to_remove: list[str]) -> tuple[
+    list[str], list[np.dtype]]:
+    temp_columns = [(column, type) for column, type in
+                    zip(column_names, column_types) if
+                    column not in columns_to_remove]
+    temp_column_names, temp_column_types = map(list, zip(*temp_columns))
+    return (temp_column_names, temp_column_types)
+
+
+@typechecked
 def do_rollup(config):
     base_level = config.level
+    src_dir = config.src_dir
     dest_dir = config.dest_dir
     file_root = config.file_root + "."
 
     # Determine input files
-    target_files: list[Path] = sorted(dest_dir.glob(f"*.targets.{base_level}s"))
+    target_files: list[Path] = sorted(src_dir.glob(f"*.targets.{base_level}s"))
     target_files = [file for file in target_files if not file.name.startswith(file_root)]
-    decoy_files: list[Path] = sorted(dest_dir.glob(f"*.decoys.{base_level}s"))
+    decoy_files: list[Path] = sorted(src_dir.glob(f"*.decoys.{base_level}s"))
     decoy_files = [file for file in decoy_files if not file.name.startswith(file_root)]
     in_files: list[Path] = sorted(target_files + decoy_files)
     logging.info(f"Reading files: {[str(file) for file in in_files]}")
@@ -281,9 +280,7 @@ def do_rollup(config):
     column_names = reader.get_column_names()
     column_types = reader.get_column_types()
 
-    temp_columns = [(column, type) for column, type in zip(column_names, column_types)
-        if column not in ["q_value", "posterior_error_prob"]]
-    temp_column_names, temp_column_types = map(list, zip(*temp_columns))
+    temp_column_names, temp_column_types = remove_columns(column_names, column_types, ["q_value", "posterior_error_prob"])
 
     # Configure temp writers
     temp_buffer_size = 1000
@@ -318,7 +315,8 @@ def do_rollup(config):
 
     # Configure temp readers and output writers
     buffer_size = 1000
-    output_options = dict(columns=column_names, column_types=column_types,
+    output_columns, output_types = remove_columns(column_names, column_types, ["is_decoy"])
+    output_options = dict(columns=output_columns, column_types=output_types,
                           buffer_size=buffer_size)
     create_writer = lambda path: TabularDataWriter.from_suffix(path, **output_options)
 
@@ -339,9 +337,8 @@ def do_rollup(config):
         data["q_value"] = qvals
         data["posterior_error_prob"] = peps
 
-        # todo: need to remove is_decoy column again
-        output_writers[0].write(data.loc[targets, column_names])
-        output_writers[1].write(data.loc[~targets, column_names])
+        output_writers[0].write(data.loc[targets, output_columns])
+        output_writers[1].write(data.loc[~targets, output_columns])
 
 
 def main(main_args=None):

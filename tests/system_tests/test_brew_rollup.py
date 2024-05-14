@@ -23,8 +23,9 @@ def run_brew_rollup(params: List[Any], run_in_subprocess=None,
 
 def test_rollup_10000(tmp_path):
     """Test that basic cli works."""
-    path = tmp_path
-    # path = Path("scratch", "testing")
+    # path = tmp_path
+    path = Path("scratch", "testing")
+    path.mkdir(parents=True, exist_ok=True)
 
     retrain = False
     recompute = False
@@ -74,10 +75,9 @@ def test_rollup_10000(tmp_path):
 
     rollup_params = [
         "--level", "precursor",
+        "--src_dir", path,
         "--dest_dir", path,
-        "--max_workers", 8,
         "--verbosity", 3,
-        "--keep_decoys",
     ]
     output = run_brew_rollup(rollup_params, capture_output=True)
     print(output and output["stderr"])
