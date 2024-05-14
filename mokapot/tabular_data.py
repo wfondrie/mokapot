@@ -20,6 +20,8 @@ CSV_SUFFIXES = [
     ".proteins",
     ".modifiedpeptides",
     ".peptidegroups",
+    ".modified_peptides",
+    ".peptide_groups",
     ".precursors",
 ]
 PARQUET_SUFFIXES = [".parquet"]
