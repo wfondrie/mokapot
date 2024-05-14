@@ -263,7 +263,8 @@ def do_rollup(config):
     levels_not_found = [level for level in levels if level not in reader.get_column_names()]
     levels = [level for level in levels if level in reader.get_column_names()]
     logging.info(f"Rolling up to levels: {levels}")
-    logging.info(f"  (Rollup levels not found in input: {levels_not_found})")
+    if len(levels_not_found) > 0:
+        logging.info(f"  (Rollup levels not found in input: {levels_not_found})")
 
     # Determine temporary files
     temp_files = {level: dest_dir / f"{file_root}temp.{level}s" for level in levels}
