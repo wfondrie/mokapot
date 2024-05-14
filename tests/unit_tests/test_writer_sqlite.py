@@ -7,8 +7,7 @@ from mokapot.confidence_writer import ConfidenceSqliteWriter
 def test_sqlite_writer(confidence_write_data):
     df_psm = confidence_write_data["psms"]
     candidate_ids = df_psm.PSMId.to_list()
-    database = ":memory:"
-    connection = sqlite3.connect(database = "file::memory:?cache=shared")
+    connection = sqlite3.connect(database = ":memory:")
     prepare_tables_sqlite_db(
         connection, candidate_ids
     )
