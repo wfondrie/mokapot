@@ -35,11 +35,16 @@ from .utils import (
     convert_targets_column,
     merge_sort,
     map_columns_to_indices,
+    get_dataframe_from_records,
 )
 from .dataset import OnDiskPsmDataset
 from .picked_protein import picked_protein
 from .writers import to_flashlfq
-from .tabular_data import TabularDataWriter, TabularDataReader
+from .tabular_data import (
+    TabularDataWriter,
+    TabularDataReader,
+    get_score_column_type,
+)
 from .confidence_writer import write_confidences
 from .constants import CONFIDENCE_CHUNK_SIZE
 
@@ -181,7 +186,9 @@ class Confidence(object):
         psm_columns : str or list of str
             The columns that define a PSM.
         """
-        psm_idx = groupby_max(psms, psm_columns, self._score_column, rng=self._rng)
+        psm_idx = groupby_max(
+            psms, psm_columns, self._score_column, rng=self._rng
+        )
         return psms.loc[psm_idx, :]
 
     def plot_qvalues(self, level="psms", threshold=0.1, ax=None, **kwargs):
@@ -555,6 +562,7 @@ def assign_confidence(
 
     # just take the first one for info (and make sure the other are the same)
     curr_psms = psms[0]
+    file_ext = os.path.splitext(curr_psms.filename)[-1]
     for _psms in psms[1:]:
         assert _psms.columns == curr_psms.columns
 
@@ -565,7 +573,7 @@ def assign_confidence(
     # Level data for psm level
     level = "psms"
     levels = [level]
-    level_data_path = {level: dest_dir / f"{file_root}{level}.csv"}
+    level_data_path = {level: dest_dir / f"{file_root}{level}{file_ext}"}
     level_hash_columns = {level: curr_psms.spectrum_columns}
 
     # Level data for higher rollup levels
@@ -576,8 +584,8 @@ def assign_confidence(
         for level_column in level_columns:
             level = level_column.lower() + "s"  # e.g. Peptide to peptides
             levels.append(level)
-            level_data_path[level] = dest_dir / f"{file_root}{level}.csv"
-            level_hash_columns[level] = level_column
+            level_data_path[level] = dest_dir / f"{file_root}{level}{file_ext}"
+            level_hash_columns[level] = [level_column]
             if level not in ["psms", "peptides", "proteins"]:
                 extra_output_columns.append(level_column)
 
@@ -585,7 +593,7 @@ def assign_confidence(
     if proteins:
         level = "proteins"
         levels_or_proteins = [*levels, level]
-        level_data_path[level] = dest_dir / f"{file_root}{level}.csv"
+        level_data_path[level] = dest_dir / f"{file_root}{level}{file_ext}"
         level_hash_columns[level] = curr_psms.protein_column
 
     # fixme: the output header and data do not fit, when the extra_output_columns
@@ -627,6 +635,10 @@ def assign_confidence(
             "score",
         ]
 
+        input_output_column_mapping = {
+            i: j for i, j in zip(in_metadata_columns, out_metadata_columns)
+        }
+
         file_prefix = file_root
         if prefix:
             file_prefix = f"{file_prefix}{prefix}."
@@ -638,9 +650,7 @@ def assign_confidence(
             else:
                 output_columns = out_columns_psms_peps
 
-            outfile_targets = (
-                dest_dir / f"{file_prefix}targets.{level}"
-            )
+            outfile_targets = dest_dir / f"{file_prefix}targets.{level}"
             writer = TabularDataWriter.from_suffix(
                 outfile_targets, output_columns
             )
@@ -649,9 +659,7 @@ def assign_confidence(
             out_files[level] = [outfile_targets]
 
             if decoys:
-                outfile_decoys = (
-                    dest_dir / f"{file_prefix}decoys.{level}"
-                )
+                outfile_decoys = dest_dir / f"{file_prefix}decoys.{level}"
                 writer = TabularDataWriter.from_suffix(
                     outfile_decoys, output_columns
                 )
@@ -678,51 +686,72 @@ def assign_confidence(
 
             # The columns we get from the sorted file iterator
             iterator_columns = _psms.metadata_columns + ["score"]
+            iterator_column_types = _psms.metadata_column_types + [
+                get_score_column_type(file_ext)
+            ]
+            output_column_types = [
+                iterator_column_types[iterator_columns.index(i)]
+                for i in in_metadata_columns
+            ]
 
-            writers = {
+            handles = {
                 level: TabularDataWriter.from_suffix(
-                    level_data_path[level], out_metadata_columns
+                    level_data_path[level],
+                    columns=out_metadata_columns,
+                    column_types=output_column_types,
+                    buffer_size=0,
                 )
                 for level in levels
             }
-            for writer in writers.values():
+            for writer in handles.values():
                 writer.initialize()
-
-            # fixme: The writers are currently too slow, for single line io,
-            # so we go back to low level (furthermore, the merge_sort is
-            # also a bit crappy, and needs some fixing)
-            handles = {
-                level: open(level_data_path[level], "a")
-                for level in levels
-            }
 
             seen_level_entities = {level: set() for level in levels}
 
-            level_hash_colidx: dict = map_columns_to_indices(
-                level_hash_columns, iterator_columns
-            )
-            input_colidx = map_columns_to_indices(
-                in_metadata_columns, iterator_columns
-            )
-
             psm_count = 0
+            batches = {level: [] for level in levels}
+            batch_counts = {level: 0 for level in levels}
             for data_row in sorted_file_iterator:
-                line_list = np.array(data_row)
                 psm_count += 1
                 for level in levels:
                     if level != "psms" or deduplication:
-                        psm_hash = str(line_list[level_hash_colidx[level]])
+                        psm_hash = str(
+                            [
+                                data_row.get(col)
+                                for col in level_hash_columns[level]
+                            ]
+                        )
                         if psm_hash in seen_level_entities[level]:
                             if level == "psms":
                                 break
                             continue
                         seen_level_entities[level].add(psm_hash)
-                    line = line_list[input_colidx]
-                    handles[level].write("\t".join(line))
+                    batches[level].append(data_row)
+                    batch_counts[level] += 1
+                    if batch_counts[level] == CONFIDENCE_CHUNK_SIZE:
+                        df = get_dataframe_from_records(
+                            batches[level],
+                            in_metadata_columns,
+                            input_output_column_mapping,
+                            target_column=_psms.target_column,
+                        )
+                        df = df.astype(handles[level].get_schema(as_dict=True))
+                        handles[level].append_data(df)
+                        batch_counts[level] = 0
+                        batches[level] = []
+            for level, batch in batches.items():
+                df = get_dataframe_from_records(
+                    batch,
+                    in_metadata_columns,
+                    input_output_column_mapping,
+                    target_column=_psms.target_column,
+                )
+                df = df.astype(handles[level].get_schema(as_dict=True))
+                handles[level].append_data(df)
 
             for level in levels:
-                handles[level].close()
                 count = len(seen_level_entities[level])
+                handles[level].finalize()
                 if level == "psms":
                     if deduplication:
                         LOGGER.info(
@@ -755,7 +784,6 @@ def assign_confidence(
         )
         if not prefix:
             append_to_output_file = True
-
 
 
 @contextmanager

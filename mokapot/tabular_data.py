@@ -1,7 +1,7 @@
 import sqlite3
 import warnings
 from contextlib import contextmanager
-from typing import Generator
+from typing import Generator, List
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 from typeguard import typechecked
 from numpy import dtype
+import pyarrow as pa
 
 CSV_SUFFIXES = [
     ".csv",
@@ -26,6 +27,15 @@ CSV_SUFFIXES = [
 ]
 PARQUET_SUFFIXES = [".parquet"]
 SQLITE_SUFFIXES = [".db"]
+
+
+def get_score_column_type(suffix):
+    if suffix in PARQUET_SUFFIXES:
+        return pa.float64()
+    elif suffix in CSV_SUFFIXES:
+        return "float"
+    else:
+        raise ValueError(f"Suffix '{suffix}' does not match expected formats")
 
 
 @typechecked
@@ -52,8 +62,9 @@ class TabularDataReader(ABC):
         return True
 
     @staticmethod
-    def from_path(file_name: Path, column_map: dict[str, str] | None = None,
-                  **kwargs) -> "TabularDataReader":
+    def from_path(
+        file_name: Path, column_map: dict[str, str] | None = None, **kwargs
+    ) -> "TabularDataReader":
         # Currently, we look only at the suffix, however, in the future we could
         # also look into the file itself (is it ascii? does it have some "magic
         # bytes"? ...)
@@ -83,8 +94,10 @@ class ColumnMappedReader(TabularDataReader):
         self.column_map = column_map
 
     def get_column_names(self) -> list[str]:
-        return [self.column_map.get(column, column)
-                for column in self.reader.get_column_names()]
+        return [
+            self.column_map.get(column, column)
+            for column in self.reader.get_column_names()
+        ]
 
     def get_column_types(self) -> list[dtype]:
         return self.reader.get_column_types()
@@ -116,7 +129,9 @@ class ColumnMappedReader(TabularDataReader):
         self, chunk_size: int, columns: list[str] | None = None
     ) -> Generator[pd.DataFrame, None, None]:
         orig_columns = self._get_orig_columns(columns)
-        for chunk in self.reader.get_chunked_data_iterator(chunk_size, columns=orig_columns):
+        for chunk in self.reader.get_chunked_data_iterator(
+            chunk_size, columns=orig_columns
+        ):
             yield self._get_mapped_dataframe(chunk)
 
 
@@ -188,7 +203,7 @@ class DataFrameReader(TabularDataReader):
         self, chunk_size: int, columns: list[str] | None = None
     ) -> Generator[pd.DataFrame, None, None]:
         for pos in range(0, len(self.df), chunk_size):
-            chunk = self.df.iloc[pos:pos + chunk_size]
+            chunk = self.df.iloc[pos : pos + chunk_size]
             yield chunk if columns is None else chunk[columns]
 
     def _returned_dataframe_is_mutable(self):
@@ -221,15 +236,10 @@ class ParquetFileReader(TabularDataReader):
         return pq.ParquetFile(self.file_name).schema.names
 
     def get_column_types(self) -> list:
-        iterator = self.get_chunked_data_iterator(chunk_size=2)
-        first_rows = next(iterator)
-        return _types_from_dataframe(first_rows)
+        return pq.ParquetFile(self.file_name).schema.to_arrow_schema().types
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
-        result = (
-            pq.read_table(self.file_name, columns=columns)
-            .to_pandas()
-        )
+        result = pq.read_table(self.file_name, columns=columns).to_pandas()
         return result
 
     def get_chunked_data_iterator(
@@ -272,12 +282,16 @@ class TabularDataWriter(ABC):
         # todo: maybe an exception would be better suited than an assert
         columns = data.columns.tolist()
         if not columns == self.get_column_names():
-            raise ValueError(f"Column names {columns} do not match {self.get_column_names()}")
+            raise ValueError(
+                f"Column names {columns} do not match {self.get_column_names()}"
+            )
 
         if self.column_types is not None:
             column_types = _types_from_dataframe(data)
             if not column_types == self.get_column_types():
-                raise ValueError(f"Column types {column_types} do not match {self.get_column_types()}")
+                raise ValueError(
+                    f"Column types {column_types} do not match {self.get_column_types()}"
+                )
 
     def write(self, data: pd.DataFrame):
         self.check_valid_data(data)
@@ -312,7 +326,7 @@ class TabularDataWriter(ABC):
         elif suffix in PARQUET_SUFFIXES:
             writer = ParquetFileWriter(file_name, columns, **kwargs)
         elif suffix in SQLITE_SUFFIXES:
-            writer =  SqliteWriter(file_name, columns, **kwargs)
+            writer = SqliteWriter(file_name, columns, **kwargs)
         else:  # Fallback
             warnings.warn(
                 f"Suffix '{suffix}' not recognized in file name '{file_name}'."
@@ -362,8 +376,8 @@ class BufferedWriter(TabularDataWriter):
         if self.buffer is None:
             return
         while len(self.buffer) >= self.buffer_size:
-            self.writer.append_data(self.buffer.iloc[:self.buffer_size])
-            self.buffer = self.buffer[self.buffer_size:]
+            self.writer.append_data(self.buffer.iloc[: self.buffer_size])
+            self.buffer = self.buffer[self.buffer_size :]
         if force and len(self.buffer) > 0:
             self.writer.append_data(self.buffer)
             self.buffer = None
@@ -373,7 +387,9 @@ class BufferedWriter(TabularDataWriter):
             self.buffer = data.copy(deep=True)
         else:
             # This is supposed to be faster than pre-allocating, but we should check
-            self.buffer = pd.concat([self.buffer, data], axis=0, ignore_index=True)
+            self.buffer = pd.concat(
+                [self.buffer, data], axis=0, ignore_index=True
+            )
         self._write_buffer()
 
     def check_valid_data(self, data: pd.DataFrame):
@@ -388,6 +404,7 @@ class BufferedWriter(TabularDataWriter):
     def finalize(self):
         self._write_buffer(force=True)
         self.writer.finalize()
+
     def get_associated_reader(self):
         return self.writer.get_associated_reader()
 
@@ -416,6 +433,12 @@ class CSVFileWriter(TabularDataWriter):
             f"CSVFileWriter({self.file_name=},{self.columns=},{self.stdargs=})"
         )
 
+    def get_schema(self, as_dict: bool = True):
+        schema = []
+        for name, type in zip(self.columns, self.column_types):
+            schema.append((name, type))
+        return {name: str(type) for name, type in schema}
+
     def initialize(self):
         # Just write header information
         df = pd.DataFrame(columns=self.columns)
@@ -431,6 +454,7 @@ class CSVFileWriter(TabularDataWriter):
 
     def get_associated_reader(self):
         return CSVFileReader(self.file_name, sep=self.stdargs["sep"])
+
 
 @typechecked
 class ParquetFileWriter(TabularDataWriter):
@@ -452,23 +476,34 @@ class ParquetFileWriter(TabularDataWriter):
     def __repr__(self):
         return f"ParquetFileWriter({self.file_name=},{self.columns=})"
 
+    def get_schema(self, as_dict: bool = False):
+        schema = []
+        for name, type in zip(self.columns, self.column_types):
+            schema.append((name, type))
+        if as_dict:
+            return {name: str(type) for name, type in schema}
+        return pa.schema(schema)
+
     def initialize(self):
-        # todo: Probably needs to do something with the column and type information
-        pass
+        self.writer = pq.ParquetWriter(
+            self.file_name, schema=self.get_schema()
+        )
 
     def finalize(self):
-        # todo: Close if necessary
-        pass
+        self.writer.close()
 
     def append_data(self, data: pd.DataFrame):
-        # todo: implement
-        raise NotImplementedError
+        table = pa.Table.from_pandas(
+            data, preserve_index=False, schema=self.get_schema()
+        )
+        self.writer.write_table(table)
 
     def write(self, data: pd.DataFrame):
         data.to_parquet(self.file_name, index=False)
 
     def get_associated_reader(self):
         return CSVFileReader(self.file_name)
+
 
 @typechecked
 class SqliteWriter(TabularDataWriter, ABC):

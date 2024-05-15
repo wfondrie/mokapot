@@ -164,6 +164,7 @@ def read_percolator(
     LOGGER.info("Reading %s...", perc_file)
     reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
+    col_types = reader.get_column_types()
 
     # Find all the necessary columns, case-insensitive:
     specid = find_required_column("specid", columns)
@@ -200,6 +201,7 @@ def read_percolator(
             nonfeat.append(col)
 
     features = [c for c in columns if c not in nonfeat]
+    nonfeat_types = [col_types[columns.index(col)] for col in nonfeat]
 
     # Check for errors:
     if not all(spectra):
@@ -253,6 +255,7 @@ def read_percolator(
         protein_column=proteins,
         feature_columns=_feature_columns,
         metadata_columns=nonfeat,
+        metadata_column_types=nonfeat_types,
         level_columns=level_columns,
         filename_column=filename,
         scan_column=scan,
