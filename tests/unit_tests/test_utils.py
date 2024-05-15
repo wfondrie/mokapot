@@ -94,6 +94,8 @@ def test_merge_sort(merge_sort_data):
     files_csv, files_parquet = merge_sort_data
     iterable_csv = utils.merge_sort(files_csv, "score")
     iterable_parquet = utils.merge_sort(files_parquet, "score")
+    a = list(iterable_csv)
+    b = list(iterable_parquet)
     assert list(iterable_csv) == list(
         iterable_parquet
     ), "Merge sort ids vary between parquet and csv"

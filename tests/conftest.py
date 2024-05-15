@@ -13,6 +13,7 @@ from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from triqler.qvality import getQvaluesFromScores
 from mokapot.qvalues import tdc
 import pyarrow.parquet as pq
+import pyarrow as pa
 from mokapot.utils import convert_targets_column
 
 
@@ -284,6 +285,7 @@ def psms_ondisk():
             "Proteins",
             "Label",
         ],
+        metadata_column_types=["int", "int", "int", "string", "int"],
         level_columns=["Peptide"],
         filename_column=None,
         specId_column="SpecId",
@@ -334,6 +336,13 @@ def psms_ondisk_from_parquet():
             "Peptide",
             "Proteins",
             "ExpMass",
+        ],
+        metadata_column_types=[
+            pa.int64(),
+            pa.int64(),
+            pa.int64(),
+            pa.string(),
+            pa.int64(),
         ],
         level_columns=["Peptide"],
         filename_column=None,

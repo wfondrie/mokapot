@@ -6,7 +6,7 @@ import pandas as pd
 import copy
 from pathlib import Path
 from pytest import approx
-
+import pyarrow as pa
 
 import mokapot
 from mokapot import OnDiskPsmDataset, assign_confidence
@@ -49,6 +49,14 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
             "proteins",
             "target",
         ],
+        metadata_column_types=[
+            "int",
+            "int",
+            "float",
+            "string",
+            "string",
+            "int",
+        ],
         level_columns=["peptide"],
         specId_column="specid",
         spectra_dataframe=df_spectra,
@@ -66,18 +74,30 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
             eval_fdr=0.02,
         )
     finally:
-        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = mokapot.constants.CONFIDENCE_CHUNK_SIZE
+        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = (
+            mokapot.constants.CONFIDENCE_CHUNK_SIZE
+        )
 
     df_results_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
     assert len(df_results_group) == 500
-    assert df_results_group.columns.tolist() == ['PSMId', 'peptide', 'score', 'q-value', 'posterior_error_prob', 'proteinIds']
+    assert df_results_group.columns.tolist() == [
+        "PSMId",
+        "peptide",
+        "score",
+        "q-value",
+        "posterior_error_prob",
+        "proteinIds",
+    ]
     df = df_results_group.head(3)
-    assert df['PSMId'].tolist() == [98, 187, 176]
-    assert df['peptide'].tolist() == ['PELPK', 'IYFCK', 'CGQGK']
-    assert df['score'].tolist() == approx([5.857438, 5.703985, 5.337845])
-    assert df['q-value'].tolist() == approx([0.01020408, 0.01020408, 0.01020408])
-    assert df['posterior_error_prob'].tolist() == approx([1.635110e-05, 2.496682e-05, 6.854064e-05])
-
+    assert df["PSMId"].tolist() == [98, 187, 176]
+    assert df["peptide"].tolist() == ["PELPK", "IYFCK", "CGQGK"]
+    assert df["score"].tolist() == approx([5.857438, 5.703985, 5.337845])
+    assert df["q-value"].tolist() == approx(
+        [0.01020408, 0.01020408, 0.01020408]
+    )
+    assert df["posterior_error_prob"].tolist() == approx(
+        [1.635110e-05, 2.496682e-05, 6.854064e-05]
+    )
 
 
 def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
@@ -109,6 +129,14 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
             "peptide",
             "proteins",
             "target",
+        ],
+        metadata_column_types=[
+            pa.int64(),
+            pa.int64(),
+            pa.int64(),
+            pa.string(),
+            pa.string(),
+            pa.int64(),
         ],
         level_columns=["peptide"],
         specId_column="specid",
