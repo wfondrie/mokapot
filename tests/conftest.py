@@ -610,13 +610,13 @@ def peptide_csv_file(tmp_path):
 def psms_iterator():
     """Create a standard psms iterable"""
     return [
-        ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
-        ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
-        ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
-        ["4", "1", "QILVQLR", "-5.92", "0.12", "1.0", "_.dummy._\n"],
-        ["5", "1", "HLAQLLR", "-6.05", "0.13", "1.0", "_.dummy._\n"],
-        ["6", "0", "QILVQLR", "-6.06", "0.14", "1.0", "_.dummy._\n"],
-        ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
+        {"PSMId":"1", "Label":"1", "Peptide":"HLAQLLR", "score":"-5.75", "q-value":"0.108","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
+        {"PSMId":"2", "Label":"0", "Peptide":"HLAQLLR", "score":"-5.81", "q-value":"0.109","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
+        {"PSMId":"3", "Label":"0", "Peptide":"NVPTSLLK","score": "-5.83","q-value": "0.11","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
+        {"PSMId":"4", "Label":"1", "Peptide":"QILVQLR", "score":"-5.92", "q-value":"0.12", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
+        {"PSMId":"5", "Label":"1", "Peptide":"HLAQLLR", "score":"-6.05", "q-value":"0.13", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
+        {"PSMId":"6", "Label":"0", "Peptide":"QILVQLR", "score":"-6.06", "q-value":"0.14", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
+        {"PSMId":"7", "Label":"1", "Peptide":"SRTSVIPGPK", "score":"-6.12","q-value": "0.15","posterior_error_prob": "1.0", "proteinIds":"_.dummy._"},
     ]
 
 
