@@ -871,15 +871,17 @@ def _save_sorted_metadata_chunks(
 
 @typechecked
 def get_unique_peptides_from_psms(
-    iterable, peptide_col_index, out_peptides: Path, sep
+    iterable, peptide_col_name, out_peptides: Path, write_columns: list, sep
 ):
     f_peptide = open(out_peptides, "a")
     seen_peptide = set()
     for line_list in iterable:
-        line_hash_peptide = line_list[peptide_col_index]
+        line_hash_peptide = line_list[peptide_col_name]
         if line_hash_peptide not in seen_peptide:
             seen_peptide.add(line_hash_peptide)
-            f_peptide.write(f"{sep.join(line_list[:4] + [line_list[-1]])}")
+            f_peptide.write(
+                f"{sep.join([line_list[key] for key in write_columns])}\n"
+            )
 
     f_peptide.close()
     return len(seen_peptide)

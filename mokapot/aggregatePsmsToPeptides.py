@@ -55,6 +55,7 @@ def main(main_args=None):
         protein_column=None,
         feature_columns=None,
         metadata_columns=None,
+        metadata_column_types=None,
         level_columns=None,
         filename_column=None,
         scan_column=None,
@@ -89,8 +90,9 @@ def main(main_args=None):
 
     unique_peptides = get_unique_peptides_from_psms(
         iterable=iterable,
-        peptide_col_index=2,
+        peptide_col_name="peptide",
         out_peptides=peptides_path,
+        write_columns=metadata_columns,
         sep=sep,
     )
     logging.info("\t- Found %i unique peptides.", unique_peptides)

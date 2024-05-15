@@ -154,7 +154,7 @@ def merge_sort_csv(paths, col_score, target_column=None, sep="\t"):
         [row, key] = get_next_row(file_handles, current_rows, col_score)
         if row is not None:
             if target_column:
-                row.insert(1, str(key))
+                row[target_column] = str(key)
             yield row
 
 
@@ -182,7 +182,9 @@ def merge_sort_parquet(paths, col_score, target_column=None):
                 key: str(value) for key, value in row.items()
             }  # to keep types similar to csv merge sort
             if target_column:
-                row.insert(1, str(key))
+                # row.insert(1, str(key))
+                print(target_column, key)
+                row[target_column] = str(key)
             yield row
 
 
