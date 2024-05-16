@@ -164,26 +164,26 @@ def setup_logging(config):
     logging.captureWarnings(True)
 
 
-def output_start_message(config):
+def output_start_message(prog_name, config):
     # todo: need to update that too
     start_time = time.time()
-    logging.info("mokapot version %s", str(__version__))
+    logging.info(f"{prog_name} version {__version__}")
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
     logging.info("Department of Genome Sciences at the University of Washington.")
     logging.info("Command issued:")
-    logging.info("%s", " ".join(sys.argv))
+    logging.info("  %s", " ".join(sys.argv))
     logging.info("")
     logging.info("Starting Analysis")
     logging.info("=================")
     return start_time
 
-def output_end_message(config, start_time):
+def output_end_message(prog_name, config, start_time):
     total_time = round(time.time() - start_time)
     total_time = str(datetime.timedelta(seconds=total_time))
 
     logging.info("")
     logging.info("=== DONE! ===")
-    logging.info("mokapot analysis completed in %s", total_time)
+    logging.info(f"{prog_name} analysis completed in {total_time}")
 
 DEFAULT_PARENT_LEVELS = {
     "precursor": "psm",
@@ -334,10 +334,11 @@ def main(main_args=None):
     """The CLI entry point"""
 
     config = parse_arguments(main_args)
+    prog_name = "brew_rollup"
 
     setup_logging(config)
 
-    start_time = output_start_message(config)
+    start_time = output_start_message(prog_name, config)
 
     np.random.seed(config.seed)
 
@@ -346,7 +347,7 @@ def main(main_args=None):
 
     do_rollup(config)
 
-    output_end_message(config, start_time)
+    output_end_message(prog_name, config, start_time)
 
 
 if __name__ == "__main__":

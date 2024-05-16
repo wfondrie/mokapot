@@ -77,7 +77,7 @@ def test_rollup_10000(tmp_path):
         "--level", "precursor",
         "--src_dir", path,
         "--dest_dir", path,
-        "--verbosity", 3,
+        "--verbosity", 2,
     ]
     output = run_brew_rollup(rollup_params, capture_output=True)
     print(output and output["stderr"])
