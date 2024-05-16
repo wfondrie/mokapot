@@ -262,14 +262,14 @@ def do_rollup(config):
         logging.info(f"  (Rollup levels not found in input: {levels_not_found})")
 
     # Determine temporary files
-    temp_files = {level: dest_dir / f"{file_root}temp.{level}s" for level in levels}
-    logging.info(f"Using temp files: { {level: str(file) for level, file in temp_files.items()} }")
+    temp_files = {level: dest_dir / f"{file_root}temp.{level}s{suffix}" for level in levels}
+    logging.debug(f"Using temp files: { {level: str(file) for level, file in temp_files.items()} }")
 
     # Determine output files
-    out_files = {level: [dest_dir / f"{file_root}targets.{level}s",
-                         dest_dir / f"{file_root}decoys.{level}s", ]
+    out_files = {level: [dest_dir / f"{file_root}targets.{level}s{suffix}",
+                         dest_dir / f"{file_root}decoys.{level}s{suffix}", ]
                  for level in levels}
-    logging.info(f"Writing to files: { {level: list(map(str, files)) for level, files in out_files.items()} }")
+    logging.debug(f"Writing to files: { {level: list(map(str, files)) for level, files in out_files.items()} }")
 
 
     # Determine columns for output files and intermediate files
