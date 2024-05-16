@@ -547,3 +547,14 @@ class SqliteWriter(TabularDataWriter, ABC):
     def get_associated_reader(self):
         # todo: need an sqlite reader first...
         raise NotImplementedError
+
+
+@typechecked
+def remove_columns(column_names: list[str], column_types: list[np.dtype],
+                   columns_to_remove: list[str]) -> tuple[
+    list[str], list[np.dtype]]:
+    temp_columns = [(column, type) for column, type in
+                    zip(column_names, column_types) if
+                    column not in columns_to_remove]
+    temp_column_names, temp_column_types = zip(*temp_columns)
+    return (list(temp_column_names), list(temp_column_types))

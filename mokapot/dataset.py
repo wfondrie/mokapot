@@ -494,7 +494,7 @@ class OnDiskPsmDataset:
         # todo: btw: should not get the filename but a reader object or something, in order to parse other filetypes without if's
         if filename:
             columns = TabularDataReader.from_path(
-                self.filename
+                filename
             ).get_column_names()
 
             def check_column(column):

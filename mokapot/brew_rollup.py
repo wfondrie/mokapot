@@ -18,7 +18,7 @@ from mokapot.streaming import merge_readers, MergedTabularDataReader, \
     ComputedTabularDataReader
 from mokapot import __version__, qvalues
 from mokapot.tabular_data import TabularDataWriter, TabularDataReader, \
-    auto_finalize
+    auto_finalize, remove_columns
 from mokapot.peps import peps_from_scores
 
 
@@ -219,17 +219,6 @@ STANDARD_COLUMN_NAME_MAP = {
     "modifiedpeptide": "modified_peptide",
     "q-value": "q_value"
 }
-
-
-@typechecked
-def remove_columns(column_names: list[str], column_types: list[np.dtype],
-                   columns_to_remove: list[str]) -> tuple[
-    list[str], list[np.dtype]]:
-    temp_columns = [(column, type) for column, type in
-                    zip(column_names, column_types) if
-                    column not in columns_to_remove]
-    temp_column_names, temp_column_types = map(list, zip(*temp_columns))
-    return (temp_column_names, temp_column_types)
 
 
 @typechecked
