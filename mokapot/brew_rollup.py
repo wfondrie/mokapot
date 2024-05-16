@@ -223,15 +223,22 @@ STANDARD_COLUMN_NAME_MAP = {
 
 @typechecked
 def do_rollup(config):
-    base_level = config.level
-    src_dir = config.src_dir
-    dest_dir = config.dest_dir
-    file_root = config.file_root + "."
+    base_level: str = config.level
+    src_dir: Path = config.src_dir
+    dest_dir: Path = config.dest_dir
+    file_root: str = config.file_root + "."
 
     # Determine input files
-    target_files: list[Path] = sorted(src_dir.glob(f"*.targets.{base_level}s"))
+    if len(list(src_dir.glob(f"*.{base_level}s.parquet"))) > 0:
+        if len(list(src_dir.glob(f"*.{base_level}s"))) > 0:
+            raise RuntimeError(f"Only input files of either type CSV or type Parquet should exist in '{src_dir}', but both types were found.")
+        suffix = ".parquet"
+    else:
+        suffix = ""
+
+    target_files: list[Path] = sorted(src_dir.glob(f"*.targets.{base_level}s{suffix}"))
+    decoy_files: list[Path] = sorted(src_dir.glob(f"*.decoys.{base_level}s{suffix}"))
     target_files = [file for file in target_files if not file.name.startswith(file_root)]
-    decoy_files: list[Path] = sorted(src_dir.glob(f"*.decoys.{base_level}s"))
     decoy_files = [file for file in decoy_files if not file.name.startswith(file_root)]
     in_files: list[Path] = sorted(target_files + decoy_files)
     logging.info(f"Reading files: {[str(file) for file in in_files]}")
