@@ -18,7 +18,7 @@ class JoinedTabularDataReader(TabularDataReader):
     def get_column_names(self) -> list[str]:
         return sum([reader.get_column_names() for reader in self.readers], [])
 
-    def get_column_types(self) -> list[dtype]:
+    def get_column_types(self) -> list:
         return sum([reader.get_column_types() for reader in self.readers], [])
 
     def _subset_columns(self, column_names: list[str] | None) -> list[
@@ -66,7 +66,7 @@ class ComputedTabularDataReader(TabularDataReader):
     def get_column_names(self) -> list[str]:
         return self.reader.get_column_names() + [self.column]
 
-    def get_column_types(self) -> list[dtype]:
+    def get_column_types(self) -> list:
         return self.reader.get_column_types() + [self.dtype]
 
     def _reader_columns(self, columns: list[str]):
@@ -105,6 +105,7 @@ class MergedTabularDataReader(TabularDataReader):
         self.column_names = readers[0].get_column_names()
         self.column_types = readers[0].get_column_types()
 
+        # todo: all those asserts should raise an exception, could happen in production too
         for reader in readers:
             assert reader.get_column_names() == self.column_names, "Column names do not match"
             assert reader.get_column_types() == self.column_types, "Column types do not match"
@@ -113,7 +114,7 @@ class MergedTabularDataReader(TabularDataReader):
     def get_column_names(self) -> list[str]:
         return self.column_names
 
-    def get_column_types(self) -> list[np.dtype]:
+    def get_column_types(self) -> list:
         return self.column_types
 
     def get_row_iterator(self, columns: list[str] | None = None) -> Generator[
