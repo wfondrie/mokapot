@@ -7,6 +7,7 @@ results and Percolator results.
 """
 
 import logging
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -18,7 +19,9 @@ logging.basicConfig(level=logging.INFO)
 
 def test_compare_to_percolator(tmp_path):
     """Test that mokapot get almost the same answer as Percolator"""
-    dat = mokapot.read_pin(Path("data", "phospho_rep1.pin"), max_workers=3)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=pd.errors.ParserWarning)
+        dat = mokapot.read_pin(Path("data", "phospho_rep1.pin"), max_workers=3)
     proteins = mokapot.read_fasta(Path("data", "human_sp_td.fasta"))
     psms, models, scores, desc = mokapot.brew(dat)
     mokapot.assign_confidence(
