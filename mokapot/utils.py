@@ -5,13 +5,14 @@ Utility functions
 import itertools
 import gzip
 from pathlib import Path
-from typing import Union
+from typing import Union, List
 
 import numpy as np
 import pandas as pd
 from .constants import MERGE_SORT_CHUNK_SIZE
 import pyarrow.parquet as pq
 from typeguard import typechecked
+import csv
 
 
 @typechecked
@@ -107,10 +108,9 @@ def get_next_row(file_handles, current_rows, col_index, sep="\t"):
             max_row = row
 
     try:
-        current_rows[max_key] = next(file_handles[max_key]).split(sep)
+        current_rows[max_key] = next(file_handles[max_key])
 
     except StopIteration:
-        file_handles[max_key].close()
         del current_rows[max_key]
         del file_handles[max_key]
         return [max_row, max_key]
@@ -128,10 +128,7 @@ def get_row_from_batch(
         if max_score is None or max_score < score:
             max_score = score
             max_key = key
-    max_row = list(
-        map(str, current_batches[max_key][current_indices[max_key]].values())
-    )
-    max_row[-1] += "\n"
+    max_row = current_batches[max_key][current_indices[max_key]]
     current_indices[max_key] += 1
     if current_indices[max_key] == max_indices[max_key]:
         try:
@@ -144,48 +141,74 @@ def get_row_from_batch(
     return [max_row, max_key]
 
 
+def merge_sort_csv(paths, col_score, target_column=None, sep="\t"):
+    file_handles = {
+        i: csv.DictReader(open(path, "r"), delimiter=sep)
+        for i, path in enumerate(paths)
+    }
+    current_rows = {}
+    for key, f in file_handles.items():
+        current_rows[key] = next(f)
+
+    while file_handles != {}:
+        [row, key] = get_next_row(file_handles, current_rows, col_score)
+        if row is not None:
+            if target_column:
+                row[target_column] = str(key)
+            yield row
+
+
+def merge_sort_parquet(paths, col_score, target_column=None):
+    file_handles = {
+        i: pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
+        for i, path in enumerate(paths)
+    }
+    current_batches = {}
+    current_indices = [0] * len(paths)
+    max_indices = [0] * len(paths)
+    for key, file in file_handles.items():
+        current_batches[key] = next(file).to_pylist()
+        max_indices[key] = len(current_batches[key])
+    while file_handles != {}:
+        [row, key] = get_row_from_batch(
+            file_handles,
+            current_batches,
+            current_indices,
+            max_indices,
+            col_score,
+        )
+        if row is not None:
+            row = {
+                key: str(value) for key, value in row.items()
+            }  # to keep types similar to csv merge sort
+            if target_column:
+                # row.insert(1, str(key))
+                print(target_column, key)
+                row[target_column] = str(key)
+            yield row
+
+
 def merge_sort(paths, col_score, target_column=None, sep="\t"):
 
     if paths[0].suffix == ".parquet":
-        file_handles = {
-            i: pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
-            for i, path in enumerate(paths)
-        }
-        current_batches = {}
-        current_indices = [0] * len(paths)
-        max_indices = [0] * len(paths)
-        for key, file in file_handles.items():
-            current_batches[key] = next(file).to_pylist()
-            max_indices[key] = len(current_batches[key])
-        while file_handles != {}:
-            [row, key] = get_row_from_batch(
-                file_handles,
-                current_batches,
-                current_indices,
-                max_indices,
-                col_score,
-            )
-            if row is not None:
-                if target_column:
-                    row.insert(1, str(key))
-                yield row
+        return merge_sort_parquet(paths, col_score, target_column)
     else:
-        file_handles = {i: open(path, "r") for i, path in enumerate(paths)}
-        current_rows = {}
-        for key, f in file_handles.items():
-            next(f)
-            first_row = next(f)
-            current_rows[key] = first_row.split(sep)
+        return merge_sort_csv(paths, col_score, target_column, sep)
 
-        with open(paths[0], "r") as f:
-            header = next(f)
-        col_index = header.rstrip().split(sep).index(col_score)
-        while file_handles != {}:
-            [row, key] = get_next_row(file_handles, current_rows, col_index)
-            if row is not None:
-                if target_column:
-                    row.insert(1, str(key))
-                yield row
+
+def get_dataframe_from_records(
+    records: List[dict],
+    in_columns: List,
+    column_mapping: dict,
+    target_column: str = None,
+):
+    df = pd.DataFrame.from_records(records, columns=in_columns)
+    if target_column:
+        df[target_column] = df[target_column].map(
+            lambda x: True if x == "True" else False
+        )
+    df = df.rename(columns=column_mapping)
+    return df
 
 
 @typechecked

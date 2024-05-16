@@ -101,9 +101,7 @@ class PsmDataset(ABC):
             other_columns = ()
 
         # Check that all of the columns exist:
-        used_columns = sum(
-            [other_columns, self._spectrum_columns], tuple()
-        )
+        used_columns = sum([other_columns, self._spectrum_columns], tuple())
 
         missing_columns = [c not in self.data.columns for c in used_columns]
         if not missing_columns:
@@ -462,6 +460,7 @@ class OnDiskPsmDataset:
         protein_column,
         feature_columns,
         metadata_columns,
+        metadata_column_types,
         level_columns,
         filename_column,
         scan_column,
@@ -481,6 +480,7 @@ class OnDiskPsmDataset:
         self.spectrum_columns = spectrum_columns
         self.feature_columns = feature_columns
         self.metadata_columns = metadata_columns
+        self.metadata_column_types = metadata_column_types
         self.level_columns = level_columns
         self.filename_column = filename_column
         self.scan_column = scan_column
