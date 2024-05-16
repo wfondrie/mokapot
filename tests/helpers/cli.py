@@ -3,16 +3,12 @@ import logging
 import os
 import io
 import subprocess
-import sys
 from contextlib import redirect_stdout, redirect_stderr
 from typing import List, Any, Optional, Dict, Callable
 
-import pytest
-from _pytest.logging import caplog, LogCaptureFixture
 from typeguard import TypeCheckError
 
 from mokapot.mokapot import main as mokapot_main
-from mokapot.aggregatePsmsToPeptides import main as aggregate_main
 
 @contextlib.contextmanager
 def catch_type_check():
@@ -126,29 +122,3 @@ def run_mokapot_cli(params: List[Any], run_in_subprocess=None,
     """
     return _run_cli("mokapot.mokapot", mokapot_main, params,
                     run_in_subprocess, capture_output)
-
-
-def run_aggregate_cli(params: List[Any], run_in_subprocess=None,
-                      capture_output=False):
-    """
-    Run the aggregatePsmsToPeptides command either in a subprocess or as direct
-    call to the main function.
-
-    Parameters
-    ----------
-    params : List[Any]
-        List of parameters to be passed to the `mokapot.aggregatePsmsToPeptides`
-        command line tool.
-
-    run_in_subprocess : bool, optional
-        If set to True, the script will be run in a subprocess. If set to False,
-        the script will be run directly. If not provided, the value will be read
-        from the environment variable TEST_CLI_IN_SUBPROCESS. If the value is
-        'true', 'yes', 'y', or '1', it will be treated as True. Otherwise, it
-        will be treated as False. Default is None.
-
-    capture_output : bool, default: False
-        Determines whether to capture the stdout and stderr output.
-    """
-    return _run_cli("mokapot.aggregatePsmsToPeptides", aggregate_main,
-                    params, run_in_subprocess, capture_output)
