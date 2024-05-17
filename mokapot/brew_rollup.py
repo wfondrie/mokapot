@@ -7,18 +7,26 @@ import logging
 import sys
 import time
 import argparse
-from argparse import _ArgumentGroup  as ArgumentGroup
+from argparse import _ArgumentGroup as ArgumentGroup
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from typeguard import typechecked, TypeCheckError
 
-from mokapot.streaming import merge_readers, MergedTabularDataReader, \
-    ComputedTabularDataReader
+from mokapot.streaming import (
+    merge_readers,
+    MergedTabularDataReader,
+    ComputedTabularDataReader,
+)
 from mokapot import __version__, qvalues
-from mokapot.tabular_data import TabularDataWriter, TabularDataReader, \
-    auto_finalize, remove_columns
+from mokapot.tabular_data import (
+    TabularDataWriter,
+    TabularDataReader,
+    auto_finalize,
+    remove_columns,
+)
 from mokapot.peps import peps_from_scores
 
 
@@ -57,7 +65,13 @@ def parse_arguments(main_args):
 def add_main_options(parser: ArgumentGroup) -> None:
     parser.add_argument(
         "--level",
-        choices=['psm', 'precursor', 'modifiedpeptide', 'peptide', 'peptidegroup'],
+        choices=[
+            "psm",
+            "precursor",
+            "modifiedpeptide",
+            "peptide",
+            "peptidegroup",
+        ],
         required=True,
         help=(
             "Load previously saved models and skip model training."
@@ -70,9 +84,7 @@ def add_main_options(parser: ArgumentGroup) -> None:
         "--src_dir",
         type=Path,
         default="./",
-        help=(
-            "The directory in which to look for the files to rollup."
-        ),
+        help=("The directory in which to look for the files to rollup."),
     )
 
 
@@ -169,13 +181,16 @@ def output_start_message(prog_name, config):
     start_time = time.time()
     logging.info(f"{prog_name} version {__version__}")
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
-    logging.info("Department of Genome Sciences at the University of Washington.")
+    logging.info(
+        "Department of Genome Sciences at the University of Washington."
+    )
     logging.info("Command issued:")
     logging.info("  %s", " ".join(sys.argv))
     logging.info("")
     logging.info("Starting Analysis")
     logging.info("=================")
     return start_time
+
 
 def output_end_message(prog_name, config, start_time):
     total_time = round(time.time() - start_time)
@@ -185,15 +200,19 @@ def output_end_message(prog_name, config, start_time):
     logging.info("=== DONE! ===")
     logging.info(f"{prog_name} analysis completed in {total_time}")
 
+
 DEFAULT_PARENT_LEVELS = {
     "precursor": "psm",
     "modified_peptide": "precursor",
     "peptide": "modified_peptide",
-    "peptide_group": "precursor", # due to "unknown nature" of peptide groups
+    "peptide_group": "precursor",  # due to "unknown nature" of peptide groups
 }
 
+
 @typechecked
-def compute_rollup_levels(base_level: str, parent_levels: dict[str, str] | None=None) -> list[str]:
+def compute_rollup_levels(
+    base_level: str, parent_levels: dict[str, str] | None = None
+) -> list[str]:
     if parent_levels is None:
         parent_levels = DEFAULT_PARENT_LEVELS
     levels = [base_level]
@@ -206,6 +225,7 @@ def compute_rollup_levels(base_level: str, parent_levels: dict[str, str] | None=
                 changed = True
     return levels
 
+
 STANDARD_COLUMN_NAME_MAP = {
     "SpecId": "psm_id",
     "PSMId": "psm_id",
@@ -217,7 +237,7 @@ STANDARD_COLUMN_NAME_MAP = {
     "peptidegroup": "peptide_group",
     "ModifiedPeptide": "modified_peptide",
     "modifiedpeptide": "modified_peptide",
-    "q-value": "q_value"
+    "q-value": "q_value",
 }
 
 
@@ -231,61 +251,111 @@ def do_rollup(config):
     # Determine input files
     if len(list(src_dir.glob(f"*.{base_level}s.parquet"))) > 0:
         if len(list(src_dir.glob(f"*.{base_level}s"))) > 0:
-            raise RuntimeError(f"Only input files of either type CSV or type Parquet should exist in '{src_dir}', but both types were found.")
+            raise RuntimeError(
+                f"Only input files of either type CSV or type Parquet should exist in '{src_dir}', but both types were found."
+            )
         suffix = ".parquet"
+        dtype = pa.bool_()
     else:
         suffix = ""
+        dtype = np.dtype("bool")
 
-    target_files: list[Path] = sorted(src_dir.glob(f"*.targets.{base_level}s{suffix}"))
-    decoy_files: list[Path] = sorted(src_dir.glob(f"*.decoys.{base_level}s{suffix}"))
-    target_files = [file for file in target_files if not file.name.startswith(file_root)]
-    decoy_files = [file for file in decoy_files if not file.name.startswith(file_root)]
+    target_files: list[Path] = sorted(
+        src_dir.glob(f"*.targets.{base_level}s{suffix}")
+    )
+    decoy_files: list[Path] = sorted(
+        src_dir.glob(f"*.decoys.{base_level}s{suffix}")
+    )
+    target_files = [
+        file for file in target_files if not file.name.startswith(file_root)
+    ]
+    decoy_files = [
+        file for file in decoy_files if not file.name.startswith(file_root)
+    ]
     in_files: list[Path] = sorted(target_files + decoy_files)
     logging.info(f"Reading files: {[str(file) for file in in_files]}")
     # todo: message if no input files found
 
     # Configure readers (read targets/decoys and adjoin is_decoy column)
-    target_readers = [ComputedTabularDataReader(
-        reader=TabularDataReader.from_path(path, column_map=STANDARD_COLUMN_NAME_MAP),
-        column="is_decoy", dtype=np.dtype('bool'), func=lambda df: np.full(len(df), False)) for path in target_files]
-    decoy_readers = [ComputedTabularDataReader(
-        reader=TabularDataReader.from_path(path, column_map=STANDARD_COLUMN_NAME_MAP),
-        column="is_decoy", dtype=np.dtype('bool'), func=lambda df: np.full(len(df), True)) for path in decoy_files]
-    reader = MergedTabularDataReader(target_readers + decoy_readers, priority_column="score")
+    target_readers = [
+        ComputedTabularDataReader(
+            reader=TabularDataReader.from_path(
+                path, column_map=STANDARD_COLUMN_NAME_MAP
+            ),
+            column="is_decoy",
+            dtype=dtype,
+            func=lambda df: np.full(len(df), False),
+        )
+        for path in target_files
+    ]
+    decoy_readers = [
+        ComputedTabularDataReader(
+            reader=TabularDataReader.from_path(
+                path, column_map=STANDARD_COLUMN_NAME_MAP
+            ),
+            column="is_decoy",
+            dtype=dtype,
+            func=lambda df: np.full(len(df), True),
+        )
+        for path in decoy_files
+    ]
+    reader = MergedTabularDataReader(
+        target_readers + decoy_readers, priority_column="score"
+    )
 
     # Determine out levels
     levels = compute_rollup_levels(base_level, DEFAULT_PARENT_LEVELS)
-    levels_not_found = [level for level in levels if level not in reader.get_column_names()]
+    levels_not_found = [
+        level for level in levels if level not in reader.get_column_names()
+    ]
     levels = [level for level in levels if level in reader.get_column_names()]
     logging.info(f"Rolling up to levels: {levels}")
     if len(levels_not_found) > 0:
-        logging.info(f"  (Rollup levels not found in input: {levels_not_found})")
+        logging.info(
+            f"  (Rollup levels not found in input: {levels_not_found})"
+        )
 
     # Determine temporary files
-    temp_files = {level: dest_dir / f"{file_root}temp.{level}s{suffix}" for level in levels}
-    logging.debug(f"Using temp files: { {level: str(file) for level, file in temp_files.items()} }")
+    temp_files = {
+        level: dest_dir / f"{file_root}temp.{level}s{suffix}"
+        for level in levels
+    }
+    logging.debug(
+        f"Using temp files: { {level: str(file) for level, file in temp_files.items()} }"
+    )
 
     # Determine output files
-    out_files = {level: [dest_dir / f"{file_root}targets.{level}s{suffix}",
-                         dest_dir / f"{file_root}decoys.{level}s{suffix}", ]
-                 for level in levels}
-    logging.debug(f"Writing to files: { {level: list(map(str, files)) for level, files in out_files.items()} }")
-
+    out_files = {
+        level: [
+            dest_dir / f"{file_root}targets.{level}s{suffix}",
+            dest_dir / f"{file_root}decoys.{level}s{suffix}",
+        ]
+        for level in levels
+    }
+    logging.debug(
+        f"Writing to files: { {level: list(map(str, files)) for level, files in out_files.items()} }"
+    )
 
     # Determine columns for output files and intermediate files
     column_names = reader.get_column_names()
     column_types = reader.get_column_types()
 
-    temp_column_names, temp_column_types = remove_columns(column_names, column_types, ["q_value", "posterior_error_prob"])
+    temp_column_names, temp_column_types = remove_columns(
+        column_names, column_types, ["q_value", "posterior_error_prob"]
+    )
 
     # Configure temp writers
     temp_buffer_size = 1000
 
-    temp_writers = {level: TabularDataWriter.from_suffix(temp_files[level],
-                                                         columns=temp_column_names,
-                                                         column_types=temp_column_types,
-                                                         buffer_size = temp_buffer_size)
-                    for level in levels}
+    temp_writers = {
+        level: TabularDataWriter.from_suffix(
+            temp_files[level],
+            columns=temp_column_names,
+            column_types=temp_column_types,
+            buffer_size=temp_buffer_size,
+        )
+        for level in levels
+    }
 
     # todo: We need an option to write parquet or sql for example (also, the
     #  output file type could depend on the input file type)
@@ -307,15 +377,23 @@ def do_rollup(config):
         logging.info(f"Read {count} PSMs")
         for level in levels:
             seen = seen_entities[level]
-            logging.info(f"Rollup level {level}: found {len(seen)} unique entities")
+            logging.info(
+                f"Rollup level {level}: found {len(seen)} unique entities"
+            )
 
     # Configure temp readers and output writers
     buffer_size = 1000
-    output_columns, output_types = remove_columns(column_names, column_types, ["is_decoy"])
-    output_options = dict(columns=output_columns, column_types=output_types,
-                          buffer_size=buffer_size)
-    create_writer = lambda path: TabularDataWriter.from_suffix(path, **output_options)
-
+    output_columns, output_types = remove_columns(
+        column_names, column_types, ["is_decoy"]
+    )
+    output_options = dict(
+        columns=output_columns,
+        column_types=output_types,
+        buffer_size=buffer_size,
+    )
+    create_writer = lambda path: TabularDataWriter.from_suffix(
+        path, **output_options
+    )
 
     for level in levels:
         reader = temp_writers[level].get_associated_reader()
@@ -327,7 +405,9 @@ def do_rollup(config):
         scores = data["score"].values
         targets = ~data["is_decoy"].values
 
-        qvals = qvalues.qvalues_from_scores(scores, targets, config.qvalue_algorithm)
+        qvals = qvalues.qvalues_from_scores(
+            scores, targets, config.qvalue_algorithm
+        )
         peps = peps_from_scores(scores, targets, config.peps_algorithm)
 
         data["q_value"] = qvals

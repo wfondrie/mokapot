@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from numpy import dtype
 from typeguard import typechecked
+import pyarrow as pa
 
 from mokapot.tabular_data import TabularDataReader
 
@@ -21,28 +22,45 @@ class JoinedTabularDataReader(TabularDataReader):
     def get_column_types(self) -> list[dtype]:
         return sum([reader.get_column_types() for reader in self.readers], [])
 
-    def _subset_columns(self, column_names: list[str] | None) -> list[
-        list[str] | None]:
+    def _subset_columns(
+        self, column_names: list[str] | None
+    ) -> list[list[str] | None]:
         if column_names is None:
             return [None for _ in self.readers]
-        return [[column_name for column_name in reader.get_column_names() if
-                 column_name in column_names] for reader in self.readers]
+        return [
+            [
+                column_name
+                for column_name in reader.get_column_names()
+                if column_name in column_names
+            ]
+            for reader in self.readers
+        ]
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         subset_column_lists = self._subset_columns(columns)
         df = pd.concat(
-            [reader.read(columns=subset_columns) for reader, subset_columns in
-             zip(self.readers, subset_column_lists)], axis=1)
+            [
+                reader.read(columns=subset_columns)
+                for reader, subset_columns in zip(
+                    self.readers, subset_column_lists
+                )
+            ],
+            axis=1,
+        )
         return df if columns is None else df[columns]
 
-    def get_chunked_data_iterator(self, chunk_size: int,
-                                  columns: list[str] | None = None) -> \
-            Generator[pd.DataFrame, None, None]:
+    def get_chunked_data_iterator(
+        self, chunk_size: int, columns: list[str] | None = None
+    ) -> Generator[pd.DataFrame, None, None]:
         subset_column_lists = self._subset_columns(columns)
-        iterators = [reader.get_chunked_data_iterator(chunk_size=chunk_size,
-                                                      columns=subset_columns)
-                     for reader, subset_columns in
-                     zip(self.readers, subset_column_lists)]
+        iterators = [
+            reader.get_chunked_data_iterator(
+                chunk_size=chunk_size, columns=subset_columns
+            )
+            for reader, subset_columns in zip(
+                self.readers, subset_column_lists
+            )
+        ]
 
         while True:
             try:
@@ -53,11 +71,16 @@ class JoinedTabularDataReader(TabularDataReader):
             yield df if columns is None else df[columns]
 
 
-
 @typechecked
 class ComputedTabularDataReader(TabularDataReader):
 
-    def __init__(self, reader: TabularDataReader, column: str, dtype: np.dtype, func: Callable):
+    def __init__(
+        self,
+        reader: TabularDataReader,
+        column: str,
+        dtype: np.dtype | pa.DataType,
+        func: Callable,
+    ):
         self.reader = reader
         self.dtype = dtype
         self.func = func
@@ -66,22 +89,24 @@ class ComputedTabularDataReader(TabularDataReader):
     def get_column_names(self) -> list[str]:
         return self.reader.get_column_names() + [self.column]
 
-    def get_column_types(self) -> list[dtype]:
+    def get_column_types(self) -> list:
         return self.reader.get_column_types() + [self.dtype]
 
     def _reader_columns(self, columns: list[str]):
         return [column for column in columns if column != self.column]
+
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         df = self.reader.read(self._reader_columns(columns))
         if columns is not None or self.column in columns:
             df[self.column] = self.func(df)
         return df if columns is None else df[columns]
 
-    def get_chunked_data_iterator(self, chunk_size: int,
-                                  columns: list[str] | None = None) -> \
-            Generator[pd.DataFrame, None, None]:
+    def get_chunked_data_iterator(
+        self, chunk_size: int, columns: list[str] | None = None
+    ) -> Generator[pd.DataFrame, None, None]:
         iterator = self.reader.get_chunked_data_iterator(
-            chunk_size=chunk_size, columns=self._reader_columns(columns))
+            chunk_size=chunk_size, columns=self._reader_columns(columns)
+        )
 
         while True:
             try:
@@ -92,10 +117,16 @@ class ComputedTabularDataReader(TabularDataReader):
                 df[self.column] = self.func(df)
             yield df if columns is None else df[columns]
 
+
 @typechecked
 class MergedTabularDataReader(TabularDataReader):
-    def __init__(self, readers: list[TabularDataReader], priority_column: str,
-                 descending: bool = True, reader_chunk_size: int = 10):
+    def __init__(
+        self,
+        readers: list[TabularDataReader],
+        priority_column: str,
+        descending: bool = True,
+        reader_chunk_size: int = 10,
+    ):
         self.readers = readers
         self.priority_column = priority_column
         self.descending = descending
@@ -106,23 +137,34 @@ class MergedTabularDataReader(TabularDataReader):
         self.column_types = readers[0].get_column_types()
 
         for reader in readers:
-            assert reader.get_column_names() == self.column_names, "Column names do not match"
-            assert reader.get_column_types() == self.column_types, "Column types do not match"
-        assert priority_column in self.column_names, "Priority column not found"
+            assert (
+                reader.get_column_names() == self.column_names
+            ), "Column names do not match"
+            assert (
+                reader.get_column_types() == self.column_types
+            ), "Column types do not match"
+        assert (
+            priority_column in self.column_names
+        ), "Priority column not found"
 
     def get_column_names(self) -> list[str]:
         return self.column_names
 
-    def get_column_types(self) -> list[np.dtype]:
+    def get_column_types(self) -> list:
         return self.column_types
 
-    def get_row_iterator(self, columns: list[str] | None = None) -> Generator[
-        pd.DataFrame, None, None]:
+    def get_row_iterator(
+        self, columns: list[str] | None = None
+    ) -> Generator[pd.DataFrame, None, None]:
         chunk_iterators = [
-            reader.get_chunked_data_iterator(chunk_size=self.reader_chunk_size,
-                                             columns=columns)
-            for reader in self.readers]
-        chunk_dfs = [next(chunk_iterator) for chunk_iterator in chunk_iterators]
+            reader.get_chunked_data_iterator(
+                chunk_size=self.reader_chunk_size, columns=columns
+            )
+            for reader in self.readers
+        ]
+        chunk_dfs = [
+            next(chunk_iterator) for chunk_iterator in chunk_iterators
+        ]
 
         chunk_lengths = [len(df) for df in chunk_dfs]
         chunk_row_indices = [0 for _ in chunk_dfs]
@@ -133,23 +175,31 @@ class MergedTabularDataReader(TabularDataReader):
             else:
                 chunk_index = np.argmin(values)
             row = chunk_dfs[chunk_index].iloc[[chunk_row_indices[chunk_index]]]
-            row.reset_index(drop=True, inplace=True)  # Necessary for so that row's index is 0
+            row.reset_index(
+                drop=True, inplace=True
+            )  # Necessary for so that row's index is 0
             yield row
             chunk_row_indices[chunk_index] += 1
             try:
-                if chunk_row_indices[chunk_index] == chunk_lengths[chunk_index]:
+                if (
+                    chunk_row_indices[chunk_index]
+                    == chunk_lengths[chunk_index]
+                ):
                     chunk_dfs[chunk_index] = next(chunk_iterators[chunk_index])
                     chunk_lengths[chunk_index] = len(chunk_dfs[chunk_index])
                     chunk_row_indices[chunk_index] = 0
 
                 new_value = chunk_dfs[chunk_index][self.priority_column].iloc[
-                    chunk_row_indices[chunk_index]]
+                    chunk_row_indices[chunk_index]
+                ]
                 if self.descending and new_value > values[chunk_index]:
                     raise ValueError(
-                        f"Value {new_value} exceeds {self.priority_column} but should be descending")
+                        f"Value {new_value} exceeds {self.priority_column} but should be descending"
+                    )
                 if not self.descending and new_value < values[chunk_index]:
                     raise ValueError(
-                        f"Value {new_value} lower than {self.priority_column} but should be ascending")
+                        f"Value {new_value} lower than {self.priority_column} but should be ascending"
+                    )
 
                 values[chunk_index] = new_value
             except StopIteration:
@@ -159,9 +209,9 @@ class MergedTabularDataReader(TabularDataReader):
                 del chunk_row_indices[chunk_index]
                 del values[chunk_index]
 
-    def get_chunked_data_iterator(self, chunk_size: int,
-                                  columns: list[str] | None = None) -> \
-            Generator[pd.DataFrame, None, None]:
+    def get_chunked_data_iterator(
+        self, chunk_size: int, columns: list[str] | None = None
+    ) -> Generator[pd.DataFrame, None, None]:
 
         row_iterator = self.get_row_iterator(columns=columns)
         finished = False
@@ -192,9 +242,17 @@ def join_readers(readers: list[TabularDataReader]):
 
 
 @typechecked
-def merge_readers(readers: list[TabularDataReader], priority_column: str,
-                  descending: bool = True, reader_chunk_size: int = 10):
-    reader = MergedTabularDataReader(readers, priority_column, descending,
-                                     reader_chunk_size=reader_chunk_size)
+def merge_readers(
+    readers: list[TabularDataReader],
+    priority_column: str,
+    descending: bool = True,
+    reader_chunk_size: int = 10,
+):
+    reader = MergedTabularDataReader(
+        readers,
+        priority_column,
+        descending,
+        reader_chunk_size=reader_chunk_size,
+    )
     iterator = reader.get_chunked_data_iterator(chunk_size=1)
     return iterator
