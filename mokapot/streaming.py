@@ -19,7 +19,7 @@ class JoinedTabularDataReader(TabularDataReader):
     def get_column_names(self) -> list[str]:
         return sum([reader.get_column_names() for reader in self.readers], [])
 
-    def get_column_types(self) -> list[dtype]:
+    def get_column_types(self) -> list:
         return sum([reader.get_column_types() for reader in self.readers], [])
 
     def _subset_columns(
@@ -136,6 +136,7 @@ class MergedTabularDataReader(TabularDataReader):
         self.column_names = readers[0].get_column_names()
         self.column_types = readers[0].get_column_types()
 
+        # todo: all those asserts should raise an exception, could happen in production too
         for reader in readers:
             assert (
                 reader.get_column_names() == self.column_names

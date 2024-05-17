@@ -135,7 +135,7 @@ class ColumnMappedReader(TabularDataReader):
             yield self._get_mapped_dataframe(chunk)
 
 
-def _types_from_dataframe(df: pd.DataFrame) -> list[dtype]:
+def _types_from_dataframe(df: pd.DataFrame) -> list:
     type_map = df.dtypes
     column_names = df.columns.tolist()
     return [type_map[column_name] for column_name in column_names]
@@ -287,11 +287,15 @@ class TabularDataWriter(ABC):
             )
 
         if self.column_types is not None:
-            column_types = _types_from_dataframe(data)
-            if not column_types == self.get_column_types():
-                raise ValueError(
-                    f"Column types {column_types} do not match {self.get_column_types()}"
-                )
+            pass
+            # todo: Commented out for a while till we have a better type
+            #  compatibility check, or agreed on some "super type" of numpy
+            #  dtype and pyarrow types (and what not...)
+            # column_types = _types_from_dataframe(data)
+            # if not column_types == self.get_column_types():
+            #     raise ValueError(
+            #         f"Column types {column_types} do not match {self.get_column_types()}"
+            #     )
 
     def write(self, data: pd.DataFrame):
         self.check_valid_data(data)
