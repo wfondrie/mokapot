@@ -23,7 +23,7 @@ from ..constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
-from ..file_io import TabbedFileReader
+from ..tabular_data import TabularDataReader
 from typing import List
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +33,6 @@ LOGGER = logging.getLogger(__name__)
 def read_pin(
     pin_files,
     max_workers,
-    group_column=None,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
@@ -68,10 +67,8 @@ def read_pin(
     ----------
     pin_files : str, tuple of str, or pandas.DataFrame
         One or more PIN files to read or a :py:class:`pandas.DataFrame`.
-    folds :
-    group_column : str, optional
-        A factor to by which to group PSMs for grouped confidence
-        estimation.
+    max_workers: int
+        Maximum number of parallel processes to use.
     filename_column : str, optional
         The column specifying the MS data file. If :code:`None`, mokapot will
         look for a column called "filename" (case insensitive). This is
@@ -94,14 +91,6 @@ def read_pin(
         :code:`None`, mokapot will look for a column called "charge" (case
         insensitive). This is required for some output formats, such as
         FlashLFQ.
-    to_df : bool, optional
-        Return a :py:class:`pandas.DataFrame` instead of a
-        :py:class:`~mokapot.dataset.LinearPsmDataset`.
-    copy_data : bool, optional
-        If true, a deep copy of the data is created. This uses more memory, but
-        is safer because it prevents accidental modification of the underlying
-        data. This argument only has an effect when `pin_files` is a
-        :py:class:`pandas.DataFrame`
 
     Returns
     -------
@@ -114,7 +103,6 @@ def read_pin(
         read_percolator(
             pin_file,
             max_workers=max_workers,
-            group_column=group_column,
             filename_column=filename_column,
             calcmass_column=calcmass_column,
             expmass_column=expmass_column,
@@ -149,7 +137,6 @@ def create_chunks_with_identifier(data, identifier_column, chunk_size):
 def read_percolator(
     perc_file: Path,
     max_workers,
-    group_column=None,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
@@ -175,8 +162,9 @@ def read_percolator(
     """
 
     LOGGER.info("Reading %s...", perc_file)
-    reader = TabbedFileReader.from_path(perc_file)
+    reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
+    col_types = reader.get_column_types()
 
     # Find all the necessary columns, case-insensitive:
     specid = find_required_column("specid", columns)
@@ -208,17 +196,12 @@ def read_percolator(
     if charge is not None and len(alt_charge) > 1:
         nonfeat.append(charge)
 
-    # Add the grouping column
-    if group_column is not None:
-        nonfeat += [group_column]
-        if group_column not in columns:
-            raise ValueError(f"The '{group_column} column was not found.")
-
     for col in [filename, calcmass, expmass, ret_time]:
         if col is not None:
             nonfeat.append(col)
 
     features = [c for c in columns if c not in nonfeat]
+    nonfeat_types = [col_types[columns.index(col)] for col in nonfeat]
 
     # Check for errors:
     if not all(spectra):
@@ -270,9 +253,9 @@ def read_percolator(
         spectrum_columns=spectra,
         peptide_column=peptides,
         protein_column=proteins,
-        group_column=group_column,
         feature_columns=_feature_columns,
         metadata_columns=nonfeat,
+        metadata_column_types=nonfeat_types,
         level_columns=level_columns,
         filename_column=filename,
         scan_column=scan,
@@ -287,7 +270,7 @@ def read_percolator(
 
 # Utility Functions -----------------------------------------------------------
 def drop_missing_values_and_fill_spectra_dataframe(
-    reader: TabbedFileReader,
+    reader: TabularDataReader,
     column: List,
     spectra: List,
     df_spectra_list: List[pd.DataFrame],
@@ -397,7 +380,7 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
         [[] for _ in range(len(train_idx))] for _ in range(len(psms))
     ]
     for _psms, idx, file_idx in zip(psms, zip(*train_idx), range(len(psms))):
-        reader = TabbedFileReader.from_path(_psms.filename)
+        reader = TabularDataReader.from_path(_psms.filename)
         file_iterator = reader.get_chunked_data_iterator(
             chunk_size=chunk_size, columns=_psms.columns
         )
@@ -412,38 +395,3 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
         for df, orig_idx in zip(train_psms, zip(*train_idx))
     )
     return [pd.concat(df) for df in zip(*train_psms_reordered)]
-
-
-def read_data_for_rescale(psms, subset_max_rescale):
-    data_sizes = [
-        sum(1 for line in open(_psms.filename)) - 1 for _psms in psms
-    ]
-    skip_rows_per_file = [None for _ in psms]
-    if subset_max_rescale and subset_max_rescale < sum(data_sizes):
-        subset_max_rescale_per_file = [
-            subset_max_rescale // len(data_sizes)
-            for _ in range(len(data_sizes))
-        ]
-        subset_max_rescale_per_file[-1] += subset_max_rescale - sum(
-            subset_max_rescale_per_file
-        )
-        skip_rows_per_file = [
-            sorted(
-                np.random.choice(
-                    a=range(1, data_size + 1),
-                    size=data_size - subset_max,
-                    replace=False,
-                )
-            )
-            for data_size, subset_max in zip(
-                data_sizes, subset_max_rescale_per_file
-            )
-        ]
-    return pd.concat(
-        [
-            TabbedFileReader.from_path(_psms.filename).read(
-                list(_psms.feature_columns)
-            )
-            for _psms, skip_rows in zip(psms, skip_rows_per_file)
-        ]
-    ).reset_index(drop=True)

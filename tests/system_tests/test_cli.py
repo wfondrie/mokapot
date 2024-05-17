@@ -182,36 +182,6 @@ def test_cli_saved_models(tmp_path, phospho_files):
     assert Path(tmp_path, "targets.peptides").exists()
 
 
-def test_cli_plugins(tmp_path, phospho_files):
-    try:
-        import mokapot_ctree
-    except ImportError:
-        mokapot_ctree = None
-
-    if mokapot_ctree is None:
-        pytest.skip("Testing plugins is not installed")
-
-    params = [
-        phospho_files[0],
-        "--dest_dir",
-        tmp_path,
-        "--test_fdr",
-        "0.01",
-    ]
-
-    res = run_mokapot_cli(params + ["--help"], capture_output=True)
-    assert "--yell" in res["stderr"]
-
-    # Make sure it does not yell when the plugin is not loaded explicitly
-    res = run_mokapot_cli(params, capture_output=True)
-    assert "Yelling at the user" not in res["stderr"]
-
-    # Check that it does yell when the plugin is loaded and arg is requested
-    params += ["--plugin", "mokapot_ctree", "--yell"]
-    res = run_mokapot_cli(params, capture_output=True)
-    assert "Yelling at the user" in res["stderr"]
-
-
 def test_cli_skip_rollup(tmp_path, phospho_files):
     """Test that peptides file results is skipped when using skip_rollup"""
     params = [
@@ -243,35 +213,4 @@ def test_cli_ensemble(tmp_path, phospho_files):
     run_mokapot_cli(params)
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
-
-
-def test_cli_rescale(tmp_path, scope_files):
-    """Test that rescale works"""
-    params = [
-        scope_files[1],
-        "--dest_dir",
-        tmp_path,
-        "--test_fdr",
-        "0.01",
-        "--save_models",
-    ]
-
-    run_mokapot_cli(params)
-
-    params = [
-        scope_files[0],
-        "--dest_dir",
-        tmp_path,
-        "--test_fdr",
-        "0.01",
-        "--load_models",
-        *list(Path(tmp_path).glob("*.pkl")),
-        "--rescale",
-    ]
-    run_mokapot_cli(params)
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
-
-    run_mokapot_cli(params + ["--subset_max_rescale", "5000"])
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
+    # fixme: should also test the *contents* of the files

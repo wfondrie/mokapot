@@ -251,23 +251,6 @@ def _parser():
     )
 
     parser.add_argument(
-        "--rescale",
-        default=False,
-        action="store_true",
-        help=("rescale data when using pretrained model."),
-    )
-
-    parser.add_argument(
-        "--subset_max_rescale",
-        type=int,
-        default=None,
-        help=(
-            "Maximum number of PSMs to use for rescaling "
-            "data when using pre-trained models."
-        ),
-    )
-
-    parser.add_argument(
         "--override",
         default=False,
         action="store_true",
@@ -292,14 +275,6 @@ def _parser():
             "Load previously saved models and skip model training."
             "Note that the number of models must match the value of --folds."
         ),
-    )
-
-    parser.add_argument(
-        "--plugin",
-        type=str,
-        action="append",
-        default=[],
-        help=("The names of the plugins to use."),
     )
 
     parser.add_argument(

@@ -169,7 +169,6 @@ def test_brew_test_fdr_error_parquet(psms_ondisk_from_parquet, svm):
     assert "Failed to calibrate" in str(err)
 
 
-# @pytest.mark.skip(reason="Not currently working, at least on MacOS.")
 def test_brew_multiprocess(psms_ondisk, svm):
     """Test that multiprocessing doesn't yield an error"""
     _, models, _, _ = mokapot.brew(

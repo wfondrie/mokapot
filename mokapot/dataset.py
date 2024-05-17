@@ -26,7 +26,7 @@ from zlib import crc32
 import numpy as np
 import pandas as pd
 from typeguard import typechecked
-from .file_io import TabbedFileReader
+from .tabular_data import TabularDataReader
 
 from . import qvalues
 from . import utils
@@ -83,7 +83,6 @@ class PsmDataset(ABC):
         psms,
         spectrum_columns,
         feature_columns,
-        group_column,
         other_columns,
         copy_data,
         rng,
@@ -95,22 +94,14 @@ class PsmDataset(ABC):
 
         # Set columns
         self._spectrum_columns = utils.tuplize(spectrum_columns)
-        self._group_column = group_column
 
         if other_columns is not None:
             other_columns = utils.tuplize(other_columns)
         else:
             other_columns = ()
 
-        if group_column is not None:
-            group_column = (group_column,)
-        else:
-            group_column = ()
-
         # Check that all of the columns exist:
-        used_columns = sum(
-            [other_columns, self._spectrum_columns, group_column], tuple()
-        )
+        used_columns = sum([other_columns, self._spectrum_columns], tuple())
 
         missing_columns = [c not in self.data.columns for c in used_columns]
         if not missing_columns:
@@ -160,13 +151,6 @@ class PsmDataset(ABC):
         identify a mass spectrum.
         """
         return self.data.loc[:, self._spectrum_columns]
-
-    @property
-    def groups(self):
-        """
-        A :py:class:`pandas.Series` of the groups for confidence estimation.
-        """
-        return self.data.loc[:, self._group_column]
 
     @property
     def columns(self):
@@ -318,8 +302,6 @@ class LinearPsmDataset(PsmDataset):
         The column that specifies which protein(s) the detected peptide might
         have originated from. This column is not used to compute protein-level
         confidence estimates (see :py:meth:`add_proteins()`).
-    group_column : str, optional
-        A factor by which to group PSMs for grouped confidence estimation.
     feature_columns : str or tuple of str, optional
         The column(s) specifying the feature(s) for mokapot analysis. If
         :code:`None`, these are assumed to be all of the columns that were not
@@ -366,7 +348,6 @@ class LinearPsmDataset(PsmDataset):
     features : pandas.DataFrame
     spectra : pandas.DataFrame
     peptides : pandas.Series
-    groups : pandas.Series
     targets : numpy.ndarray
     columns : list of str
     has_proteins : bool
@@ -381,7 +362,6 @@ class LinearPsmDataset(PsmDataset):
         spectrum_columns,
         peptide_column,
         protein_column=None,
-        group_column=None,
         feature_columns=None,
         filename_column=None,
         scan_column=None,
@@ -420,7 +400,6 @@ class LinearPsmDataset(PsmDataset):
             psms=psms,
             spectrum_columns=spectrum_columns,
             feature_columns=feature_columns,
-            group_column=group_column,
             other_columns=other_columns,
             copy_data=copy_data,
             rng=rng,
@@ -469,120 +448,6 @@ class LinearPsmDataset(PsmDataset):
         )
 
 
-class CrossLinkedPsmDataset(PsmDataset):
-    """
-    Store and analyze a collection of PSMs
-
-    A `PsmDataset` is intended to store a collection of PSMs from
-    standard, data-dependent acquisition proteomics experiments and
-    defines the necessary fields for mokapot analysis.
-
-    Parameters
-    ----------
-    psms : pandas.DataFrame
-        A collection of PSMs.
-    target_column : tuple of str
-        The columns specifying whether each peptide of a PSM is a target
-        (`True`) or a decoy (`False`) sequence. These columns will be coerced
-        to boolean, so the
-        specifying targets as `1` and decoys as `-1` will not work correctly.
-    spectrum_columns : str or tuple of str
-        The column(s) that collectively identify unique mass spectra.
-        Multiple columns can be useful to avoid combining scans from
-        multiple mass spectrometry runs.
-    peptide_columns : str or tuple of str
-        The column(s) that collectively define a peptide. Multiple
-        columns may be useful if sequence and modifications are provided
-        as separate columns.
-    protein_column : str
-        The column that specifies which protein(s) the detected peptide
-        might have originated from. This column should contain a
-        delimited list of protein identifiers that match the FASTA file
-        used for database searching.
-    feature_columns : str or tuple of str
-        The column(s) specifying the feature(s) for mokapot analysis. If
-        `None`, these are assumed to be all columns not specified in the
-        previous parameters.
-
-    :meta private:
-    """
-
-    def __init__(
-        self,
-        psms: pd.DataFrame,
-        spectrum_columns,
-        target_columns,
-        peptide_columns,
-        protein_columns,
-        feature_columns=None,
-    ):
-        """Initialize a PsmDataset object."""
-        self._target_columns = utils.tuplize(target_columns)
-        self._peptide_columns = tuple(
-            utils.tuplize(c) for c in peptide_columns
-        )
-        self._protein_columns = tuple(
-            utils.tuplize(c) for c in protein_columns
-        )
-
-        # Finish initialization
-        other_columns = sum(
-            [
-                self._target_columns,
-                *self._peptide_columns,
-                *self._protein_columns,
-            ],
-            tuple(),
-        )
-
-        super().__init__(
-            psms=psms,
-            spectrum_columns=spectrum_columns,
-            feature_columns=feature_columns,
-            other_columns=other_columns,
-        )
-
-    @property
-    def targets(self):
-        """An array indicating whether each PSM is a target."""
-        bool_targs = self.data.loc[:, self._target_columns].astype(bool)
-        return bool_targs.sum(axis=1).values
-
-    def _update_labels(self, scores, eval_fdr=0.01, desc=True):
-        """
-        Return the label for each PSM, given it's score.
-
-        This method is used during model training to define positive
-        examples, which are traditionally the target PSMs that fall
-        within a specified FDR threshold.
-
-        Parameters
-        ----------
-        scores : numpy.ndarray
-            The score used to rank the PSMs.
-        eval_fdr : float
-            The false discovery rate threshold to use.
-        desc : bool
-            Are higher scores better?
-
-        Returns
-        -------
-        np.ndarray
-            The label of each PSM, where 1 indicates a positive example,
-            -1 indicates a negative example, and 0 removes the PSM from
-            training. Typically, 0 is reserved for targets, below a
-            specified FDR threshold.
-        """
-        qvals = qvalues.crosslink_tdc(
-            scores, num_targets=self.targets, desc=desc
-        )
-        unlabeled = np.logical_and(qvals > eval_fdr, self.targets)
-        new_labels = np.ones(len(qvals))
-        new_labels[~self.targets] = -1
-        new_labels[unlabeled] = 0
-        return new_labels
-
-
 class OnDiskPsmDataset:
     @typechecked
     def __init__(
@@ -593,9 +458,9 @@ class OnDiskPsmDataset:
         spectrum_columns,
         peptide_column,
         protein_column,
-        group_column,
         feature_columns,
         metadata_columns,
+        metadata_column_types,
         level_columns,
         filename_column,
         scan_column,
@@ -613,9 +478,9 @@ class OnDiskPsmDataset:
         self.peptide_column = peptide_column
         self.protein_column = protein_column
         self.spectrum_columns = spectrum_columns
-        self.group_column = group_column
         self.feature_columns = feature_columns
         self.metadata_columns = metadata_columns
+        self.metadata_column_types = metadata_column_types
         self.level_columns = level_columns
         self.filename_column = filename_column
         self.scan_column = scan_column
@@ -626,11 +491,10 @@ class OnDiskPsmDataset:
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
 
-        # todo: check that if filename is given all column specs are really  columns of the file
         # todo: btw: should not get the filename but a reader object or something, in order to parse other filetypes without if's
         if filename:
-            columns = TabbedFileReader.from_path(
-                self.filename
+            columns = TabularDataReader.from_path(
+                filename
             ).get_column_names()
 
             def check_column(column):
@@ -649,7 +513,6 @@ class OnDiskPsmDataset:
             check_column(self.peptide_column)
             check_column(self.protein_column)
             check_columns(self.spectrum_columns)
-            check_column(self.group_column)
             # check_columns(self.feature_columns)  # fixme: we don't check these for now, otherwise strange things happen
             check_columns(self.metadata_columns)
             check_columns(self.level_columns)
@@ -823,7 +686,7 @@ class OnDiskPsmDataset:
         return spectra_idx
 
     def read_data(self, columns=None, chunk_size=None):
-        reader = TabbedFileReader.from_path(self.filename)
+        reader = TabularDataReader.from_path(self.filename)
         if chunk_size:
             return reader.get_chunked_data_iterator(
                 chunk_size=chunk_size, columns=columns
@@ -919,7 +782,7 @@ def update_labels(
     eval_fdr=0.01,
     desc=True,
 ):
-    reader = TabbedFileReader.from_path(file_name)
+    reader = TabularDataReader.from_path(file_name)
     df = reader.read(columns=[target_column])
     return _update_labels(
         scores=scores,

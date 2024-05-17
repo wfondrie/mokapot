@@ -1,21 +1,22 @@
+import sqlite3
+
 import pandas as pd
-from mokapot.file_io import SqliteWriter
+from mokapot.confidence_writer import ConfidenceSqliteWriter
 
 
 def test_sqlite_writer(confidence_write_data):
     df_psm = confidence_write_data["psms"]
-    confidence_writer = SqliteWriter(
-        ":memory:", columns=df_psm.columns.to_list()
-    )
     candidate_ids = df_psm.PSMId.to_list()
-    conn = prepare_tables_sqlite_db(
-        confidence_writer.connection, candidate_ids
+    connection = sqlite3.connect(database = ":memory:")
+    prepare_tables_sqlite_db(
+        connection, candidate_ids
     )
 
     for level, df in confidence_write_data.items():
-        confidence_writer.append_data(
-            df, level, "q_value", "posterior_error_prob"
+        confidence_writer = ConfidenceSqliteWriter(
+            connection, columns=df_psm.columns.to_list(), level=level
         )
+        confidence_writer.append_data(df)
 
     level_tables = {
         "psms": "CANDIDATE",
@@ -25,7 +26,7 @@ def test_sqlite_writer(confidence_write_data):
         "peptidegroups": "PEPTIDE_GROUP_VALIDATION",
     }
     for level, level_table in level_tables.items():
-        df = pd.read_sql(f"select * from {level_table};", conn)
+        df = pd.read_sql(f"SELECT * FROM {level_table};", connection)
         df_test = confidence_write_data[level]
         assert len(df_test) == len(
             df
@@ -49,4 +50,3 @@ def prepare_tables_sqlite_db(connection, candidate_ids):
         connection.execute(
             f"INSERT INTO CANDIDATE (CANDIDATE_ID) VALUES({c_id});"
         )
-    return connection

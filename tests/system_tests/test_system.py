@@ -7,18 +7,21 @@ results and Percolator results.
 """
 
 import logging
+import warnings
 from pathlib import Path
 
 import pandas as pd
 import mokapot
-from mokapot.file_io import TabbedFileReader
+from mokapot.tabular_data import TabularDataReader, CSVFileReader
 
 logging.basicConfig(level=logging.INFO)
 
 
 def test_compare_to_percolator(tmp_path):
     """Test that mokapot get almost the same answer as Percolator"""
-    dat = mokapot.read_pin(Path("data", "phospho_rep1.pin"), max_workers=3)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=pd.errors.ParserWarning)
+        dat = mokapot.read_pin(Path("data", "phospho_rep1.pin"), max_workers=3)
     proteins = mokapot.read_fasta(Path("data", "human_sp_td.fasta"))
     psms, models, scores, desc = mokapot.brew(dat)
     mokapot.assign_confidence(
@@ -37,11 +40,11 @@ def test_compare_to_percolator(tmp_path):
         path.name.format(**kwargs)
     )
     perc_res = {
-        p: TabbedFileReader.from_path(format_name(perc_path, p=p)).read()
+        p: CSVFileReader(format_name(perc_path, p=p)).read()
         for p in ["proteins"]
     }
     moka_res = {
-        p: TabbedFileReader.from_path(format_name(moka_path, p=p)).read()
+        p: CSVFileReader(format_name(moka_path, p=p)).read()
         for p in ["proteins"]
     }
 

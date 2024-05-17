@@ -13,6 +13,7 @@ from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from triqler.qvality import getQvaluesFromScores
 from mokapot.qvalues import tdc
 import pyarrow.parquet as pq
+import pyarrow as pa
 from mokapot.utils import convert_targets_column
 
 
@@ -28,7 +29,6 @@ def psm_df_6():
     data = {
         "target": [True, True, True, False, False, False],
         "spectrum": [1, 2, 3, 4, 5, 1],
-        "group": [1, 1, 2, 2, 2, 1],
         "peptide": ["a", "b", "a", "c", "d", "e"],
         "protein": ["A", "B"] * 3,
         "feature_1": [4, 3, 2, 2, 1, 0],
@@ -47,7 +47,6 @@ def psm_df_100(tmp_path):
         "scannr": np.random.randint(0, 100, 50),
         "calcmass": rng.uniform(500, 2000, size=50),
         "expmass": rng.uniform(500, 2000, size=50),
-        "group": rng.choice(2, size=50),
         "peptide": [_random_peptide(5, rng) for _ in range(50)],
         "proteins": ["_dummy" for _ in range(50)],
         "score": np.concatenate([rng.normal(3, size=20), rng.normal(size=30)]),
@@ -62,7 +61,6 @@ def psm_df_100(tmp_path):
         "scannr": np.random.randint(0, 100, 50),
         "calcmass": rng.uniform(500, 2000, size=50),
         "expmass": rng.uniform(500, 2000, size=50),
-        "group": rng.choice(2, size=50),
         "peptide": [_random_peptide(5, rng) for _ in range(50)],
         "proteins": ["_dummy" for _ in range(50)],
         "score": rng.normal(size=50),
@@ -87,7 +85,6 @@ def psm_df_100_parquet(tmp_path):
         "scannr": np.random.randint(0, 100, 50),
         "calcmass": rng.uniform(500, 2000, size=50),
         "expmass": rng.uniform(500, 2000, size=50),
-        "group": rng.choice(2, size=50),
         "peptide": [_random_peptide(5, rng) for _ in range(50)],
         "proteins": ["_dummy" for _ in range(50)],
         "score": np.concatenate([rng.normal(3, size=20), rng.normal(size=30)]),
@@ -102,7 +99,6 @@ def psm_df_100_parquet(tmp_path):
         "scannr": np.random.randint(0, 100, 50),
         "calcmass": rng.uniform(500, 2000, size=50),
         "expmass": rng.uniform(500, 2000, size=50),
-        "group": rng.choice(2, size=50),
         "peptide": [_random_peptide(5, rng) for _ in range(50)],
         "proteins": ["_dummy" for _ in range(50)],
         "score": rng.normal(size=50),
@@ -127,7 +123,6 @@ def psm_df_1000(tmp_path):
         "scannr": np.random.randint(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
-        "group": [0 for _ in range(500)],
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
         "score": np.concatenate(
@@ -149,7 +144,6 @@ def psm_df_1000(tmp_path):
         "scannr": np.random.randint(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
-        "group": [0 for _ in range(500)],
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
         "score": rng.normal(size=500),
@@ -182,7 +176,6 @@ def psm_df_1000_parquet(tmp_path):
         "scannr": np.random.randint(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
-        "group": [0 for _ in range(500)],
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
         "score": np.concatenate(
@@ -204,7 +197,6 @@ def psm_df_1000_parquet(tmp_path):
         "scannr": np.random.randint(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
-        "group": [0 for _ in range(500)],
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
         "score": rng.normal(size=500),
@@ -268,7 +260,6 @@ def psms_ondisk():
         rt_column=None,
         charge_column=None,
         protein_column=None,
-        group_column=None,
         feature_columns=[
             "CalcMass",
             "lnrSp",
@@ -294,6 +285,7 @@ def psms_ondisk():
             "Proteins",
             "Label",
         ],
+        metadata_column_types=["int", "int", "int", "string", "int"],
         level_columns=["Peptide"],
         filename_column=None,
         specId_column="SpecId",
@@ -323,7 +315,6 @@ def psms_ondisk_from_parquet():
         rt_column=None,
         charge_column=None,
         protein_column="Proteins",
-        group_column=None,
         feature_columns=[
             "Mass",
             "MS8_feature_5",
@@ -345,6 +336,13 @@ def psms_ondisk_from_parquet():
             "Peptide",
             "Proteins",
             "ExpMass",
+        ],
+        metadata_column_types=[
+            pa.int64(),
+            pa.int64(),
+            pa.int64(),
+            pa.string(),
+            pa.int64(),
         ],
         level_columns=["Peptide"],
         filename_column=None,
@@ -612,13 +610,13 @@ def peptide_csv_file(tmp_path):
 def psms_iterator():
     """Create a standard psms iterable"""
     return [
-        ["1", "1", "HLAQLLR", "-5.75", "0.108", "1.0", "_.dummy._\n"],
-        ["2", "0", "HLAQLLR", "-5.81", "0.109", "1.0", "_.dummy._\n"],
-        ["3", "0", "NVPTSLLK", "-5.83", "0.11", "1.0", "_.dummy._\n"],
-        ["4", "1", "QILVQLR", "-5.92", "0.12", "1.0", "_.dummy._\n"],
-        ["5", "1", "HLAQLLR", "-6.05", "0.13", "1.0", "_.dummy._\n"],
-        ["6", "0", "QILVQLR", "-6.06", "0.14", "1.0", "_.dummy._\n"],
-        ["7", "1", "SRTSVIPGPK", "-6.12", "0.15", "1.0", "_.dummy._\n"],
+        {"PSMId":"1", "Label":"1", "Peptide":"HLAQLLR", "score":"-5.75", "q-value":"0.108","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
+        {"PSMId":"2", "Label":"0", "Peptide":"HLAQLLR", "score":"-5.81", "q-value":"0.109","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
+        {"PSMId":"3", "Label":"0", "Peptide":"NVPTSLLK","score": "-5.83","q-value": "0.11","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
+        {"PSMId":"4", "Label":"1", "Peptide":"QILVQLR", "score":"-5.92", "q-value":"0.12", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
+        {"PSMId":"5", "Label":"1", "Peptide":"HLAQLLR", "score":"-6.05", "q-value":"0.13", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
+        {"PSMId":"6", "Label":"0", "Peptide":"QILVQLR", "score":"-6.06", "q-value":"0.14", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
+        {"PSMId":"7", "Label":"1", "Peptide":"SRTSVIPGPK", "score":"-6.12","q-value": "0.15","posterior_error_prob": "1.0", "proteinIds":"_.dummy._"},
     ]
 
 

@@ -8,6 +8,7 @@ from operator import itemgetter
 
 import numpy as np
 from joblib import Parallel, delayed
+from typeguard import typechecked
 
 from .model import PercolatorModel
 from . import utils
@@ -26,15 +27,16 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
+@typechecked
 def brew(
     psms,
     model=None,
-    test_fdr=0.01,
-    folds=3,
-    max_workers=1,
+    test_fdr:float=0.01,
+    folds:int=3,
+    max_workers:int=1,
     rng=None,
-    subset_max_train=None,
-    ensemble=False,
+    subset_max_train:int|None=None,
+    ensemble:bool=False,
 ):
     """
     Re-score one or more collection of PSMs.
@@ -361,7 +363,6 @@ def _create_psms(psms, data, enforce_checks=True):
         spectrum_columns=psms.spectrum_columns,
         peptide_column=psms.peptide_column,
         protein_column=psms.protein_column,
-        group_column=psms.group_column,
         feature_columns=psms.feature_columns,
         filename_column=psms.filename_column,
         scan_column=psms.scan_column,
