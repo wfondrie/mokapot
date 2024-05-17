@@ -506,7 +506,7 @@ class ParquetFileWriter(TabularDataWriter):
         data.to_parquet(self.file_name, index=False)
 
     def get_associated_reader(self):
-        return CSVFileReader(self.file_name)
+        return ParquetFileReader(self.file_name)
 
 
 @typechecked
@@ -554,11 +554,15 @@ class SqliteWriter(TabularDataWriter, ABC):
 
 
 @typechecked
-def remove_columns(column_names: list[str], column_types: list,
-                   columns_to_remove: list[str]) -> tuple[
-    list[str], list]:
-    temp_columns = [(column, type) for column, type in
-                    zip(column_names, column_types) if
-                    column not in columns_to_remove]
+def remove_columns(
+    column_names: list[str],
+    column_types: list,
+    columns_to_remove: list[str],
+) -> tuple[list[str], list]:
+    temp_columns = [
+        (column, type)
+        for column, type in zip(column_names, column_types)
+        if column not in columns_to_remove
+    ]
     temp_column_names, temp_column_types = zip(*temp_columns)
     return (list(temp_column_names), list(temp_column_types))
