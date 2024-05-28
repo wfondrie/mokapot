@@ -674,7 +674,6 @@ def assign_confidence(
             do_rollup,
             max_workers,
             score,
-            sep,
         ) as sorted_file_iterator:
 
             LOGGER.info("Assigning confidence...")
@@ -795,7 +794,6 @@ def create_sorted_file_iterator(
     do_rollup: bool,
     max_workers: int,
     score: np.ndarray[float],
-    sep: str,
 ):
     # Read from the input psms (PsmDataset) and write into smaller
     # sorted files, by
@@ -831,9 +829,7 @@ def create_sorted_file_iterator(
     scores_metadata_paths = list(
         dest_dir.glob(f"{file_prefix}scores_metadata_*")
     )
-    sorted_file_iterator = merge_sort(
-        scores_metadata_paths, col_score="score", sep=sep
-    )
+    sorted_file_iterator = merge_sort(scores_metadata_paths, col_score="score")
 
     # Return the sorted iterator and clean up afterwards, regardless of whether
     # an exception was thrown in the `with` block

@@ -97,7 +97,7 @@ def create_chunks(
     return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
-def get_next_row(file_handles, current_rows, col_index, sep="\t"):
+def get_next_row(file_handles, current_rows, col_index):
     max_key = max_row = None
     max_score = None
     for key, row in current_rows.items():
@@ -141,9 +141,9 @@ def get_row_from_batch(
     return [max_row, max_key]
 
 
-def merge_sort_csv(paths, col_score, sep="\t"):
+def merge_sort_csv(paths, col_score):
     file_handles = {i: open(path, "r") for i, path in enumerate(paths)}
-    dict_readers = {i: csv.DictReader(handle, delimiter=sep)
+    dict_readers = {i: csv.DictReader(handle, delimiter="\t")
                     for i, handle in file_handles.items()}
     current_rows = {i: next(f) for i, f in dict_readers.items()}
 
@@ -175,17 +175,16 @@ def merge_sort_parquet(paths, col_score):
             col_score,
         )
         if row is not None:
-            row = {
-                key: str(value) for key, value in row.items()
-            }  # to keep types similar to csv merge sort
+            # to keep types similar to csv merge sort
+            row = {key: str(value) for key, value in row.items()}
             yield row
 
 
-def merge_sort(paths, col_score, sep="\t"):
+def merge_sort(paths, col_score):
     if paths[0].suffix == ".parquet":
         return merge_sort_parquet(paths, col_score)
     else:
-        return merge_sort_csv(paths, col_score, sep)
+        return merge_sort_csv(paths, col_score)
 
 
 def get_dataframe_from_records(
