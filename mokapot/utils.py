@@ -141,7 +141,7 @@ def get_row_from_batch(
     return [max_row, max_key]
 
 
-def merge_sort_csv(paths, col_score, target_column=None, sep="\t"):
+def merge_sort_csv(paths, col_score, sep="\t"):
     file_handles = {i: open(path, "r") for i, path in enumerate(paths)}
     dict_readers = {i: csv.DictReader(handle, delimiter=sep)
                     for i, handle in file_handles.items()}
@@ -150,14 +150,12 @@ def merge_sort_csv(paths, col_score, target_column=None, sep="\t"):
     while dict_readers != {}:
         [row, key] = get_next_row(dict_readers, current_rows, col_score)
         if row is not None:
-            if target_column:
-                row[target_column] = str(key)
             yield row
 
     for i, handle in file_handles.items():
         handle.close()
 
-def merge_sort_parquet(paths, col_score, target_column=None):
+def merge_sort_parquet(paths, col_score):
     file_handles = {
         i: pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
         for i, path in enumerate(paths)
@@ -180,19 +178,14 @@ def merge_sort_parquet(paths, col_score, target_column=None):
             row = {
                 key: str(value) for key, value in row.items()
             }  # to keep types similar to csv merge sort
-            if target_column:
-                # row.insert(1, str(key))
-                print(target_column, key)
-                row[target_column] = str(key)
             yield row
 
 
-def merge_sort(paths, col_score, target_column=None, sep="\t"):
-
+def merge_sort(paths, col_score, sep="\t"):
     if paths[0].suffix == ".parquet":
-        return merge_sort_parquet(paths, col_score, target_column)
+        return merge_sort_parquet(paths, col_score)
     else:
-        return merge_sort_csv(paths, col_score, target_column, sep)
+        return merge_sort_csv(paths, col_score, sep)
 
 
 def get_dataframe_from_records(
