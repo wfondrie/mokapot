@@ -841,7 +841,10 @@ def create_sorted_file_iterator(
         yield sorted_file_iterator
     finally:
         for sc_path in scores_metadata_paths:
-            sc_path.unlink()
+            try:
+                sc_path.unlink()
+            except Exception as e:
+                LOGGER.warning("Caught exception while deleting temp files: %s", e)
 
 
 @typechecked

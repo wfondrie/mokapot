@@ -142,21 +142,20 @@ def get_row_from_batch(
 
 
 def merge_sort_csv(paths, col_score, target_column=None, sep="\t"):
-    file_handles = {
-        i: csv.DictReader(open(path, "r"), delimiter=sep)
-        for i, path in enumerate(paths)
-    }
-    current_rows = {}
-    for key, f in file_handles.items():
-        current_rows[key] = next(f)
+    file_handles = {i: open(path, "r") for i, path in enumerate(paths)}
+    dict_readers = {i: csv.DictReader(handle, delimiter=sep)
+                    for i, handle in file_handles.items()}
+    current_rows = {i: next(f) for i, f in dict_readers.items()}
 
-    while file_handles != {}:
-        [row, key] = get_next_row(file_handles, current_rows, col_score)
+    while dict_readers != {}:
+        [row, key] = get_next_row(dict_readers, current_rows, col_score)
         if row is not None:
             if target_column:
                 row[target_column] = str(key)
             yield row
 
+    for i, handle in file_handles.items():
+        handle.close()
 
 def merge_sort_parquet(paths, col_score, target_column=None):
     file_handles = {
