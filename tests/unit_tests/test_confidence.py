@@ -1,16 +1,30 @@
 """Test that Confidence classes are working correctly"""
+import contextlib
 
 import numpy as np
 import pyarrow.parquet as pq
 import pandas as pd
 import copy
 from pathlib import Path
+
+from pandas.testing import assert_frame_equal
 from pytest import approx
 import pyarrow as pa
 
 import mokapot
 from mokapot import OnDiskPsmDataset, assign_confidence
 from mokapot.confidence import get_unique_peptides_from_psms
+
+
+@contextlib.contextmanager
+def run_with_chunk_size(chunk_size):
+    old_chunk_size = mokapot.confidence.CONFIDENCE_CHUNK_SIZE
+    try:
+        # We need to fully qualified path name to modify the constants
+        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = chunk_size
+        yield
+    finally:
+        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = old_chunk_size
 
 
 def test_chunked_assign_confidence(psm_df_1000, tmp_path):
@@ -61,10 +75,8 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
         specId_column="specid",
         spectra_dataframe=df_spectra,
     )
-    try:
+    with run_with_chunk_size(100):
         np.random.seed(42)
-        # We need to fully qualified path name to modify the constants
-        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = 100
         assign_confidence(
             [copy.copy(psms_disk)],
             prefixes=[None],
@@ -72,10 +84,6 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
             dest_dir=tmp_path,
             max_workers=4,
             eval_fdr=0.02,
-        )
-    finally:
-        mokapot.confidence.CONFIDENCE_CHUNK_SIZE = (
-            mokapot.constants.CONFIDENCE_CHUNK_SIZE
         )
 
     df_results_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
@@ -142,17 +150,31 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
         specId_column="specid",
         spectra_dataframe=df_spectra,
     )
-    np.random.seed(42)
-    assign_confidence(
-        [copy.copy(psms_disk)],
-        prefixes=[None],
-        descs=[True],
-        dest_dir=tmp_path,
-        max_workers=4,
-        eval_fdr=0.02,
-    )
-    df_results_group = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
+    with run_with_chunk_size(100):
+        np.random.seed(42)
+        assign_confidence(
+            [copy.copy(psms_disk)],
+            prefixes=[None],
+            descs=[True],
+            dest_dir=tmp_path,
+            max_workers=4,
+            eval_fdr=0.02,
+        )
+        df_results_group1 = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
 
+    with run_with_chunk_size(10000):
+        np.random.seed(42)
+        assign_confidence(
+            [copy.copy(psms_disk)],
+            prefixes=[None],
+            descs=[True],
+            dest_dir=tmp_path,
+            max_workers=4,
+            eval_fdr=0.02,
+        )
+        df_results_group2 = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
+
+    assert_frame_equal(df_results_group1, df_results_group2)
 
 def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
     psms_iterator = psms_iterator
