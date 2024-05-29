@@ -5,10 +5,11 @@ Utility functions
 import itertools
 import gzip
 from pathlib import Path
-from typing import Union, List
+from typing import Union, List, Iterator, TypeAlias
 
 import numpy as np
 import pandas as pd
+
 from .constants import MERGE_SORT_CHUNK_SIZE
 import pyarrow.parquet as pq
 from typeguard import typechecked
@@ -97,94 +98,65 @@ def create_chunks(
     return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
-def get_next_row(file_handles, current_rows, col_index):
+DataRow: TypeAlias = dict[str, str]
+
+
+@typechecked
+def get_next_row(
+        row_iterator_dict: dict[int, Iterator[DataRow]],
+        current_row_dict: dict[int, DataRow],
+        score_column: str) -> DataRow:
     max_key = max_row = None
     max_score = None
-    for key, row in current_rows.items():
-        score = float(row[col_index])
+    for key, row in current_row_dict.items():
+        score = float(row[score_column])
         if max_score is None or max_score < score:
             max_score = score
             max_key = key
             max_row = row
 
     try:
-        current_rows[max_key] = next(file_handles[max_key])
-
+        current_row_dict[max_key] = next(row_iterator_dict[max_key])
     except StopIteration:
-        del current_rows[max_key]
-        del file_handles[max_key]
-        return [max_row, max_key]
+        del current_row_dict[max_key]
+        del row_iterator_dict[max_key]
 
-    return [max_row, max_key]
-
-
-def get_row_from_batch(
-    file_handles, current_batches, current_indices, max_indices, col_score
-):
-    max_key = None
-    max_score = None
-    for key, batch in current_batches.items():
-        score = batch[current_indices[key]][col_score]
-        if max_score is None or max_score < score:
-            max_score = score
-            max_key = key
-    max_row = current_batches[max_key][current_indices[max_key]]
-    current_indices[max_key] += 1
-    if current_indices[max_key] == max_indices[max_key]:
-        try:
-            current_batches[max_key] = next(file_handles[max_key]).to_pylist()
-            current_indices[max_key] = 0
-            max_indices[max_key] = len(current_batches[max_key])
-        except StopIteration:
-            del file_handles[max_key]
-            del current_batches[max_key]
-    return [max_row, max_key]
+    return max_row
 
 
-def merge_sort_csv(paths, col_score):
-    file_handles = {i: open(path, "r") for i, path in enumerate(paths)}
-    dict_readers = {i: csv.DictReader(handle, delimiter="\t")
-                    for i, handle in file_handles.items()}
-    current_rows = {i: next(f) for i, f in dict_readers.items()}
-
-    while dict_readers != {}:
-        [row, key] = get_next_row(dict_readers, current_rows, col_score)
-        if row is not None:
-            yield row
-
-    for i, handle in file_handles.items():
-        handle.close()
-
-def merge_sort_parquet(paths, col_score):
-    file_handles = {
-        i: pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
-        for i, path in enumerate(paths)
-    }
-    current_batches = {}
-    current_indices = [0] * len(paths)
-    max_indices = [0] * len(paths)
-    for key, file in file_handles.items():
-        current_batches[key] = next(file).to_pylist()
-        max_indices[key] = len(current_batches[key])
-    while file_handles != {}:
-        [row, key] = get_row_from_batch(
-            file_handles,
-            current_batches,
-            current_indices,
-            max_indices,
-            col_score,
-        )
-        if row is not None:
-            # to keep types similar to csv merge sort
-            row = {key: str(value) for key, value in row.items()}
+@typechecked
+def csv_row_iterator(path: Path) -> Iterator[DataRow]:
+    with open(path, "r") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
             yield row
 
 
-def merge_sort(paths, col_score):
+@typechecked
+def parquet_row_iterator(path: Path) -> Iterator[DataRow]:
+    batch_iterator = pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
+    for record_batch in batch_iterator:
+        batch = record_batch.to_pylist()
+        for raw_row in batch:
+            row = {key: str(value) for key, value in raw_row.items()}
+            yield row
+
+
+@typechecked
+def merge_sort(paths: list[Path], score_column: str):
     if paths[0].suffix == ".parquet":
-        return merge_sort_parquet(paths, col_score)
+        row_iterator_func = parquet_row_iterator
     else:
-        return merge_sort_csv(paths, col_score)
+        row_iterator_func = csv_row_iterator
+
+    row_iterator_dict = {i: row_iterator_func(path)
+                         for i, path in enumerate(paths)}
+    current_row_dict = {i: next(row_iter)
+                        for i, row_iter in row_iterator_dict.items()}
+
+    while row_iterator_dict != {}:
+        row = get_next_row(row_iterator_dict, current_row_dict, score_column)
+        if row is not None:
+            yield row
 
 
 def get_dataframe_from_records(

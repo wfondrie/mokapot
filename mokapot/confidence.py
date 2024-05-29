@@ -829,7 +829,7 @@ def create_sorted_file_iterator(
     scores_metadata_paths = list(
         dest_dir.glob(f"{file_prefix}scores_metadata_*")
     )
-    sorted_file_iterator = merge_sort(scores_metadata_paths, col_score="score")
+    sorted_file_iterator = merge_sort(scores_metadata_paths, score_column="score")
 
     # Return the sorted iterator and clean up afterwards, regardless of whether
     # an exception was thrown in the `with` block
