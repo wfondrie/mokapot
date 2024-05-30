@@ -1,4 +1,4 @@
-from typing import Generator, Callable
+from typing import Generator, Callable, Iterator
 
 import pandas as pd
 import numpy as np
@@ -156,59 +156,56 @@ class MergedTabularDataReader(TabularDataReader):
 
     def get_row_iterator(
         self, columns: list[str] | None = None
-    ) -> Generator[pd.DataFrame, None, None]:
-        chunk_iterators = [
-            reader.get_chunked_data_iterator(
+    ) -> Iterator[pd.DataFrame]:
+
+        def row_iterator_from_chunked(chunked_iter: Iterator) -> Iterator:
+            for chunk in chunked_iter:
+                # for row in chunk.:
+                #     yield row
+                for i in range(len(chunk)):
+                    row = chunk.iloc[[i]]
+                    row.index = [0]
+                    yield row
+        def get_value(row, col):
+            return row[col].iloc[0]
+
+        row_iterators = [
+            row_iterator_from_chunked(reader.get_chunked_data_iterator(
                 chunk_size=self.reader_chunk_size, columns=columns
-            )
+            ))
             for reader in self.readers
         ]
-        chunk_dfs = [
-            next(chunk_iterator) for chunk_iterator in chunk_iterators
+        current_rows = [
+            next(row_iterator) for row_iterator in row_iterators
         ]
 
-        chunk_lengths = [len(df) for df in chunk_dfs]
-        chunk_row_indices = [0 for _ in chunk_dfs]
-        values = [df[self.priority_column].iloc[0] for df in chunk_dfs]
-        while len(chunk_iterators):
+        values = [get_value(row, self.priority_column) for row in current_rows]
+        while len(row_iterators):
             if self.descending:
-                chunk_index = np.argmax(values)
+                iterator_index = np.argmax(values)
             else:
-                chunk_index = np.argmin(values)
-            row = chunk_dfs[chunk_index].iloc[[chunk_row_indices[chunk_index]]]
-            row.reset_index(
-                drop=True, inplace=True
-            )  # Necessary for so that row's index is 0
-            yield row
-            chunk_row_indices[chunk_index] += 1
-            try:
-                if (
-                    chunk_row_indices[chunk_index]
-                    == chunk_lengths[chunk_index]
-                ):
-                    chunk_dfs[chunk_index] = next(chunk_iterators[chunk_index])
-                    chunk_lengths[chunk_index] = len(chunk_dfs[chunk_index])
-                    chunk_row_indices[chunk_index] = 0
+                iterator_index = np.argmin(values)
 
-                new_value = chunk_dfs[chunk_index][self.priority_column].iloc[
-                    chunk_row_indices[chunk_index]
-                ]
-                if self.descending and new_value > values[chunk_index]:
+            row = current_rows[iterator_index]
+            yield row
+
+            try:
+                current_rows[iterator_index] = next(row_iterators[iterator_index])
+                new_value = get_value(current_rows[iterator_index], self.priority_column)
+                if self.descending and new_value > values[iterator_index]:
                     raise ValueError(
                         f"Value {new_value} exceeds {self.priority_column} but should be descending"
                     )
-                if not self.descending and new_value < values[chunk_index]:
+                if not self.descending and new_value < values[iterator_index]:
                     raise ValueError(
                         f"Value {new_value} lower than {self.priority_column} but should be ascending"
                     )
 
-                values[chunk_index] = new_value
+                values[iterator_index] = new_value
             except StopIteration:
-                del chunk_iterators[chunk_index]
-                del chunk_dfs[chunk_index]
-                del chunk_lengths[chunk_index]
-                del chunk_row_indices[chunk_index]
-                del values[chunk_index]
+                del row_iterators[iterator_index]
+                del values[iterator_index]
+
 
     def get_chunked_data_iterator(
         self, chunk_size: int, columns: list[str] | None = None
