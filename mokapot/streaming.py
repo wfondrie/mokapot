@@ -232,6 +232,7 @@ class MergedTabularDataReader(TabularDataReader):
                 values[iterator_index] = new_value
             except StopIteration:
                 del row_iterators[iterator_index]
+                del current_rows[iterator_index]
                 del values[iterator_index]
 
 
