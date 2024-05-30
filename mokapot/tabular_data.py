@@ -1,6 +1,7 @@
 import sqlite3
 import warnings
 from contextlib import contextmanager
+from enum import Enum
 from typing import Generator, List
 
 import numpy as np
@@ -27,6 +28,11 @@ CSV_SUFFIXES = [
 ]
 PARQUET_SUFFIXES = [".parquet"]
 SQLITE_SUFFIXES = [".db"]
+
+class TableType(Enum):
+    DataFrame = "DataFrame"
+    Records = "Records"
+    Dicts = "Dicts"
 
 
 def get_score_column_type(suffix):
@@ -322,7 +328,7 @@ class TabularDataWriter(ABC):
 
     @staticmethod
     def from_suffix(
-        file_name: Path, columns: list[str], buffer_size: int = 0, **kwargs
+        file_name: Path, columns: list[str], buffer_size: int = 0, buffer_type: TableType = TableType.DataFrame, **kwargs
     ) -> "TabularDataWriter":
         suffix = file_name.suffix
         if suffix in CSV_SUFFIXES:
@@ -339,7 +345,7 @@ class TabularDataWriter(ABC):
             writer = CSVFileWriter(file_name, columns, **kwargs)
 
         if buffer_size > 1:
-            writer = BufferedWriter(writer, buffer_size)
+            writer = BufferedWriter(writer, buffer_size, buffer_type)
         return writer
 
 
@@ -364,36 +370,65 @@ class BufferedWriter(TabularDataWriter):
 
     writer: TabularDataWriter
     buffer_size: int
-    buffer: pd.DataFrame | None
+    buffer_type: TableType
+    buffer: pd.DataFrame | list[dict] | np.recarray | None
 
     def __init__(
         self,
         writer: TabularDataWriter,
-        buffer_size: int = 1000,
+        buffer_size = 1000,
+        buffer_type = TableType.DataFrame,
     ):
         super().__init__(writer.columns, writer.column_types)
         self.writer = writer
         self.buffer_size = buffer_size
+        self.buffer_type = buffer_type
         self.buffer = None
+
+    def _buffer_slice(self, start: int = 0, end: int = -1, as_dataframe: bool = False):
+        if self.buffer_type == TableType.DataFrame:
+            slice = self.buffer.iloc[start:end]
+        else:
+            slice = self.buffer[start:end]
+        if as_dataframe and not isinstance(slice, pd.DataFrame):
+            return pd.DataFrame(slice)
+        else:
+            return slice
+
 
     def _write_buffer(self, force=False):
         if self.buffer is None:
             return
         while len(self.buffer) >= self.buffer_size:
-            self.writer.append_data(self.buffer.iloc[: self.buffer_size])
-            self.buffer = self.buffer[self.buffer_size :]
+            self.writer.append_data(self._buffer_slice(end=self.buffer_size, as_dataframe=True))
+            self.buffer = self._buffer_slice(start=self.buffer_size, )
         if force and len(self.buffer) > 0:
-            self.writer.append_data(self.buffer)
+            self.writer.append_data(self._buffer_slice(as_dataframe=True))
             self.buffer = None
 
-    def append_data(self, data: pd.DataFrame):
-        if self.buffer is None:
-            self.buffer = data.copy(deep=True)
+    def append_data(self, data: pd.DataFrame | dict | list[dict] | np.record):
+
+        if self.buffer_type == TableType.DataFrame:
+            if not isinstance(data, pd.DataFrame):
+               raise TypeError(f"Parameter data must be of type DataFrame, not {type(data)}")
+
+            if self.buffer is None:
+                self.buffer = data.copy(deep=True)
+            else:
+                self.buffer = pd.concat([self.buffer, data], axis=0, ignore_index=True)
+        elif self.buffer_type == TableType.Dicts:
+            if isinstance(data, dict):
+                data = [data]
+            if self.buffer is None:
+                self.buffer = []
+            self.buffer += data
+        elif self.buffer_type == TableType.Records:
+            if self.buffer is None:
+                self.buffer = np.recarray(shape=(0,), dtype=data.dtype)
+            self.buffer = np.append(self.buffer, data)
         else:
-            # This is supposed to be faster than pre-allocating, but we should check
-            self.buffer = pd.concat(
-                [self.buffer, data], axis=0, ignore_index=True
-            )
+            raise RuntimeError(f"Not yet done...")
+
         self._write_buffer()
 
     def check_valid_data(self, data: pd.DataFrame):

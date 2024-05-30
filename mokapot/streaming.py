@@ -1,4 +1,4 @@
-from typing import Generator, Callable, Iterator
+from typing import Generator, Callable, Iterator, Type
 
 import pandas as pd
 import numpy as np
@@ -6,7 +6,7 @@ from numpy import dtype
 from typeguard import typechecked
 import pyarrow as pa
 
-from mokapot.tabular_data import TabularDataReader
+from mokapot.tabular_data import TabularDataReader, TableType
 
 
 @typechecked
@@ -125,7 +125,7 @@ class MergedTabularDataReader(TabularDataReader):
         readers: list[TabularDataReader],
         priority_column: str,
         descending: bool = True,
-        reader_chunk_size: int = 10,
+        reader_chunk_size: int = 1000,
     ):
         self.readers = readers
         self.priority_column = priority_column
@@ -154,20 +154,48 @@ class MergedTabularDataReader(TabularDataReader):
     def get_column_types(self) -> list:
         return self.column_types
 
+
+
     def get_row_iterator(
-        self, columns: list[str] | None = None
-    ) -> Iterator[pd.DataFrame]:
+        self,
+        columns: list[str] | None = None,
+        row_type: TableType = TableType.DataFrame
+    ) -> Iterator[pd.DataFrame|dict|np.record]:
+
+        def iterate_over_df(df: pd.DataFrame) -> Iterator:
+            for i in range(len(df)):
+                row = df.iloc[[i]]
+                row.index = [0]
+                yield row
+        def get_value_df(row, col):
+            return row[col].iloc[0]
+
+        def iterate_over_dicts(df: pd.DataFrame) -> Iterator:
+            dict = df.to_dict(orient="records")
+            return iter(dict)
+        def get_value_dict(row, col):
+            return row[col]
+
+        def iterate_over_records(df: pd.DataFrame) -> Iterator:
+            records = df.to_records(index=False)
+            return iter(records)
+
+        if row_type == TableType.DataFrame:
+            iterate_over_chunk = iterate_over_df
+            get_value = get_value_df
+        elif row_type == TableType.Dicts:
+            iterate_over_chunk = iterate_over_dicts
+            get_value = get_value_dict
+        elif row_type == TableType.Records:
+            iterate_over_chunk = iterate_over_records
+            get_value = get_value_dict
+        else:
+            raise ValueError(f"ret_type must be 'dataframe' or 'records' or 'dicts', not {row_type}")
 
         def row_iterator_from_chunked(chunked_iter: Iterator) -> Iterator:
             for chunk in chunked_iter:
-                # for row in chunk.:
-                #     yield row
-                for i in range(len(chunk)):
-                    row = chunk.iloc[[i]]
-                    row.index = [0]
+                for row in iterate_over_chunk(chunk):
                     yield row
-        def get_value(row, col):
-            return row[col].iloc[0]
 
         row_iterators = [
             row_iterator_from_chunked(reader.get_chunked_data_iterator(
@@ -244,7 +272,7 @@ def merge_readers(
     readers: list[TabularDataReader],
     priority_column: str,
     descending: bool = True,
-    reader_chunk_size: int = 10,
+    reader_chunk_size: int = 1000,
 ):
     reader = MergedTabularDataReader(
         readers,
