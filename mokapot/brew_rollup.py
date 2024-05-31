@@ -26,6 +26,7 @@ from mokapot.tabular_data import (
     TabularDataReader,
     auto_finalize,
     remove_columns,
+    TableType,
 )
 from mokapot.peps import peps_from_scores
 
@@ -241,6 +242,18 @@ STANDARD_COLUMN_NAME_MAP = {
 }
 
 
+def make_timer():
+    t0 = time.time()
+
+    def elapsed():
+        nonlocal t0
+        t1 = time.time()
+        dt, t0 = t1 - t0, t1
+        return dt
+
+    return elapsed
+
+
 @typechecked
 def do_rollup(config):
     base_level: str = config.level
@@ -300,7 +313,7 @@ def do_rollup(config):
         for path in decoy_files
     ]
     reader = MergedTabularDataReader(
-        target_readers + decoy_readers, priority_column="score"
+        target_readers + decoy_readers, priority_column="score", reader_chunk_size=10000
     )
 
     # Determine out levels
@@ -345,6 +358,8 @@ def do_rollup(config):
     )
 
     # Configure temp writers
+    merge_row_type = TableType.Dicts
+
     temp_buffer_size = 1000
 
     temp_writers = {
@@ -353,6 +368,7 @@ def do_rollup(config):
             columns=temp_column_names,
             column_types=temp_column_types,
             buffer_size=temp_buffer_size,
+            buffer_type=merge_row_type,
         )
         for level in levels
     }
@@ -361,15 +377,24 @@ def do_rollup(config):
     #  output file type could depend on the input file type)
 
     # Write temporary files which contain only the best scoring entity of a given level
+    logging.debug("Writing temp files: %s", [str(file) for file in temp_files.values()])
+
+    timer = make_timer()
     with auto_finalize(temp_writers.values()):
         count = 0
         seen_entities: dict[str, set] = {level: set() for level in levels}
-        for line in reader.get_row_iterator(temp_column_names):
+        for line in reader.get_row_iterator(temp_column_names, row_type=merge_row_type):
             count += 1
+            if count % 10000 == 0:
+                logging.debug(f"  Processed {count} lines ({timer():.2f} seconds)")
+
             for level in levels:
                 seen = seen_entities[level]
                 id_col = level
-                id = line.loc[0, id_col]
+                if merge_row_type == TableType.DataFrame:
+                    id = line.loc[0, id_col]
+                else:
+                    id = line[id_col]
                 if id not in seen:
                     seen.add(id)
                     temp_writers[level].append_data(line)

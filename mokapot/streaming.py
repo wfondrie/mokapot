@@ -1,4 +1,4 @@
-from typing import Generator, Callable
+from typing import Generator, Callable, Iterator, Type
 
 import pandas as pd
 import numpy as np
@@ -6,7 +6,7 @@ from numpy import dtype
 from typeguard import typechecked
 import pyarrow as pa
 
-from mokapot.tabular_data import TabularDataReader
+from mokapot.tabular_data import TabularDataReader, TableType
 
 
 @typechecked
@@ -125,7 +125,7 @@ class MergedTabularDataReader(TabularDataReader):
         readers: list[TabularDataReader],
         priority_column: str,
         descending: bool = True,
-        reader_chunk_size: int = 10,
+        reader_chunk_size: int = 1000,
     ):
         self.readers = readers
         self.priority_column = priority_column
@@ -154,61 +154,87 @@ class MergedTabularDataReader(TabularDataReader):
     def get_column_types(self) -> list:
         return self.column_types
 
+
+
     def get_row_iterator(
-        self, columns: list[str] | None = None
-    ) -> Generator[pd.DataFrame, None, None]:
-        chunk_iterators = [
-            reader.get_chunked_data_iterator(
+        self,
+        columns: list[str] | None = None,
+        row_type: TableType = TableType.DataFrame
+    ) -> Iterator[pd.DataFrame|dict|np.record]:
+
+        def iterate_over_df(df: pd.DataFrame) -> Iterator:
+            for i in range(len(df)):
+                row = df.iloc[[i]]
+                row.index = [0]
+                yield row
+        def get_value_df(row, col):
+            return row[col].iloc[0]
+
+        def iterate_over_dicts(df: pd.DataFrame) -> Iterator:
+            dict = df.to_dict(orient="records")
+            return iter(dict)
+        def get_value_dict(row, col):
+            return row[col]
+
+        def iterate_over_records(df: pd.DataFrame) -> Iterator:
+            records = df.to_records(index=False)
+            return iter(records)
+
+        if row_type == TableType.DataFrame:
+            iterate_over_chunk = iterate_over_df
+            get_value = get_value_df
+        elif row_type == TableType.Dicts:
+            iterate_over_chunk = iterate_over_dicts
+            get_value = get_value_dict
+        elif row_type == TableType.Records:
+            iterate_over_chunk = iterate_over_records
+            get_value = get_value_dict
+        else:
+            raise ValueError(f"ret_type must be 'dataframe' or 'records' or 'dicts', not {row_type}")
+
+        def row_iterator_from_chunked(chunked_iter: Iterator) -> Iterator:
+            for chunk in chunked_iter:
+                for row in iterate_over_chunk(chunk):
+                    yield row
+
+        row_iterators = [
+            row_iterator_from_chunked(reader.get_chunked_data_iterator(
                 chunk_size=self.reader_chunk_size, columns=columns
-            )
+            ))
             for reader in self.readers
         ]
-        chunk_dfs = [
-            next(chunk_iterator) for chunk_iterator in chunk_iterators
+        current_rows = [
+            next(row_iterator) for row_iterator in row_iterators
         ]
 
-        chunk_lengths = [len(df) for df in chunk_dfs]
-        chunk_row_indices = [0 for _ in chunk_dfs]
-        values = [df[self.priority_column].iloc[0] for df in chunk_dfs]
-        while len(chunk_iterators):
+        values = [get_value(row, self.priority_column) for row in current_rows]
+        while len(row_iterators):
             if self.descending:
-                chunk_index = np.argmax(values)
+                iterator_index = np.argmax(values)
             else:
-                chunk_index = np.argmin(values)
-            row = chunk_dfs[chunk_index].iloc[[chunk_row_indices[chunk_index]]]
-            row.reset_index(
-                drop=True, inplace=True
-            )  # Necessary for so that row's index is 0
-            yield row
-            chunk_row_indices[chunk_index] += 1
-            try:
-                if (
-                    chunk_row_indices[chunk_index]
-                    == chunk_lengths[chunk_index]
-                ):
-                    chunk_dfs[chunk_index] = next(chunk_iterators[chunk_index])
-                    chunk_lengths[chunk_index] = len(chunk_dfs[chunk_index])
-                    chunk_row_indices[chunk_index] = 0
+                iterator_index = np.argmin(values)
 
-                new_value = chunk_dfs[chunk_index][self.priority_column].iloc[
-                    chunk_row_indices[chunk_index]
-                ]
-                if self.descending and new_value > values[chunk_index]:
+            row = current_rows[iterator_index]
+            yield row
+
+            try:
+                current_rows[iterator_index] = next(row_iterators[iterator_index])
+                new_value = get_value(current_rows[iterator_index], self.priority_column)
+                if self.descending and new_value > values[iterator_index]:
                     raise ValueError(
                         f"Value {new_value} exceeds {self.priority_column} but should be descending"
                     )
-                if not self.descending and new_value < values[chunk_index]:
+                if not self.descending and new_value < values[iterator_index]:
                     raise ValueError(
                         f"Value {new_value} lower than {self.priority_column} but should be ascending"
                     )
 
-                values[chunk_index] = new_value
+                values[iterator_index] = new_value
             except StopIteration:
-                del chunk_iterators[chunk_index]
-                del chunk_dfs[chunk_index]
-                del chunk_lengths[chunk_index]
-                del chunk_row_indices[chunk_index]
-                del values[chunk_index]
+                del row_iterators[iterator_index]
+                del current_rows[iterator_index]
+                del values[iterator_index]
+
 
     def get_chunked_data_iterator(
         self, chunk_size: int, columns: list[str] | None = None
@@ -247,7 +273,7 @@ def merge_readers(
     readers: list[TabularDataReader],
     priority_column: str,
     descending: bool = True,
-    reader_chunk_size: int = 10,
+    reader_chunk_size: int = 1000,
 ):
     reader = MergedTabularDataReader(
         readers,
