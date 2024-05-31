@@ -385,7 +385,7 @@ class BufferedWriter(TabularDataWriter):
         self.buffer_type = buffer_type
         self.buffer = None
 
-    def _buffer_slice(self, start: int = 0, end: int = -1, as_dataframe: bool = False):
+    def _buffer_slice(self, start: int = 0, end: int | None = None, as_dataframe: bool = False):
         if self.buffer_type == TableType.DataFrame:
             slice = self.buffer.iloc[start:end]
         else:
