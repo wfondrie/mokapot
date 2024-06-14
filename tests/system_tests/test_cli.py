@@ -214,3 +214,18 @@ def test_cli_ensemble(tmp_path, phospho_files):
     assert Path(tmp_path, "targets.psms").exists()
     assert Path(tmp_path, "targets.peptides").exists()
     # fixme: should also test the *contents* of the files
+
+
+def test_cli_bad_input(tmp_path):
+    """Test ensemble flag"""
+    params = [
+        Path("data") / "percolator-noSplit-extended-201-bad.tab",
+        "--dest_dir", tmp_path,
+        "--train_fdr", "0.05",
+        "--ensemble",
+    ]
+
+    run_mokapot_cli(params)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
+    # fixme: should also test the *contents* of the files

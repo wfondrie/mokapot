@@ -734,7 +734,6 @@ def assign_confidence(
                             input_output_column_mapping,
                             target_column=_psms.target_column,
                         )
-                        df = df.astype(handles[level].get_schema(as_dict=True))
                         handles[level].append_data(df)
                         batch_counts[level] = 0
                         batches[level] = []
@@ -745,7 +744,6 @@ def assign_confidence(
                     input_output_column_mapping,
                     target_column=_psms.target_column,
                 )
-                df = df.astype(handles[level].get_schema(as_dict=True))
                 handles[level].append_data(df)
 
             for level in levels:
