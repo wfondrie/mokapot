@@ -5,15 +5,15 @@ Utility functions
 import itertools
 import gzip
 from pathlib import Path
-from typing import Union, List, Iterator, TypeAlias
+from typing import Union, List, Iterator, TypeAlias, Any
 
 import numpy as np
 import pandas as pd
+from mokapot.tabular_data import TabularDataReader
 
 from .constants import MERGE_SORT_CHUNK_SIZE
 import pyarrow.parquet as pq
 from typeguard import typechecked
-import csv
 
 
 @typechecked
@@ -98,7 +98,7 @@ def create_chunks(
     return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
-DataRow: TypeAlias = dict[str, str]
+DataRow: TypeAlias = dict[str, Any]
 
 
 @typechecked
@@ -126,9 +126,11 @@ def get_next_row(
 
 @typechecked
 def csv_row_iterator(path: Path) -> Iterator[DataRow]:
-    with open(path, "r") as handle:
-        for row in csv.DictReader(handle, delimiter="\t"):
-            yield row
+    chunk_iterator = TabularDataReader.from_path(path).get_chunked_data_iterator(chunk_size=MERGE_SORT_CHUNK_SIZE)
+    for chunk in chunk_iterator:
+        records = chunk.to_dict(orient='records')
+        for record in records:
+            yield record
 
 
 @typechecked
@@ -136,8 +138,7 @@ def parquet_row_iterator(path: Path) -> Iterator[DataRow]:
     batch_iterator = pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
     for record_batch in batch_iterator:
         batch = record_batch.to_pylist()
-        for raw_row in batch:
-            row = {key: str(value) for key, value in raw_row.items()}
+        for row in batch:
             yield row
 
 
@@ -167,9 +168,8 @@ def get_dataframe_from_records(
 ):
     df = pd.DataFrame.from_records(records, columns=in_columns)
     if target_column:
-        df[target_column] = df[target_column].map(
-            lambda x: True if x == "True" else False
-        )
+        if df[target_column].dtype == 'object':
+            df[target_column] = df[target_column] == "True"
     df = df.rename(columns=column_mapping)
     return df
 
