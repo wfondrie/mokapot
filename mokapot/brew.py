@@ -27,7 +27,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Functions -------------------------------------------------------------------
-@typechecked
 def brew(
     psms,
     model=None,

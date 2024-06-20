@@ -33,7 +33,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest pytest-cov wheel
         pip install -e .
-        pip install -e ./tests/system_tests/sample_plugin/.
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
