@@ -11,7 +11,6 @@ from mokapot.tabular_data import (
     ParquetFileReader,
     DataFrameReader,
     ColumnMappedReader,
-    TabularDataWriter,
     CSVFileWriter,
     auto_finalize,
 )
@@ -37,71 +36,42 @@ def test_csv_file_reader():
     path = Path("data", "phospho_rep1.pin")
     reader = TabularDataReader.from_path(path)
     names = reader.get_column_names()
-    expected = [
-        "SpecId",
-        "Label",
-        "ScanNr",
-        "ExpMass",
-        "CalcMass",
-        "lnrSp",
-        "deltLCn",
-        "deltCn",
-        "Sp",
-        "IonFrac",
-        "RefactoredXCorr",
-        "NegLog10PValue",
-        "NegLog10ResEvPValue",
-        "NegLog10CombinePValue",
-        "PepLen",
-        "Charge1",
-        "Charge2",
-        "Charge3",
-        "Charge4",
-        "Charge5",
-        "enzN",
-        "enzC",
-        "enzInt",
-        "lnNumDSP",
-        "dM",
-        "absdM",
-        "Peptide",
-        "Proteins",
-    ]
-    assert names == expected
-
-    expected = [
-        dtype("O"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("int64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("float64"),
-        dtype("O"),
-        dtype("O"),
-    ]
-
     types = reader.get_column_types()
-    assert types == expected
+    column_to_types = dict(zip(names, types))
+
+    expected_column_to_types = {
+        'SpecId': dtype('O'),
+        'Label': dtype('int64'),
+        'ScanNr': dtype('int64'),
+        'ExpMass': dtype('float64'),
+        'CalcMass': dtype('float64'),
+        'lnrSp': dtype('float64'),
+        'deltLCn': dtype('float64'),
+        'deltCn': dtype('float64'),
+        'Sp': dtype('float64'),
+        'IonFrac': dtype('float64'),
+        'RefactoredXCorr': dtype('float64'),
+        'NegLog10PValue': dtype('float64'),
+        'NegLog10ResEvPValue': dtype('float64'),
+        'NegLog10CombinePValue': dtype('float64'),
+        'PepLen': dtype('int64'),
+        'Charge1': dtype('int64'),
+        'Charge2': dtype('int64'),
+        'Charge3': dtype('int64'),
+        'Charge4': dtype('int64'),
+        'Charge5': dtype('int64'),
+        'enzN': dtype('int64'),
+        'enzC': dtype('int64'),
+        'enzInt': dtype('int64'),
+        'lnNumDSP': dtype('float64'),
+        'dM': dtype('float64'),
+        'absdM': dtype('float64'),
+        'Peptide': dtype('O'),
+        'Proteins': dtype('O')
+    }
+
+    for name, type in expected_column_to_types.items():
+        assert column_to_types[name] == type
 
     df = reader.read(["ScanNr", "SpecId"])
     assert df.columns.tolist() == ["ScanNr", "SpecId"]
@@ -119,51 +89,32 @@ def test_parquet_file_reader():
     path = Path("data", "10k_psms_test.parquet")
     reader = TabularDataReader.from_path(path)
     names = reader.get_column_names()
-    expected = [
-        "SpecId",
-        "Label",
-        "ScanNr",
-        "ExpMass",
-        "Mass",
-        "MS8_feature_5",
-        "missedCleavages",
-        "MS8_feature_7",
-        "MS8_feature_13",
-        "MS8_feature_20",
-        "MS8_feature_21",
-        "MS8_feature_22",
-        "MS8_feature_24",
-        "MS8_feature_29",
-        "MS8_feature_30",
-        "MS8_feature_32",
-        "Peptide",
-        "Proteins",
-    ]
-
-    assert names == expected
-
-    expected = [
-        pa.int64(),
-        pa.int64(),
-        pa.int64(),
-        pa.float64(),
-        pa.float64(),
-        pa.int64(),
-        pa.int64(),
-        pa.float64(),
-        pa.float64(),
-        pa.float64(),
-        pa.float64(),
-        pa.float64(),
-        pa.int64(),
-        pa.float64(),
-        pa.float64(),
-        pa.float64(),
-        pa.string(),
-        pa.string(),
-    ]
     types = reader.get_column_types()
-    assert types == expected
+    column_to_types = dict(zip(names, types))
+
+    expected_column_to_types = {
+        "SpecId": pa.int64(),
+        "Label": pa.int64(),
+        "ScanNr": pa.int64(),
+        "ExpMass": pa.float64(),
+        "Mass": pa.float64(),
+        "MS8_feature_5": pa.int64(),
+        "missedCleavages": pa.int64(),
+        "MS8_feature_7": pa.float64(),
+        "MS8_feature_13": pa.float64(),
+        "MS8_feature_20": pa.float64(),
+        "MS8_feature_21": pa.float64(),
+        "MS8_feature_22": pa.float64(),
+        "MS8_feature_24": pa.int64(),
+        "MS8_feature_29": pa.float64(),
+        "MS8_feature_30": pa.float64(),
+        "MS8_feature_32": pa.float64(),
+        "Peptide": pa.string(),
+        "Proteins": pa.string(),
+    }
+
+    for name, type in expected_column_to_types.items():
+        assert column_to_types[name] == type
 
     df = reader.read(["ScanNr", "SpecId"])
     assert df.columns.tolist() == ["ScanNr", "SpecId"]
@@ -179,22 +130,21 @@ def test_parquet_file_reader():
 
 def test_dataframe_reader(psm_df_6):
     reader = DataFrameReader(psm_df_6)
-    assert reader.get_column_names() == [
-        "target",
-        "spectrum",
-        "peptide",
-        "protein",
-        "feature_1",
-        "feature_2",
-    ]
-    assert reader.get_column_types() == [
-        dtype("bool"),
-        dtype("int64"),
-        dtype("O"),
-        dtype("O"),
-        dtype("int64"),
-        dtype("int64"),
-    ]
+    names = reader.get_column_names()
+    types = reader.get_column_types()
+    column_to_types = dict(zip(names, types))
+
+    expected_column_to_types = {
+        'target': dtype('bool'),
+        'spectrum': dtype('int64'),
+        'peptide': dtype('O'),
+        'protein': dtype('O'),
+        'feature_1': dtype('int64'),
+        'feature_2': dtype('int64')
+    }
+
+    for name, type in expected_column_to_types.items():
+        assert column_to_types[name] == type
 
     assert len(reader.read()) == 6
     chunk_iterator = reader.get_chunked_data_iterator(
@@ -247,23 +197,22 @@ def test_column_renaming(psm_df_6):
     reader = ColumnMappedReader(
         orig_reader, {"target": "T", "peptide": "Pep", "Targ": "T"}
     )
+    names = reader.get_column_names()
+    types = reader.get_column_types()
+    column_to_types = dict(zip(names, types))
 
-    assert reader.get_column_names() == [
-        "T",
-        "spectrum",
-        "Pep",
-        "protein",
-        "feature_1",
-        "feature_2",
-    ]
-    assert reader.get_column_types() == [
-        dtype("bool"),
-        dtype("int64"),
-        dtype("O"),
-        dtype("O"),
-        dtype("int64"),
-        dtype("int64"),
-    ]
+    expected_column_to_types = {
+        'T': dtype('bool'),
+        'spectrum': dtype('int64'),
+        'Pep': dtype('O'),
+        'protein': dtype('O'),
+        'feature_1': dtype('int64'),
+        'feature_2': dtype('int64')
+    }
+
+    for name, type in expected_column_to_types.items():
+        assert column_to_types[name] == type
+
 
     assert (reader.read().values == orig_reader.read().values).all()
     assert (

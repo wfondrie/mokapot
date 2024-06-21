@@ -129,8 +129,7 @@ def csv_row_iterator(path: Path) -> Iterator[DataRow]:
     chunk_iterator = TabularDataReader.from_path(path).get_chunked_data_iterator(chunk_size=MERGE_SORT_CHUNK_SIZE)
     for chunk in chunk_iterator:
         records = chunk.to_dict(orient='records')
-        for record in records:
-            yield record
+        yield from records
 
 
 @typechecked
@@ -138,8 +137,7 @@ def parquet_row_iterator(path: Path) -> Iterator[DataRow]:
     batch_iterator = pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
     for record_batch in batch_iterator:
         batch = record_batch.to_pylist()
-        for row in batch:
-            yield row
+        yield from batch
 
 
 @typechecked

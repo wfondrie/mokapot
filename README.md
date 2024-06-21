@@ -1,7 +1,3 @@
-
-[![pipeline status](https://gitlab.com/msaid/inferys/mokapot/badges/main/pipeline.svg)](https://gitlab.com/msaid/inferys/mokapot/-/commits/main)
-
-
 Fast and flexible semi-supervised learning for peptide detection.  
 
 mokapot is fundamentally a Python implementation of the semi-supervised learning
