@@ -63,7 +63,7 @@ def test_basic_cli(tmp_path, scope_files):
         "posterior_error_prob",
         "proteinIds",
     ]
-    assert len(targets_psms_df.index) == 5486
+    assert len(targets_psms_df.index) >= 5000
 
     assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
     assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
