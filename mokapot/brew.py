@@ -58,8 +58,12 @@ def brew(
 
     Parameters
     ----------
-    psms : Dict
-        Contains all required info about the input data
+    psms : PsmDataset object or list of PsmDataset objects
+        One or more :doc:`collections of PSMs <dataset>` objects.
+        PSMs are aggregated across all of the collections for model
+        training, but the confidence estimates are calculated and
+        returned separately.
+        Can also be instances of OnDiskPsmDatasets.
     model: Model object or list of Model objects, optional
         The :py:class:`mokapot.Model` object to be fit. The default is
         :code:`None`, which attempts to mimic the same support vector
