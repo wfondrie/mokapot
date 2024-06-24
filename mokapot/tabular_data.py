@@ -141,12 +141,6 @@ class ColumnMappedReader(TabularDataReader):
             yield self._get_mapped_dataframe(chunk)
 
 
-def _types_from_dataframe(df: pd.DataFrame) -> list:
-    type_map = df.dtypes
-    column_names = df.columns.tolist()
-    return [type_map[column_name] for column_name in column_names]
-
-
 @typechecked
 class CSVFileReader(TabularDataReader):
     def __init__(self, file_name: Path, sep: str = "\t"):
@@ -165,7 +159,7 @@ class CSVFileReader(TabularDataReader):
 
     def get_column_types(self) -> list:
         df = pd.read_csv(self.file_name, **self.stdargs, nrows=2)
-        return _types_from_dataframe(df)
+        return df.dtypes.tolist()
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         result = pd.read_csv(self.file_name, usecols=columns, **self.stdargs)
@@ -200,7 +194,7 @@ class DataFrameReader(TabularDataReader):
         return self.df.columns.tolist()
 
     def get_column_types(self) -> list:
-        return _types_from_dataframe(self.df)
+        return self.df.dtypes.tolist()
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         return self.df if columns is None else self.df[columns]
@@ -297,7 +291,7 @@ class TabularDataWriter(ABC):
             # todo: Commented out for a while till we have a better type
             #  compatibility check, or agreed on some "super type" of numpy
             #  dtype and pyarrow types (and what not...)
-            # column_types = _types_from_dataframe(data)
+            # column_types = data.dtypes.tolist()
             # if not column_types == self.get_column_types():
             #     raise ValueError(
             #         f"Column types {column_types} do not match {self.get_column_types()}"
