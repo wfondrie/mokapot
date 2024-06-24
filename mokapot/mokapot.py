@@ -90,7 +90,7 @@ def main(main_args=None):
         model = [load_model(model_file) for model_file in config.load_models]
 
     if model is None:
-        logging.debug(f"Loading Percolator model.")
+        logging.debug("Loading Percolator model.")
         model = PercolatorModel(
             train_fdr=config.train_fdr,
             max_iter=config.max_iter,
