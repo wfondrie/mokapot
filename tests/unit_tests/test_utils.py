@@ -96,9 +96,17 @@ def test_merge_sort(merge_sort_data):
     iterable_parquet = utils.merge_sort(files_parquet, "score")
     a = list(iterable_csv)
     b = list(iterable_parquet)
-    assert list(iterable_csv) == list(
-        iterable_parquet
-    ), "Merge sort ids vary between parquet and csv"
+
+    a_ids = [x["SpecId"] for x in a]
+    b_ids = [x["SpecId"] for x in b]
+
+    assert a_ids == b_ids, "Merge sort ids vary between parquet and csv"
+
+    # This only tests whether tho empty lists are the same, since the iterator
+    # is consumed when calling list on it.
+    # assert list(iterable_csv) == list(
+    #     iterable_parquet
+    # ), "Merge sort ids vary between parquet and csv"
 
 
 def test_create_chunks():

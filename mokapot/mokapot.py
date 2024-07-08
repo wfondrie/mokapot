@@ -7,7 +7,6 @@ import logging
 import sys
 import time
 import warnings
-from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -160,14 +159,16 @@ def main(main_args=None):
 
 
 if __name__ == "__main__":
+    import traceback
+
     try:
         main()
-    except RuntimeError as e:
-        logging.error(f"[Error] {e}")
+    except RuntimeError as _e:
+        logging.error(f"[Error] {traceback.format_exc()}")
         sys.exit(250)  # input failure
-    except ValueError as e:
-        logging.error(f"[Error] {e}")
+    except ValueError as _e:
+        logging.error(f"[Error] {traceback.format_exc()}")
         sys.exit(250)  # input failure
-    except Exception as e:
-        logging.error(f"[Error] {e}")
+    except Exception as _e:
+        logging.error(f"[Error] {traceback.format_exc()}")
         sys.exit(252)

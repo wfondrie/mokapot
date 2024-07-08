@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sqlite3
 from pathlib import Path
 from typing import Iterator
@@ -18,7 +20,7 @@ class ConfidenceSqliteWriter(SqliteWriter):
         column_types: list | None = None,
         level: str = "psms",
         qvalue_column: str = "q_value",
-        pep_column: str="posterior_error_prob",
+        pep_column: str = "posterior_error_prob",
     ) -> None:
         super().__init__(database, columns, column_types)
         self.level_cols = {
@@ -41,10 +43,10 @@ class ConfidenceSqliteWriter(SqliteWriter):
 
     def get_query(self, level, qvalue_column, pep_column):
         if level == "psms":
-            query = f"UPDATE CANDIDATE SET PSM_FDR = :{qvalue_column}, SVM_SCORE = :score, POSTERIOR_ERROR_PROBABILITY = :{pep_column} WHERE CANDIDATE_ID = :PSMId;"
+            query = f"UPDATE CANDIDATE SET PSM_FDR = :{qvalue_column}, SVM_SCORE = :score, POSTERIOR_ERROR_PROBABILITY = :{pep_column} WHERE CANDIDATE_ID = :PSMId;"  # noqa: E501
         else:
             table_name, table_id_col, mokapot_id_col = self.level_cols[level]
-            query = f"INSERT INTO {table_name}({table_id_col},FDR,PEP,SVM_SCORE) VALUES(:{mokapot_id_col},:{qvalue_column},:{pep_column},:score)"
+            query = f"INSERT INTO {table_name}({table_id_col},FDR,PEP,SVM_SCORE) VALUES(:{mokapot_id_col},:{qvalue_column},:{pep_column},:score)"  # noqa: E501
         return query
 
     def append_data(self, data):
@@ -65,8 +67,8 @@ def write_confidences(
     decoys: bool,
     level: str,
     out_columns: list[str],
-    qvalue_column: str="q_value",
-    pep_column: str="posterior_error_prob",
+    qvalue_column: str = "q_value",
+    pep_column: str = "posterior_error_prob",
 ):
     if not decoys and len(out_paths) > 1:
         out_paths.pop(1)
@@ -74,17 +76,28 @@ def write_confidences(
 
     # Create the writers
     if is_sqlite:
-        create_writer = lambda path: ConfidenceSqliteWriter(path, out_columns, level=level, qvalue_column=qvalue_column, pep_column=pep_column)
+
+        def create_writer(path):
+            return ConfidenceSqliteWriter(
+                path,
+                out_columns,
+                level=level,
+                qvalue_column=qvalue_column,
+                pep_column=pep_column,
+            )
     else:
-        create_writer = lambda path: TabularDataWriter.from_suffix(path, out_columns)
+
+        def create_writer(path):
+            return TabularDataWriter.from_suffix(path, out_columns)
+
     writers = [create_writer(path) for path in out_paths]
     # for writer in writers:
     #     writer.initialize()
 
     # Now write the confidence data
     for data_chunk, qvals_chunk, peps_chunk, targets_chunk in zip(
-        data_iterator, q_value_iterator, pep_iterator, target_iterator):
-
+        data_iterator, q_value_iterator, pep_iterator, target_iterator
+    ):
         data_chunk[qvalue_column] = qvals_chunk
         data_chunk[pep_column] = peps_chunk
         data_out = []

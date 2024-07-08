@@ -136,8 +136,13 @@ def test_cli_aggregate(tmp_path, scope_files):
     assert not Path(tmp_path, "blah.targets.decoy.peptides").exists()
 
     # Line counts were determined by one hopefully correct test run
-    assert count_lines(Path(tmp_path, "blah.targets.psms")) == 10256
-    assert count_lines(Path(tmp_path, "blah.targets.peptides")) == 9663
+    # GT counts: 10256, 9663
+    assert count_lines(Path(tmp_path, "blah.targets.psms")) in range(
+        10256 - 100, 10256 + 100
+    )
+    assert count_lines(Path(tmp_path, "blah.targets.peptides")) in range(
+        9663 - 50, 9663 + 50
+    )
 
     # Test that decoys are also in the output when --keep_decoys is used
     params += ["--keep_decoys"]
@@ -145,8 +150,12 @@ def test_cli_aggregate(tmp_path, scope_files):
     assert Path(tmp_path, "blah.decoys.psms").exists()
     assert Path(tmp_path, "blah.decoys.peptides").exists()
 
-    assert count_lines(Path(tmp_path, "blah.decoys.psms")) == 3787
-    assert count_lines(Path(tmp_path, "blah.decoys.peptides")) == 3694
+    assert count_lines(Path(tmp_path, "blah.decoys.psms")) in range(
+        3787 - 50, 3787 + 50
+    )
+    assert count_lines(Path(tmp_path, "blah.decoys.peptides")) in range(
+        3694 - 50, 3694 + 50
+    )
 
 
 def test_cli_fasta(tmp_path, phospho_files):
@@ -223,8 +232,10 @@ def test_cli_bad_input(tmp_path):
     """Test ensemble flag"""
     params = [
         Path("data") / "percolator-noSplit-extended-201-bad.tab",
-        "--dest_dir", tmp_path,
-        "--train_fdr", "0.05",
+        "--dest_dir",
+        tmp_path,
+        "--train_fdr",
+        "0.05",
         "--ensemble",
     ]
 

@@ -1,7 +1,7 @@
 import time
 
-import numpy.random
 import pytest
+import logging
 from pytest import approx
 import numpy as np
 import numpy.testing as testing
@@ -18,12 +18,18 @@ def get_target_decoy_data():
     NT0 = int(np.round(pi0 * N))
     NT1 = N - NT0
     target_scores = np.concatenate(
-        (np.maximum(R1.rvs(NT1), R0.rvs(NT1)), R0.rvs(NT0))
+        (
+            np.maximum(R1.rvs(NT1), R0.rvs(NT1)),
+            R0.rvs(NT0),
+        )
     )
     decoy_scores = R0.rvs(N)
     all_scores = np.concatenate((target_scores, decoy_scores))
     is_target = np.concatenate(
-        (np.full(len(target_scores), True), np.full(len(decoy_scores), False))
+        (
+            np.full(len(target_scores), True),
+            np.full(len(decoy_scores), False),
+        )
     )
 
     sortIdx = np.argsort(-all_scores)
@@ -41,7 +47,7 @@ def tic():
 def toc():
     global __tictoc_t0
     elapsed = time.time() - __tictoc_t0
-    print("Elapsed time: ", elapsed)
+    logging.info(f"Elapsed time: {elapsed}")
 
 
 def test_monotonize_simple():
@@ -101,8 +107,8 @@ def test_fit_nnls0():
     # k = np.array([0, 0, 1, 1, 1, 1, 3])
     n = np.array([2, 1, 0, 1, 0, 2])
     k = np.array([0, 0, 1, 1, 1, 2])
-    p = peps.fit_nnls(n, k, ascending=True)
-    p = peps.fit_nnls(n, k, ascending=False)
+    _ = peps.fit_nnls(n, k, ascending=True)
+    _ = peps.fit_nnls(n, k, ascending=False)
 
 
 def test_fit_nnls_zeros():
@@ -155,7 +161,8 @@ def test_fit_nnls_zeros_mult(caplog):
 
 
 def test_fit_nnls_peps():
-    # This is from a real test case that failed due to a problem in the scipy._nnls implementation
+    # This is from a real test case that failed due to a problem in
+    # the scipy._nnls implementation
     n0 = np.array(
         [
             3,
@@ -390,4 +397,3 @@ def test_peps_hist_nnls(seed):
         assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
     except Exception as e:
         pytest.fail(f"nnls failed on seed {seed}: {str(e)}")
-

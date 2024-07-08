@@ -1,5 +1,4 @@
 import os
-from enum import Enum
 
 CONFIDENCE_CHUNK_SIZE = int(
     os.getenv("MOKAPOT_CONFIDENCE_CHUNK_SIZE", 1000000)

@@ -2,6 +2,8 @@
 This is the command line interface for mokapot
 """
 
+from __future__ import annotations
+
 import datetime
 import logging
 import sys
@@ -11,12 +13,10 @@ from argparse import _ArgumentGroup as ArgumentGroup
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
-from typeguard import typechecked, TypeCheckError
+from typeguard import typechecked
 
 from mokapot.streaming import (
-    merge_readers,
     MergedTabularDataReader,
     ComputedTabularDataReader,
 )
@@ -124,7 +124,8 @@ def add_confidence_options(parser: ArgumentGroup) -> None:
         default="tdc",
         choices=["tdc", "from_peps", "from_counts"],
         help=(
-            "Specify the algorithm for qvalue computation. `tdc is` the default mokapot algorithm."
+            "Specify the algorithm for qvalue computation. `tdc is` "
+            "the default mokapot algorithm."
         ),
     )
 
@@ -265,7 +266,8 @@ def do_rollup(config):
     if len(list(src_dir.glob(f"*.{base_level}s.parquet"))) > 0:
         if len(list(src_dir.glob(f"*.{base_level}s"))) > 0:
             raise RuntimeError(
-                f"Only input files of either type CSV or type Parquet should exist in '{src_dir}', but both types were found."
+                "Only input files of either type CSV or type Parquet should"
+                f" exist in '{src_dir}', but both types were found."
             )
         suffix = ".parquet"
         dtype = pa.bool_()
@@ -313,7 +315,9 @@ def do_rollup(config):
         for path in decoy_files
     ]
     reader = MergedTabularDataReader(
-        target_readers + decoy_readers, priority_column="score", reader_chunk_size=10000
+        target_readers + decoy_readers,
+        priority_column="score",
+        reader_chunk_size=10000,
     )
 
     # Determine out levels
@@ -334,7 +338,8 @@ def do_rollup(config):
         for level in levels
     }
     logging.debug(
-        f"Using temp files: { {level: str(file) for level, file in temp_files.items()} }"
+        "Using temp files: "
+        f"{ {level: str(file) for level, file in temp_files.items()} }"
     )
 
     # Determine output files
@@ -345,9 +350,9 @@ def do_rollup(config):
         ]
         for level in levels
     }
-    logging.debug(
-        f"Writing to files: { {level: list(map(str, files)) for level, files in out_files.items()} }"
-    )
+
+    lvls = {level: list(map(str, files)) for level, files in out_files.items()}
+    logging.debug("Writing to files: " f"{lvls}")
 
     # Determine columns for output files and intermediate files
     column_names = reader.get_column_names()
@@ -376,17 +381,24 @@ def do_rollup(config):
     # todo: We need an option to write parquet or sql for example (also, the
     #  output file type could depend on the input file type)
 
-    # Write temporary files which contain only the best scoring entity of a given level
-    logging.debug("Writing temp files: %s", [str(file) for file in temp_files.values()])
+    # Write temporary files which contain only the best scoring entity
+    #   of a given level
+    logging.debug(
+        "Writing temp files: %s", [str(file) for file in temp_files.values()]
+    )
 
     timer = make_timer()
     with auto_finalize(temp_writers.values()):
         count = 0
         seen_entities: dict[str, set] = {level: set() for level in levels}
-        for line in reader.get_row_iterator(temp_column_names, row_type=merge_row_type):
+        for line in reader.get_row_iterator(
+            temp_column_names, row_type=merge_row_type
+        ):
             count += 1
             if count % 10000 == 0:
-                logging.debug(f"  Processed {count} lines ({timer():.2f} seconds)")
+                logging.debug(
+                    f"  Processed {count} lines ({timer():.2f} seconds)"
+                )
 
             for level in levels:
                 seen = seen_entities[level]
@@ -416,9 +428,9 @@ def do_rollup(config):
         column_types=output_types,
         buffer_size=buffer_size,
     )
-    create_writer = lambda path: TabularDataWriter.from_suffix(
-        path, **output_options
-    )
+
+    def create_writer(path):
+        return TabularDataWriter.from_suffix(path, **output_options)
 
     for level in levels:
         reader = temp_writers[level].get_associated_reader()

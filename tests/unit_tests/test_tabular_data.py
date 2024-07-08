@@ -40,34 +40,34 @@ def test_csv_file_reader():
     column_to_types = dict(zip(names, types))
 
     expected_column_to_types = {
-        'SpecId': dtype('O'),
-        'Label': dtype('int64'),
-        'ScanNr': dtype('int64'),
-        'ExpMass': dtype('float64'),
-        'CalcMass': dtype('float64'),
-        'lnrSp': dtype('float64'),
-        'deltLCn': dtype('float64'),
-        'deltCn': dtype('float64'),
-        'Sp': dtype('float64'),
-        'IonFrac': dtype('float64'),
-        'RefactoredXCorr': dtype('float64'),
-        'NegLog10PValue': dtype('float64'),
-        'NegLog10ResEvPValue': dtype('float64'),
-        'NegLog10CombinePValue': dtype('float64'),
-        'PepLen': dtype('int64'),
-        'Charge1': dtype('int64'),
-        'Charge2': dtype('int64'),
-        'Charge3': dtype('int64'),
-        'Charge4': dtype('int64'),
-        'Charge5': dtype('int64'),
-        'enzN': dtype('int64'),
-        'enzC': dtype('int64'),
-        'enzInt': dtype('int64'),
-        'lnNumDSP': dtype('float64'),
-        'dM': dtype('float64'),
-        'absdM': dtype('float64'),
-        'Peptide': dtype('O'),
-        'Proteins': dtype('O')
+        "SpecId": dtype("O"),
+        "Label": dtype("int64"),
+        "ScanNr": dtype("int64"),
+        "ExpMass": dtype("float64"),
+        "CalcMass": dtype("float64"),
+        "lnrSp": dtype("float64"),
+        "deltLCn": dtype("float64"),
+        "deltCn": dtype("float64"),
+        "Sp": dtype("float64"),
+        "IonFrac": dtype("float64"),
+        "RefactoredXCorr": dtype("float64"),
+        "NegLog10PValue": dtype("float64"),
+        "NegLog10ResEvPValue": dtype("float64"),
+        "NegLog10CombinePValue": dtype("float64"),
+        "PepLen": dtype("int64"),
+        "Charge1": dtype("int64"),
+        "Charge2": dtype("int64"),
+        "Charge3": dtype("int64"),
+        "Charge4": dtype("int64"),
+        "Charge5": dtype("int64"),
+        "enzN": dtype("int64"),
+        "enzC": dtype("int64"),
+        "enzInt": dtype("int64"),
+        "lnNumDSP": dtype("float64"),
+        "dM": dtype("float64"),
+        "absdM": dtype("float64"),
+        "Peptide": dtype("O"),
+        "Proteins": dtype("O"),
     }
 
     for name, type in expected_column_to_types.items():
@@ -135,12 +135,12 @@ def test_dataframe_reader(psm_df_6):
     column_to_types = dict(zip(names, types))
 
     expected_column_to_types = {
-        'target': dtype('bool'),
-        'spectrum': dtype('int64'),
-        'peptide': dtype('O'),
-        'protein': dtype('O'),
-        'feature_1': dtype('int64'),
-        'feature_2': dtype('int64')
+        "target": dtype("bool"),
+        "spectrum": dtype("int64"),
+        "peptide": dtype("O"),
+        "protein": dtype("O"),
+        "feature_1": dtype("int64"),
+        "feature_2": dtype("int64"),
     }
 
     for name, type in expected_column_to_types.items():
@@ -202,24 +202,26 @@ def test_column_renaming(psm_df_6):
     column_to_types = dict(zip(names, types))
 
     expected_column_to_types = {
-        'T': dtype('bool'),
-        'spectrum': dtype('int64'),
-        'Pep': dtype('O'),
-        'protein': dtype('O'),
-        'feature_1': dtype('int64'),
-        'feature_2': dtype('int64')
+        "T": dtype("bool"),
+        "spectrum": dtype("int64"),
+        "Pep": dtype("O"),
+        "protein": dtype("O"),
+        "feature_1": dtype("int64"),
+        "feature_2": dtype("int64"),
     }
 
     for name, type in expected_column_to_types.items():
         assert column_to_types[name] == type
 
-
     assert (reader.read().values == orig_reader.read().values).all()
     assert (
         reader.read(["Pep", "protein", "T", "feature_1"]).values
-        == orig_reader.read(
-            ["peptide", "protein", "target", "feature_1"]
-        ).values
+        == orig_reader.read([
+            "peptide",
+            "protein",
+            "target",
+            "feature_1",
+        ]).values
     ).all()
 
     renamed_chunk = next(

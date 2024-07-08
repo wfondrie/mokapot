@@ -16,6 +16,8 @@ We recommend using the :py:func:`~mokapot.brew()` function or the
 confidence estimates, rather than initializing the classes below directly.
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from contextlib import contextmanager
@@ -34,7 +36,6 @@ from .utils import (
     groupby_max,
     convert_targets_column,
     merge_sort,
-    map_columns_to_indices,
     get_dataframe_from_records,
 )
 from .dataset import OnDiskPsmDataset
@@ -129,11 +130,13 @@ class Confidence(object):
             The paths to the saved files.
 
         """
-        # The columns here are usually the metadata_columns from confidence.assign_confidence
-        # which are usually ['PSMId', 'Label', 'peptide', 'proteinIds', 'score']
-        # Since, those are exactly the columns that are written there to the csv
-        # files, it's not exactly clear, why they are passed along here anyway
-        # (but let's assert that here)
+        # The columns here are usually the metadata_columns from
+        # `confidence.assign_confidence`
+        # which are usually:
+        #   ['PSMId', 'Label', 'peptide', 'proteinIds', 'score']
+        # Since, those are exactly the columns that are written there to the
+        # csv files, it's not exactly clear, why they are passed along
+        # here anyway (but let's assert that here)
         reader = TabularDataReader.from_path(data_path)
         assert reader.get_column_names() == columns
 
@@ -142,7 +145,8 @@ class Confidence(object):
             CONFIDENCE_CHUNK_SIZE, in_columns
         )
 
-        # Note: the out_columns need to match those in assign_confidence (out_files)
+        # Note: the out_columns need to match those in assign_confidence
+        #   (out_files)
         qvalue_column = "q_value"
         pep_column = "posterior_error_prob"
         out_columns = in_columns + [qvalue_column, pep_column]
@@ -154,9 +158,9 @@ class Confidence(object):
             out_columns.remove(protein_column)
             out_columns.append(protein_column)
 
-        chunked = lambda list: create_chunks(
-            list, chunk_size=CONFIDENCE_CHUNK_SIZE
-        )
+        def chunked(list):
+            return create_chunks(list, chunk_size=CONFIDENCE_CHUNK_SIZE)
+
         # Replacing csv target and decoys results path with sqlite db path
         if sqlite_path:
             out_paths = [sqlite_path]
@@ -566,9 +570,11 @@ def assign_confidence(
     for _psms in psms[1:]:
         assert _psms.columns == curr_psms.columns
 
-    # todo: maybe use a collections.namedtuple for all the level info instead of all the ?
+    # todo: maybe use a collections.namedtuple for all
+    # the level info instead of all the ?
     # from collections import namedtuple
-    # LevelInfo = namedtuple('LevelInfo', ['name', 'data_path', 'deduplicate', 'colnames', 'colindices'])
+    # LevelInfo = namedtuple('LevelInfo',
+    #     ['name', 'data_path', 'deduplicate', 'colnames', 'colindices'])
 
     # Level data for psm level
     level = "psms"
@@ -596,8 +602,8 @@ def assign_confidence(
         level_data_path[level] = dest_dir / f"{file_root}{level}{file_ext}"
         level_hash_columns[level] = curr_psms.protein_column
 
-    # fixme: the output header and data do not fit, when the extra_output_columns
-    #  are in a different place. Fix that.
+    # fixme: the output header and data do not fit, when the
+    #   `extra_output_columns` are in a different place. Fix that.
     out_columns_psms_peps = [
         "PSMId",
         "peptide",
@@ -620,7 +626,9 @@ def assign_confidence(
     for _psms, score, desc, prefix in zip(psms, scores, descs, prefixes):
         out_metadata_columns = [
             "PSMId",
-            _psms.target_column,  # fixme: Why is this the only column where we take the name from the input?
+            # fixme: Why is this the only column where we take
+            #   the name from the input?
+            _psms.target_column,
             "peptide",
             *extra_output_columns,
             "proteinIds",
@@ -675,7 +683,6 @@ def assign_confidence(
             max_workers,
             score,
         ) as sorted_file_iterator:
-
             LOGGER.info("Assigning confidence...")
             LOGGER.info("Performing target-decoy competition...")
             LOGGER.info(
@@ -827,7 +834,9 @@ def create_sorted_file_iterator(
     scores_metadata_paths = list(
         dest_dir.glob(f"{file_prefix}scores_metadata_*")
     )
-    sorted_file_iterator = merge_sort(scores_metadata_paths, score_column="score")
+    sorted_file_iterator = merge_sort(
+        scores_metadata_paths, score_column="score"
+    )
 
     # Return the sorted iterator and clean up afterwards, regardless of whether
     # an exception was thrown in the `with` block
@@ -838,7 +847,9 @@ def create_sorted_file_iterator(
             try:
                 sc_path.unlink()
             except Exception as e:
-                LOGGER.warning("Caught exception while deleting temp files: %s", e)
+                LOGGER.warning(
+                    "Caught exception while deleting temp files: %s", e
+                )
 
 
 @typechecked

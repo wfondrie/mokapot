@@ -1,4 +1,5 @@
 """Test that parsing Percolator input files works correctly"""
+
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ import pandas as pd
 
 import mokapot
 from mokapot.parsers import pin
+
 
 @pytest.fixture
 def std_pin(tmp_path):
@@ -54,7 +56,9 @@ def test_pin_wo_dir():
 def test_read_file_in_chunks():
     """Test reading files in chungs"""
     columns = ["SpecId", "Label", "ScanNr", "ExpMass"]
-    iterator = pin.read_file_in_chunks(Path("data", "scope2_FP97AA.pin"), 100, use_cols=columns)
+    iterator = pin.read_file_in_chunks(
+        Path("data", "scope2_FP97AA.pin"), 100, use_cols=columns
+    )
     df = next(iterator)
     assert len(df) == 100
     assert df.iloc[0, 0] == "target_0_9674_2_-1"
@@ -62,9 +66,10 @@ def test_read_file_in_chunks():
 
     # Read in different column order than given in file
     columns = ["ExpMass", "SpecId", "Label", "ScanNr"]
-    iterator = pin.read_file_in_chunks(Path("data", "scope2_FP97AA.pin"), 100, use_cols=columns)
+    iterator = pin.read_file_in_chunks(
+        Path("data", "scope2_FP97AA.pin"), 100, use_cols=columns
+    )
     df = next(iterator)
     assert len(df) == 100
     assert df.iloc[0, 1] == "target_0_9674_2_-1"
     assert df.iloc[0, 3] == 9674
-

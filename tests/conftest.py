@@ -125,12 +125,14 @@ def psm_df_1000(tmp_path):
         "expmass": rng.uniform(500, 2000, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
-        "score": np.concatenate(
-            [rng.normal(3, size=200), rng.normal(size=300)]
-        ),
-        "score2": np.concatenate(
-            [rng.normal(3, size=200), rng.normal(size=300)]
-        ),
+        "score": np.concatenate([
+            rng.normal(3, size=200),
+            rng.normal(size=300),
+        ]),
+        "score2": np.concatenate([
+            rng.normal(3, size=200),
+            rng.normal(size=300),
+        ]),
         "filename": "test.mzML",
         "ret_time": rng.uniform(0, 60 * 120, size=500),
         "charge": rng.choice([2, 3, 4], size=500),
@@ -178,12 +180,14 @@ def psm_df_1000_parquet(tmp_path):
         "expmass": rng.uniform(500, 2000, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
-        "score": np.concatenate(
-            [rng.normal(3, size=200), rng.normal(size=300)]
-        ),
-        "score2": np.concatenate(
-            [rng.normal(3, size=200), rng.normal(size=300)]
-        ),
+        "score": np.concatenate([
+            rng.normal(3, size=200),
+            rng.normal(size=300),
+        ]),
+        "score2": np.concatenate([
+            rng.normal(3, size=200),
+            rng.normal(size=300),
+        ]),
         "filename": "test.mzML",
         "ret_time": rng.uniform(0, 60 * 120, size=500),
         "charge": rng.choice([2, 3, 4], size=500),
@@ -365,31 +369,36 @@ def psm_files_4000(tmp_path):
     decoy_scores2 = np.random.normal(size=n, loc=4, scale=3)
     decoy_scores3 = np.random.normal(size=n, loc=12, scale=4)
     targets = pd.DataFrame(
-        np.array(
-            [np.ones(n), target_scores1, target_scores2, target_scores3]
-        ).transpose(),
+        np.array([
+            np.ones(n),
+            target_scores1,
+            target_scores2,
+            target_scores3,
+        ]).transpose(),
         columns=["Label", "feature1", "feature2", "feature3"],
     )
     decoys = pd.DataFrame(
-        np.array(
-            [-np.ones(n), decoy_scores1, decoy_scores2, decoy_scores3]
-        ).transpose(),
+        np.array([
+            -np.ones(n),
+            decoy_scores1,
+            decoy_scores2,
+            decoy_scores3,
+        ]).transpose(),
         columns=["Label", "feature1", "feature2", "feature3"],
     )
     psms_df = pd.concat([targets, decoys]).reset_index(drop=True)
     NC = len(psms_df)
     psms_df["ScanNr"] = np.random.randint(1, NC // 2 + 1, NC)
-    expmass = np.hstack(
-        [
-            np.random.uniform(50, 500, NC // 2),
-            np.random.uniform(50, 500, NC // 2),
-        ]
-    )
+    expmass = np.hstack([
+        np.random.uniform(50, 500, NC // 2),
+        np.random.uniform(50, 500, NC // 2),
+    ])
     expmass.sort()
     psms_df["ExpMass"] = expmass
-    peptides = np.hstack(
-        [np.arange(1, NC // 2 + 1), np.arange(1, NC // 2 + 1)]
-    )
+    peptides = np.hstack([
+        np.arange(1, NC // 2 + 1),
+        np.arange(1, NC // 2 + 1),
+    ])
     peptides.sort()
     psms_df["Peptide"] = peptides
     psms_df["Proteins"] = "dummy"
@@ -533,17 +542,15 @@ def mock_conf():
             self._proteins = None
             self._has_proteins = False
 
-            self.peptides = pd.DataFrame(
-                {
-                    "filename": "a/b/c.mzML",
-                    "calcmass": [1, 2],
-                    "ret_time": [60, 120],
-                    "charge": [2, 3],
-                    "peptide": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
-                    "mokapot q-value": [0.001, 0.1],
-                    "protein": ["A|B|C\tB|C|A", "A|B|C"],
-                }
-            )
+            self.peptides = pd.DataFrame({
+                "filename": "a/b/c.mzML",
+                "calcmass": [1, 2],
+                "ret_time": [60, 120],
+                "charge": [2, 3],
+                "peptide": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
+                "mokapot q-value": [0.001, 0.1],
+                "protein": ["A|B|C\tB|C|A", "A|B|C"],
+            })
 
             self.confidence_estimates = {"peptides": self.peptides}
             self.decoy_confidence_estimates = {"peptides": self.peptides}
@@ -610,13 +617,69 @@ def peptide_csv_file(tmp_path):
 def psms_iterator():
     """Create a standard psms iterable"""
     return [
-        {"PSMId":"1", "Label":"1", "Peptide":"HLAQLLR", "score":"-5.75", "q-value":"0.108","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
-        {"PSMId":"2", "Label":"0", "Peptide":"HLAQLLR", "score":"-5.81", "q-value":"0.109","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
-        {"PSMId":"3", "Label":"0", "Peptide":"NVPTSLLK","score": "-5.83","q-value": "0.11","posterior_error_prob": "1.0","proteinIds": "_.dummy._"},
-        {"PSMId":"4", "Label":"1", "Peptide":"QILVQLR", "score":"-5.92", "q-value":"0.12", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
-        {"PSMId":"5", "Label":"1", "Peptide":"HLAQLLR", "score":"-6.05", "q-value":"0.13", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
-        {"PSMId":"6", "Label":"0", "Peptide":"QILVQLR", "score":"-6.06", "q-value":"0.14", "posterior_error_prob":"1.0", "proteinIds":"_.dummy._"},
-        {"PSMId":"7", "Label":"1", "Peptide":"SRTSVIPGPK", "score":"-6.12","q-value": "0.15","posterior_error_prob": "1.0", "proteinIds":"_.dummy._"},
+        {
+            "PSMId": "1",
+            "Label": "1",
+            "Peptide": "HLAQLLR",
+            "score": "-5.75",
+            "q-value": "0.108",
+            "posterior_error_prob": "1.0",
+            "proteinIds": "_.dummy._",
+        },
+        {
+            "PSMId": "2",
+            "Label": "0",
+            "Peptide": "HLAQLLR",
+            "score": "-5.81",
+            "q-value": "0.109",
+            "posterior_error_prob": "1.0",
+            "proteinIds": "_.dummy._",
+        },
+        {
+            "PSMId": "3",
+            "Label": "0",
+            "Peptide": "NVPTSLLK",
+            "score": "-5.83",
+            "q-value": "0.11",
+            "posterior_error_prob": "1.0",
+            "proteinIds": "_.dummy._",
+        },
+        {
+            "PSMId": "4",
+            "Label": "1",
+            "Peptide": "QILVQLR",
+            "score": "-5.92",
+            "q-value": "0.12",
+            "posterior_error_prob": "1.0",
+            "proteinIds": "_.dummy._",
+        },
+        {
+            "PSMId": "5",
+            "Label": "1",
+            "Peptide": "HLAQLLR",
+            "score": "-6.05",
+            "q-value": "0.13",
+            "posterior_error_prob": "1.0",
+            "proteinIds": "_.dummy._",
+        },
+        {
+            "PSMId": "6",
+            "Label": "0",
+            "Peptide": "QILVQLR",
+            "score": "-6.06",
+            "q-value": "0.14",
+            "posterior_error_prob": "1.0",
+            "proteinIds": "_.dummy._",
+        },
+        {
+            "PSMId": "7",
+            "Label": "1",
+            "Peptide": "SRTSVIPGPK",
+            "score": "-6.12",
+            "q-value": "0.15",
+            "posterior_error_prob": "1.0",
+            "proteinIds": "_.dummy._",
+        },
     ]
 
 

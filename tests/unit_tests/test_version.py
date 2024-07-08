@@ -6,4 +6,3 @@ def test_importlib():
     import mokapot
 
     assert mokapot.__version__ != "0.0.0"
-

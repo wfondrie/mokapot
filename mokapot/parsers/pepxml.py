@@ -314,8 +314,8 @@ def _log_features(col, features):
     """Log-transform columns that are p-values or E-values.
 
     This function tries to detect feature columns that are p-values using a
-    simple heuristic. If the column is a p-value, then it returns the -log (base
-    10) of the column.
+    simple heuristic. If the column is a p-value, then it returns the -log
+    (base 10) of the column.
 
     Parameters:
     -----------

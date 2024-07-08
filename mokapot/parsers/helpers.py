@@ -1,8 +1,11 @@
+from __future__ import annotations
 from typeguard import typechecked
 
 
 @typechecked
-def find_column(col: str, columns: list[str], required=True, unique=True, ignore_case=False) -> str | list[str] | None:
+def find_column(
+    col: str, columns: list[str], required=True, unique=True, ignore_case=False
+) -> str | list[str] | None:
     """
     Parameters
     ----------
@@ -17,8 +20,9 @@ def find_column(col: str, columns: list[str], required=True, unique=True, ignore
         an error will be raised if the column is not found.
 
     unique : bool, optional
-        Specifies whether the column should be unique. If set to True (default),
-        an error will be raised if multiple columns with the same name are found.
+        Specifies whether the column should be unique.
+        If set to True (default), an error will be raised if multiple
+        columns with the same name are found.
 
     ignore_case : bool, optional
         Specifies whether case should be ignored when comparing column names.
@@ -32,12 +36,18 @@ def find_column(col: str, columns: list[str], required=True, unique=True, ignore
     Raises
     ------
     ValueError
-        If the column is required and not found, or if multiple columns are found but unique is set to True.
+        If the column is required and not found, or if multiple columns
+            are found but unique is set to True.
     """
     if ignore_case:
-        str_compare = lambda str1, str2: str1.lower() == str2.lower()
+
+        def str_compare(str1, str2):
+            return str1.lower() == str2.lower()
     else:
-        str_compare = lambda str1, str2: str1 == str2
+
+        def str_compare(str1, str2):
+            return str1 == str2
+
     found_columns = [c for c in columns if str_compare(c, col)]
 
     if required and len(found_columns) == 0:
@@ -45,7 +55,9 @@ def find_column(col: str, columns: list[str], required=True, unique=True, ignore
 
     if unique:
         if len(found_columns) > 1:
-            raise ValueError(f"The column '{col}' should be unique. Found {found_columns}.")
+            raise ValueError(
+                f"The column '{col}' should be unique. Found {found_columns}."
+            )
         return found_columns[0] if len(found_columns) > 0 else None
     else:
         return found_columns
@@ -68,7 +80,9 @@ def find_columns(col: str, columns: list[str]) -> list[str]:
         The list of columns that match the given column name, ignoring case
         sensitivity.
     """
-    return find_column(col, columns, required=False, unique=False, ignore_case=True)
+    return find_column(
+        col, columns, required=False, unique=False, ignore_case=True
+    )
 
 
 @typechecked
@@ -92,11 +106,15 @@ def find_required_column(col: str, columns: list[str]) -> str:
     ValueError
         If the column was not found or not unique.
     """
-    return find_column(col, columns, required=True, unique=True, ignore_case=True)
+    return find_column(
+        col, columns, required=True, unique=True, ignore_case=True
+    )
 
 
 @typechecked
-def find_optional_column(col: str | None, columns: list[str], default: str) -> str | None:
+def find_optional_column(
+    col: str | None, columns: list[str], default: str
+) -> str | None:
     """
     Parameters
     ----------
@@ -123,4 +141,10 @@ def find_optional_column(col: str | None, columns: list[str], default: str) -> s
     ValueError
         If `col` is not None and it is not found in `columns`.
     """
-    return find_column(col or default, columns, required=col is not None, unique=True, ignore_case=col is None)
+    return find_column(
+        col or default,
+        columns,
+        required=col is not None,
+        unique=True,
+        ignore_case=col is None,
+    )

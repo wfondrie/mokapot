@@ -2,10 +2,12 @@
 Utility functions
 """
 
+from __future__ import annotations
+
 import itertools
 import gzip
 from pathlib import Path
-from typing import Union, List, Iterator, TypeAlias, Any
+from typing import Union, List, Iterator, Any, NewType, Dict
 
 import numpy as np
 import pandas as pd
@@ -98,14 +100,16 @@ def create_chunks(
     return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
-DataRow: TypeAlias = dict[str, Any]
+# Using Dict over dict is needed while we support Python 3.8
+DataRow = NewType("DataRow", Dict[str, Any])
 
 
 @typechecked
 def get_next_row(
-        row_iterator_dict: dict[int, Iterator[DataRow]],
-        current_row_dict: dict[int, DataRow],
-        score_column: str) -> DataRow:
+    row_iterator_dict: dict[int, Iterator[DataRow]],
+    current_row_dict: dict[int, DataRow],
+    score_column: str,
+) -> DataRow:
     max_key = max_row = None
     max_score = None
     for key, row in current_row_dict.items():
@@ -126,9 +130,11 @@ def get_next_row(
 
 @typechecked
 def csv_row_iterator(path: Path) -> Iterator[DataRow]:
-    chunk_iterator = TabularDataReader.from_path(path).get_chunked_data_iterator(chunk_size=MERGE_SORT_CHUNK_SIZE)
+    chunk_iterator = TabularDataReader.from_path(
+        path
+    ).get_chunked_data_iterator(chunk_size=MERGE_SORT_CHUNK_SIZE)
     for chunk in chunk_iterator:
-        records = chunk.to_dict(orient='records')
+        records = chunk.to_dict(orient="records")
         yield from records
 
 
@@ -147,10 +153,12 @@ def merge_sort(paths: list[Path], score_column: str):
     else:
         row_iterator_func = csv_row_iterator
 
-    row_iterator_dict = {i: row_iterator_func(path)
-                         for i, path in enumerate(paths)}
-    current_row_dict = {i: next(row_iter)
-                        for i, row_iter in row_iterator_dict.items()}
+    row_iterator_dict = {
+        i: row_iterator_func(path) for i, path in enumerate(paths)
+    }
+    current_row_dict = {
+        i: next(row_iter) for i, row_iter in row_iterator_dict.items()
+    }
 
     while row_iterator_dict != {}:
         row = get_next_row(row_iterator_dict, current_row_dict, score_column)
@@ -166,7 +174,7 @@ def get_dataframe_from_records(
 ):
     df = pd.DataFrame.from_records(records, columns=in_columns)
     if target_column:
-        if df[target_column].dtype == 'object':
+        if df[target_column].dtype == "object":
             df[target_column] = df[target_column] == "True"
     df = df.rename(columns=column_mapping)
     return df
@@ -234,8 +242,8 @@ def map_columns_to_indices(
         The result of the mapping, with the same structure as the `search`
         parameter but with indices instead of the search items. If the `search`
         parameter is a list, the result will be a list as well. If the `search`
-        parameter is a tuple, the result will be a tuple. The order of the items
-        in the result will be preserved.
+        parameter is a tuple, the result will be a tuple. The order of the
+        items in the result will be preserved.
 
     Raises
     ------

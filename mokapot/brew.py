@@ -2,6 +2,8 @@
 Defines a function to run the Percolator algorithm.
 """
 
+from __future__ import annotations
+
 import logging
 import copy
 from operator import itemgetter
@@ -31,12 +33,12 @@ LOGGER = logging.getLogger(__name__)
 def brew(
     psms,
     model=None,
-    test_fdr:float=0.01,
-    folds:int=3,
-    max_workers:int=1,
+    test_fdr: float = 0.01,
+    folds: int = 3,
+    max_workers: int = 1,
     rng=None,
-    subset_max_train:int|None=None,
-    ensemble:bool=False,
+    subset_max_train: int | None = None,
+    ensemble: bool = False,
 ):
     """
     Re-score one or more collection of PSMs.
@@ -464,9 +466,9 @@ def _predict(models_idx, psms, models, test_fdr, max_workers):
                 scores.append(np.hstack(fold_scores.pop(0)))
             except RuntimeError:
                 raise RuntimeError(
-                    "Failed to calibrate scores between cross-validation folds, "
-                    "because no target PSMs could be found below 'test_fdr'. Try "
-                    "raising 'test_fdr'."
+                    "Failed to calibrate scores between cross-validation "
+                    "folds, because no target PSMs could be found below "
+                    "'test_fdr'. Try raising 'test_fdr'."
                 )
         del targets
         del fold_scores

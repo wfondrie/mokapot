@@ -1,11 +1,11 @@
 """Test that Confidence classes are working correctly"""
+
 import contextlib
 
 import numpy as np
 import pyarrow.parquet as pq
 import pandas as pd
 import copy
-from pathlib import Path
 
 from pandas.testing import assert_frame_equal
 from pytest import approx
@@ -30,7 +30,8 @@ def run_with_chunk_size(chunk_size):
 def test_chunked_assign_confidence(psm_df_1000, tmp_path):
     """Test that assign_confidence() works correctly with small chunks"""
 
-    # After correcting the targets column stuff and with that the updated labels
+    # After correcting the targets column stuff and
+    # with that the updated labels
     # (see _update_labels) it turned out that there were no targets with fdr
     # below 0.01 anymore, and so as a remedy the eval_fdr was raised to 0.02.
     # NB: with the old bug there would *always* be targets labelled as 1
@@ -101,10 +102,18 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
     assert df["peptide"].tolist() == ["PELPK", "IYFCK", "CGQGK"]
     assert df["score"].tolist() == approx([5.857438, 5.703985, 5.337845])
     assert df["q-value"].tolist() == approx(
-        [0.01020408, 0.01020408, 0.01020408]
+        [
+            0.01020408,
+            0.01020408,
+            0.01020408,
+        ]
     )
     assert df["posterior_error_prob"].tolist() == approx(
-        [1.635110e-05, 2.496682e-05, 6.854064e-05]
+        [
+            1.635110e-05,
+            2.496682e-05,
+            6.854064e-05,
+        ]
     )
 
 
@@ -160,7 +169,9 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
             max_workers=4,
             eval_fdr=0.02,
         )
-        df_results_group1 = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
+        df_results_group1 = pd.read_csv(
+            tmp_path / "targets.peptides", sep="\t"
+        )
 
     with run_with_chunk_size(10000):
         np.random.seed(42)
@@ -172,9 +183,12 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
             max_workers=4,
             eval_fdr=0.02,
         )
-        df_results_group2 = pd.read_csv(tmp_path / "targets.peptides", sep="\t")
+        df_results_group2 = pd.read_csv(
+            tmp_path / "targets.peptides", sep="\t"
+        )
 
     assert_frame_equal(df_results_group1, df_results_group2)
+
 
 def test_get_unique_psms_and_peptides(peptide_csv_file, psms_iterator):
     psms_iterator = psms_iterator

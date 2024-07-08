@@ -1,6 +1,6 @@
 """The :py:class:`LinearPsmDataset` class is used to define a collection
-peptide-spectrum matches. The :py:class:`LinearPsmDataset` class is suitable for
-most types of data-dependent acquisition proteomics experiments.
+peptide-spectrum matches. The :py:class:`LinearPsmDataset` class is suitable
+for most types of data-dependent acquisition proteomics experiments.
 
 Although the class can be constructed from a :py:class:`pandas.DataFrame`, it
 is often easier to load the PSMs directly from a file in the `Percolator
@@ -17,8 +17,9 @@ One of more instance of this class are required to use the
 
 """
 
+from __future__ import annotations
+
 import logging
-import pyarrow.parquet as pq
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -353,7 +354,7 @@ class LinearPsmDataset(PsmDataset):
     has_proteins : bool
     rng : numpy.random.Generator
        The random number generator.
-    """
+    """  # noqa: E501
 
     def __init__(
         self,
@@ -491,16 +492,16 @@ class OnDiskPsmDataset:
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
 
-        # todo: btw: should not get the filename but a reader object or something, in order to parse other filetypes without if's
+        # todo: btw: should not get the filename but a reader object or
+        #   something, in order to parse other filetypes without if's
         if filename:
-            columns = TabularDataReader.from_path(
-                filename
-            ).get_column_names()
+            columns = TabularDataReader.from_path(filename).get_column_names()
 
             def check_column(column):
                 if column and column not in columns:
                     raise ValueError(
-                        f"Column '{column}' not found in data columns of file '{filename}' ({columns})"
+                        f"Column '{column}' not found in data columns of file"
+                        f" '{filename}' ({columns})"
                     )
 
             def check_columns(columns):
@@ -513,7 +514,9 @@ class OnDiskPsmDataset:
             check_column(self.peptide_column)
             check_column(self.protein_column)
             check_columns(self.spectrum_columns)
-            # check_columns(self.feature_columns)  # fixme: we don't check these for now, otherwise strange things happen
+            # check_columns(self.feature_columns)
+            # fixme: we don't check these for now,
+            #     otherwise strange things happen
             check_columns(self.metadata_columns)
             check_columns(self.level_columns)
             check_column(self.filename_column)
@@ -674,8 +677,8 @@ class OnDiskPsmDataset:
             start_split_indices.append(end_idx)
             start_idx = end_idx
 
-        # search for smallest index bigger of equal to split index in start indexes of
-        # unique groups
+        # search for smallest index bigger of equal to split index in start
+        # indexes of unique groups
         idx_split = idx_start_unique[
             np.searchsorted(idx_start_unique, start_split_indices)
         ]

@@ -13,7 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-requires-python = ">=3.6"
+requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.18.1",
     "pandas>=1.0.3",
@@ -50,7 +50,8 @@ docs = [
 ]
 dev = [
     "pre-commit>=2.7.1",
-    "black>=19.10b0",
+    "ruff>=0.4.4",
+    "pytest>=8.2.2",
 ]
 
 [project.scripts]
@@ -66,6 +67,8 @@ find = {namespaces = false}
 
 [tool.ruff]
 extend-exclude = ["docs/source/conf.py"]
+line-length = 79
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "T20"]  # T20 is for print() statements.
@@ -74,26 +77,5 @@ select = ["E", "F", "T20"]  # T20 is for print() statements.
 "__init__.py" = ["F401"]
 "test_parser_pepxml.py" = ["E501"]
 
-[tool.black]
-line-length = 79
-target-version = ['py310']
-include = '\.pyi?$'
-exclude = '''
-
-(
-  /(
-      \.eggs         # exclude a few common directories in the
-    | \.git          # root of the project
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | buck-out
-    | build
-    | dist
-  )/
-  | foo.py           # also separately exclude a file named foo.py in
-                     # the root of the project
-)
-'''
+[tool.ruff.format]
+docstring-code-format = true

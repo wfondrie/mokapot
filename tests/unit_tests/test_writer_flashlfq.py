@@ -29,17 +29,15 @@ def test_basic(mock_conf, tmp_path):
     """Test that the basic output works"""
     conf = mock_conf
     df = pd.read_table(mokapot.to_flashlfq(conf, tmp_path / "test.txt"))
-    expected = pd.DataFrame(
-        {
-            "File Name": ["c.mzML"] * 2,
-            "Base Sequence": ["ABCDXYZ", "ABCDEFG"],
-            "Full Sequence": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
-            "Peptide Monoisotopic Mass": [1, 2],
-            "Scan Retention Time": [1.0, 2.0],
-            "Precursor Charge": [2, 3],
-            "Protein Accession": ["A|B|C; B|C|A", "A|B|C"],
-        }
-    )
+    expected = pd.DataFrame({
+        "File Name": ["c.mzML"] * 2,
+        "Base Sequence": ["ABCDXYZ", "ABCDEFG"],
+        "Full Sequence": ["B.ABCD[+2.817]XYZ.A", "ABCDE(shcah8)FG"],
+        "Peptide Monoisotopic Mass": [1, 2],
+        "Scan Retention Time": [1.0, 2.0],
+        "Precursor Charge": [2, 3],
+        "Protein Accession": ["A|B|C; B|C|A", "A|B|C"],
+    })
 
     pd.testing.assert_frame_equal(df, expected)
 

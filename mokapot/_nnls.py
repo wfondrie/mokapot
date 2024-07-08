@@ -3,18 +3,20 @@
 #    Commit: https://github.com/scipy/scipy/commit/3cae6dc85d2288519cce3d3112e1c30e1f470cad
 #    Branch: main (#18570)
 #    Tags: v1.12.0 v1.12.0rc2 v1.12.0rc1
-# Reason was a bug in the original version line 139 (here 151) marked by the comment "# C.1".
-# In the paper the algorithm was based on, there is a comparison to 0 in step C.1, but here was
-# a comparison with `tol`, which sometimes led to non-convergent iterations and a subsequent
-# RuntimeError. This was fixed in this file by changing `<= tol` to `< 0`, which is the correct
-# form to check for a constraint violation. If this is patched upstream in scipy, we can remove
-# this file and the corresponding import in peps.py.
+# Reason was a bug in the original version line 139 (here 151) marked by the
+# comment "# C.1". In the paper the algorithm was based on, there is a
+# comparison to 0 in step C.1, but here was a comparison with `tol`, which
+# sometimes led to non-convergent iterations and a subsequent RuntimeError.
+# This was fixed in this file by changing
+# `<= tol` to `< 0`, which is the correct form to check for a constraint
+# violation. If this is patched upstream in scipy, we can remove this file
+# and the corresponding import in peps.py.
 
 import numpy as np
 from scipy.linalg import solve
 
 
-__all__ = ['nnls']
+__all__ = ["nnls"]
 
 
 def nnls(A, b, maxiter=None, *, atol=None):
@@ -71,7 +73,6 @@ def nnls(A, b, maxiter=None, *, atol=None):
     --------
     >>> import numpy as np
     >>> from scipy.optimize import nnls
-    ...
     >>> A = np.array([[1, 0], [1, 0], [0, 1]])
     >>> b = np.array([2, 1, 1])
     >>> nnls(A, b)
@@ -87,18 +88,23 @@ def nnls(A, b, maxiter=None, *, atol=None):
     b = np.asarray_chkfinite(b)
 
     if len(A.shape) != 2:
-        raise ValueError("Expected a two-dimensional array (matrix)" +
-                         f", but the shape of A is {A.shape}")
+        raise ValueError(
+            "Expected a two-dimensional array (matrix)"
+            + f", but the shape of A is {A.shape}"
+        )
     if len(b.shape) != 1:
-        raise ValueError("Expected a one-dimensional array (vector)" +
-                         f", but the shape of b is {b.shape}")
+        raise ValueError(
+            "Expected a one-dimensional array (vector)"
+            + f", but the shape of b is {b.shape}"
+        )
 
     m, n = A.shape
 
     if m != b.shape[0]:
         raise ValueError(
-                "Incompatible dimensions. The first dimension of " +
-                f"A is {m}, while the shape of b is {(b.shape[0], )}")
+            "Incompatible dimensions. The first dimension of "
+            + f"A is {m}, while the shape of b is {(b.shape[0],)}"
+        )
 
     x, rnorm, mode = _nnls(A, b, maxiter, tol=atol)
     if mode != 1:
@@ -118,9 +124,9 @@ def _nnls(A, b, maxiter=None, tol=None):
     Atb = b @ A  # Result is 1D - let NumPy figure it out
 
     if not maxiter:
-        maxiter = 3*n
+        maxiter = 3 * n
     if tol is None:
-        tol = 10 * max(m, n) * np.spacing(1.)
+        tol = 10 * max(m, n) * np.spacing(1.0)
 
     # Initialize vars
     x = np.zeros(n, dtype=np.float64)
@@ -144,18 +150,23 @@ def _nnls(A, b, maxiter=None, tol=None):
         # Iteration solution
         s = np.zeros(n, dtype=np.float64)
         P_ind = P.nonzero()[0]
-        s[P] = solve(AtA[P_ind[:, None], P_ind[None, :]], Atb[P],
-                     assume_a='sym', check_finite=False)  # B.4
+        s[P] = solve(
+            AtA[P_ind[:, None], P_ind[None, :]],
+            Atb[P],
+            assume_a="sym",
+            check_finite=False,
+        )  # B.4
 
         # Inner loop
         while (iter < maxiter) and (s[P].min() < 0):  # C.1
             alpha_ind = ((s < 0) & P).nonzero()
             alpha = (x[alpha_ind] / (x[alpha_ind] - s[alpha_ind])).min()  # C.2
-            x *= (1 - alpha)
-            x += alpha*s
+            x *= 1 - alpha
+            x += alpha * s
             P[x <= 0] = False
-            s[P] = solve(AtA[np.ix_(P, P)], Atb[P], assume_a='sym',
-                         check_finite=False)
+            s[P] = solve(
+                AtA[np.ix_(P, P)], Atb[P], assume_a="sym", check_finite=False
+            )
             s[~P] = 0  # C.6
             iter += 1
 
@@ -167,6 +178,6 @@ def _nnls(A, b, maxiter=None, tol=None):
             # return x, np.linalg.norm(A@x - b), -1
             # however at the top level, -1 raises an exception wasting norm
             # Instead return dummy number 0.
-            return x, 0., -1
+            return x, 0.0, -1
 
-    return x, np.linalg.norm(A@x - b), 1
+    return x, np.linalg.norm(A @ x - b), 1

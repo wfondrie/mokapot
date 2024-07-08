@@ -18,10 +18,12 @@ def percolator_extended_file_small():
     """Get the extended percolator tab file restricted to 1000 rows"""
     return Path("data", "percolator-noSplit-extended-1000.tab")
 
+
 @pytest.fixture
 def percolator_extended_file_big():
     """Get the extended percolator tab file restricted to 10000 rows"""
     return Path("data", "percolator-noSplit-extended-10000.tab")
+
 
 # @pytest.fixture
 # def percolator_extended_file_huge():
@@ -29,12 +31,14 @@ def percolator_extended_file_big():
 #     return Path("scratch", "percolator-noSplit-extended.tab")
 
 
-def test_rollup_10000(tmp_path, percolator_extended_file_small,
-                      percolator_extended_file_big):
+def test_rollup_10000(
+    tmp_path, percolator_extended_file_small, percolator_extended_file_big
+):
     """Test that basic cli works."""
     path = tmp_path
 
     import shutil
+
     shutil.rmtree(path, ignore_errors=True)
 
     retrain = False
@@ -42,13 +46,20 @@ def test_rollup_10000(tmp_path, percolator_extended_file_small,
     common_params = [
         "--dest_dir",
         path,
-        "--max_workers", 8,
-        "--test_fdr", 0.10,
-        "--train_fdr", 0.9,
-        "--verbosity", 2,
-        "--subset_max_train", 4000,
-        "--max_iter", 10,
-        "--ensemble", "--keep_decoys",
+        "--max_workers",
+        8,
+        "--test_fdr",
+        0.10,
+        "--train_fdr",
+        0.9,
+        "--verbosity",
+        2,
+        "--subset_max_train",
+        4000,
+        "--max_iter",
+        10,
+        "--ensemble",
+        "--keep_decoys",
     ]
 
     use_proteins = False
@@ -60,15 +71,18 @@ def test_rollup_10000(tmp_path, percolator_extended_file_small,
 
     if retrain or not Path.exists(path / "mokapot.model_fold-1.pkl"):
         # params = [percolator_extended_file_big,
-        params = [percolator_extended_file_small,
-                  *common_params,
-                  "--save_models",
-                  ]
+        params = [
+            percolator_extended_file_small,
+            *common_params,
+            "--save_models",
+        ]
     else:
-        params = [percolator_extended_file_small,
-                  *common_params,
-                  "--load_models", *path.glob("mokapot.model_fold-*.pkl"),
-                  ]
+        params = [
+            percolator_extended_file_small,
+            *common_params,
+            "--load_models",
+            *path.glob("mokapot.model_fold-*.pkl"),
+        ]
 
     run_mokapot_cli(params)
     assert Path(path, "targets.psms").exists()
@@ -82,7 +96,9 @@ def test_extra_cols(tmp_path):
     """Test that two identical mokapot runs produce same results."""
 
     extended_file = Path("data", "percolator-noSplit-extended-10000.tab")
-    non_extended_file = Path("data", "percolator-noSplit-non-extended-10000.tab")
+    non_extended_file = Path(
+        "data", "percolator-noSplit-non-extended-10000.tab"
+    )
 
     params = [
         "--dest_dir",
@@ -111,8 +127,16 @@ def test_extra_cols(tmp_path):
 
     df_run1_t_psms = pd.read_csv(tmp_path / "run1.targets.psms", sep="\t")
     df_run2_t_psms = pd.read_csv(tmp_path / "run2.targets.psms", sep="\t")
-    pd.testing.assert_frame_equal(df_run1_t_psms[df_run2_t_psms.columns], df_run2_t_psms)
+    pd.testing.assert_frame_equal(
+        df_run1_t_psms[df_run2_t_psms.columns], df_run2_t_psms
+    )
 
-    df_run1_t_peptides = pd.read_csv(tmp_path / "run1.targets.peptides", sep="\t")
-    df_run2_t_peptides = pd.read_csv(tmp_path / "run2.targets.peptides", sep="\t")
-    pd.testing.assert_frame_equal(df_run1_t_peptides[df_run2_t_peptides.columns], df_run2_t_peptides)
+    df_run1_t_peptides = pd.read_csv(
+        tmp_path / "run1.targets.peptides", sep="\t"
+    )
+    df_run2_t_peptides = pd.read_csv(
+        tmp_path / "run2.targets.peptides", sep="\t"
+    )
+    pd.testing.assert_frame_equal(
+        df_run1_t_peptides[df_run2_t_peptides.columns], df_run2_t_peptides
+    )

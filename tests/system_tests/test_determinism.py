@@ -1,6 +1,6 @@
 """
 These tests verify that the aggregatePsmsToPeptides executable works as expected.
-"""
+"""  # noqa: E501
 
 from pathlib import Path
 
@@ -67,8 +67,10 @@ def test_determinism_same_file(tmp_path, psm_files_4000):
 
 
 def test_determinism_different_psmid(tmp_path, psm_files_4000):
-    """Test that two mokapot runs with 2 files where only the SpecIds are changed
-    produce same results."""
+    """
+    Test that two mokapot runs with 2 files where only the SpecIds are changed
+    produce same results.
+    """
 
     cmd = [
         "--dest_dir",

@@ -9,7 +9,10 @@ def test_sanity(psms, tmp_path):
     # conf = psms.assign_confidence(eval_fdr=0.05)
     # test1 = conf.to_txt(dest_dir=tmp_path, file_root="test1")
     # mokapot.to_txt(conf, dest_dir=tmp_path, file_root="test2")
-    # test3 = mokapot.to_txt([conf, conf], dest_dir=tmp_path, file_root="test3")
+    # test3 = mokapot.to_txt(
+    #     [conf, conf],
+    #     dest_dir=tmp_path,
+    #     file_root="test3")
     # with pytest.raises(ValueError):
     #     mokapot.to_txt("blah", dest_dir=tmp_path)
     #

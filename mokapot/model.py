@@ -182,7 +182,7 @@ class Model:
         self._rng = np.random.default_rng(rng)
 
     @typechecked
-    def save(self, out_file : Path):
+    def save(self, out_file: Path):
         """
         Save the model to a file.
 
@@ -466,7 +466,7 @@ class DummyScaler:
 
 # Functions -------------------------------------------------------------------
 @typechecked
-def save_model(model, out_file : Path):
+def save_model(model, out_file: Path):
     """
     Save a :py:class:`mokapot.model.Model` object to a file.
 
@@ -490,7 +490,7 @@ def save_model(model, out_file : Path):
 
 
 @typechecked
-def load_model(model_file : Path):
+def load_model(model_file: Path):
     """
     Load a saved model for mokapot.
 

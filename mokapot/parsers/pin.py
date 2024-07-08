@@ -7,7 +7,6 @@ import warnings
 from pathlib import Path
 
 import pandas as pd
-import numpy as np
 from joblib import Parallel, delayed
 
 from .helpers import find_optional_column, find_columns, find_required_column
@@ -115,12 +114,14 @@ def read_pin(
 
 def create_chunks_with_identifier(data, identifier_column, chunk_size):
     """
-    This function will split data into chunks but will make sure that identifier_columns
-    is never split
+    This function will split data into chunks but will make sure that
+    identifier_columns is never split
+
     Parameters
     ----------
     data: the data you want to split in chunks (1d list)
-    identifier_column: columns that should never be splitted. Must be of length 2.
+    identifier_column: columns that should never be splitted.
+        Must be of length 2.
     chunk_size: the chunk size
 
     Returns
@@ -175,8 +176,8 @@ def read_percolator(
     nonfeat = [specid, scan, peptides, proteins, labels]
 
     # Columns for different rollup levels
-    # Currently no proteins, since the protein rollup is probably quite different
-    # from the other rollup levels IMHO
+    # Currently no proteins, since the protein rollup is probably quite
+    # different from the other rollup levels IMHO
     modifiedpeptides = find_columns("modifiedpeptide", columns)
     precursors = find_columns("precursor", columns)
     peptidegroups = find_columns("peptidegroup", columns)
@@ -299,8 +300,8 @@ def drop_missing_values_and_fill_spectra_dataframe(
 
 def read_file_in_chunks(file, chunk_size, use_cols):
     """
-    when reading in chunks an open file object is required as input to iterate over the
-    chunks
+    when reading in chunks an open file object is required as input to
+    iterate over the chunks
     """
     for df in pd.read_csv(
         file,
@@ -362,9 +363,9 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
     ----------
     psms : OnDiskPsmDataset
         A collection of PSMs.
-    train_idx : list of a list of a list of indexes (first level are training splits,
-        second one is the number of input files, third level the actual idexes
-        The indexes to select from data.
+    train_idx : list of a list of a list of indexes (first level are training
+        splits, second one is the number of input files, third level the
+        actual idexes The indexes to select from data.
     chunk_size : int
         The chunk size in bytes.
     max_workers: int

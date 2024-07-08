@@ -2,20 +2,32 @@
 This module estimates q-values.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import numba as nb
 from typeguard import typechecked
 
-from .peps import peps_from_scores_hist_nnls, monotonize_simple, hist_data_from_scores, estimate_pi0_by_slope
+from .peps import (
+    peps_from_scores_hist_nnls,
+    monotonize_simple,
+    hist_data_from_scores,
+    estimate_pi0_by_slope,
+)
 
 QVALUE_ALGORITHM = {
-    'tdc': lambda scores, targets: tdc(scores, targets, desc=True),
-    'from_peps': lambda scores, targets: qvalues_from_peps(scores, targets),
-    'from_counts': lambda scores, targets: qvalues_from_counts(scores, targets),
+    "tdc": lambda scores, targets: tdc(scores, targets, desc=True),
+    "from_peps": lambda scores, targets: qvalues_from_peps(scores, targets),
+    "from_counts": lambda scores, targets: qvalues_from_counts(
+        scores, targets
+    ),
 }
 
+
 @typechecked
-def tdc(scores: np.ndarray[float], target: np.ndarray[bool], desc: bool=True):
+def tdc(
+    scores: np.ndarray[float], target: np.ndarray[bool], desc: bool = True
+):
     """
     Estimate q-values using target decoy competition.
 
@@ -61,11 +73,30 @@ def tdc(scores: np.ndarray[float], target: np.ndarray[bool], desc: bool=True):
         array is the same length as the `scores` and `target` arrays.
     """
     scores = np.array(scores)
+    target = np.array(target)
 
-    try:
-        target = np.array(target, dtype=bool)
-    except ValueError:
-        raise ValueError("'target' should be boolean.")
+    # Since numpy 2.x relying in attribute errors is not viable here
+    # https://numpy.org/neps/nep-0050-scalar-promotion.html#impact-on-can-cast
+    # So I am manually checking the constraints.
+    if (
+        np.issubdtype(target.dtype, np.integer)
+        and target.max() <= 1
+        and target.min() >= 0
+    ):
+        target = target.astype(bool)
+
+    if np.issubdtype(target.dtype, np.floating):
+        like_one = target == np.ones_like(target)
+        like_zero = target == np.zeros_like(target)
+        if np.all(like_one | like_zero):
+            target = target.astype(bool)
+
+    if not np.issubdtype(target.dtype, bool):
+        err = ValueError(
+            f"'target' should be boolean. passed type: {target.dtype}"
+            f" with value: {target}"
+        )
+        raise err
 
     if scores.shape[0] != target.shape[0]:
         raise ValueError("'scores' and 'target' must be the same length")
@@ -73,7 +104,7 @@ def tdc(scores: np.ndarray[float], target: np.ndarray[bool], desc: bool=True):
     # Unsigned integers can cause weird things to happen.
     # Convert all scores to floats to for safety.
     if np.issubdtype(scores.dtype, np.integer):
-        scores = scores.astype(np.float_)
+        scores = scores.astype(np.float32)
 
     # Sort and estimate FDR
     if desc:
@@ -91,7 +122,7 @@ def tdc(scores: np.ndarray[float], target: np.ndarray[bool], desc: bool=True):
     fdr = np.divide(
         (cum_decoys + 1),
         cum_targets,
-        out=np.ones_like(cum_targets, dtype=float),
+        out=np.ones_like(cum_targets, dtype=np.float32),
         where=(cum_targets != 0),
     )
 
@@ -172,12 +203,15 @@ def qvalues_from_scores(scores, targets, qvalue_algorithm="tdc"):
     :return: The q-values calculated using the specified algorithm.
 
     :raises AssertionError: If the specified algorithm is unknown.
-    """
+    """  # noqa: E501
     qvalue_function = QVALUE_ALGORITHM[qvalue_algorithm]
     if qvalue_function is not None:
         return qvalue_function(scores, targets)
     else:
-        raise AssertionError(f"Unknown qvalue algorithm in qvalues_from_scores: {qvalue_algorithm}")
+        raise AssertionError(
+            "Unknown qvalue algorithm in qvalues_from_scores:"
+            f" {qvalue_algorithm}"
+        )
 
 
 def qvalues_from_peps(scores, targets, peps=None):
@@ -185,7 +219,7 @@ def qvalues_from_peps(scores, targets, peps=None):
     Compute q-values from peps according to Käll et al. (Section 3.2, first formula)
     Non-parametric estimation of posterior error probabilities associated with peptides
     identified by tandem mass spectrometry
-    Bioinformatics, Volume 24, Issue 16, August 2008, Pages i42–i48
+    Bioinformatics, Volume 24, Issue 16, August 2008, Pages i42-i48
     https://doi.org/10.1093/bioinformatics/btn294
 
     The formula used is:
@@ -200,12 +234,12 @@ def qvalues_from_peps(scores, targets, peps=None):
     :param peps: Array-like object representing the posterior error probabilities associated
                  with the peptides. Default is None (then it's computed via the HistNNLS algorithm).
     :return: Array of q-values computed from peps.
-    """
+    """  # noqa: E501
     if peps is None:
         peps = peps_from_scores_hist_nnls(scores, targets)
 
-    # We need to sort scores in descending order for the formula to work (it involves to cumsum's from the maximum
-    # scores downwards)
+    # We need to sort scores in descending order for the formula to work
+    # (it involves to cumsum's from the maximum scores downwards)
     ind = np.argsort(-scores)
     scores_sorted = scores[ind]
     targets_sorted = targets[ind]
@@ -213,11 +247,16 @@ def qvalues_from_peps(scores, targets, peps=None):
 
     target_scores = scores_sorted[targets_sorted]
     target_peps = peps_sorted[targets_sorted]
-    target_fdr = target_peps.cumsum() / np.arange(1, len(target_peps) + 1, dtype=float)
+    target_fdr = target_peps.cumsum() / np.arange(
+        1, len(target_peps) + 1, dtype=float
+    )
     target_qvalues = monotonize_simple(target_fdr, ascending=True)
 
-    # Note: we need to flip the arrays again, since interp needs scores in ascending order
-    qvalues = np.interp(scores, np.flip(target_scores), np.flip(target_qvalues))
+    # Note: we need to flip the arrays again, since interp needs scores in
+    #   ascending order
+    qvalues = np.interp(
+        scores, np.flip(target_scores), np.flip(target_qvalues)
+    )
     return qvalues
 
 
@@ -239,9 +278,11 @@ def qvalues_from_counts(scores, targets):
     :param scores: Array-like object representing the scores.
     :param targets: Boolean array-like object indicating the targets.
     :return: Array of q-values computed from peps.
-    """
+    """  # noqa: E501
 
-    eval_scores, target_density, decoy_density = hist_data_from_scores(scores, targets, density=True)
+    eval_scores, target_density, decoy_density = hist_data_from_scores(
+        scores, targets, density=True
+    )
     pi0 = estimate_pi0_by_slope(target_density, decoy_density)
 
     target_decoy_ratio = targets.sum() / (~targets).sum()
@@ -249,9 +290,17 @@ def qvalues_from_counts(scores, targets):
     ind = np.argsort(-scores)
     targets_sorted = targets[ind]
     scores_sorted = scores[ind]
-    fdr_sorted = pi0 * target_decoy_ratio * (~targets_sorted).cumsum() / targets_sorted.cumsum()
+    fdr_sorted = (
+        pi0
+        * target_decoy_ratio
+        * (~targets_sorted).cumsum()
+        / targets_sorted.cumsum()
+    )
     qvalues_sorted = monotonize_simple(fdr_sorted, ascending=True)
 
-    # Note: we need to flip the arrays again, since interp needs scores in ascending order
-    qvalues = np.interp(scores, np.flip(scores_sorted), np.flip(qvalues_sorted))
+    # Note: we need to flip the arrays again, since interp needs scores in
+    # ascending order
+    qvalues = np.interp(
+        scores, np.flip(scores_sorted), np.flip(qvalues_sorted)
+    )
     return qvalues
