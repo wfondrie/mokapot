@@ -249,7 +249,7 @@ def brew(
             )
     # If model training has failed
     else:
-        scores = [np.zeros(data_size) for _ in psms]
+        scores = [np.zeros(x) for x in data_size]
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
     if not all([m.override for m in models]):
