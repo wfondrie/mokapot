@@ -514,9 +514,7 @@ class OnDiskPsmDataset:
             check_column(self.peptide_column)
             check_column(self.protein_column)
             check_columns(self.spectrum_columns)
-            # check_columns(self.feature_columns)
-            # fixme: we don't check these for now,
-            #     otherwise strange things happen
+            check_columns(self.feature_columns)
             check_columns(self.metadata_columns)
             check_columns(self.level_columns)
             check_column(self.filename_column)
