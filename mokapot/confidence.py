@@ -488,7 +488,7 @@ def assign_confidence(
     psms: list[OnDiskPsmDataset],
     max_workers,
     scores=None,
-    descs=None,
+    descs: list[bool] | None=None,
     eval_fdr=0.01,
     dest_dir: Path | None = None,
     file_root: str = "",
@@ -521,8 +521,8 @@ def assign_confidence(
         The scores by which to rank the PSMs. The default, :code:`None`,
         uses the feature that accepts the most PSMs at an FDR threshold of
         `eval_fdr`.
-    descs : [bool]
-        Are higher scores better?
+    descs : list[bool] | None
+        Are higher scores better? The default None, sets all entries to True.
     eval_fdr : float
         The FDR threshold at which to report and evaluate performance. If
         `scores` is not :code:`None`, this parameter has no affect on the
@@ -535,7 +535,6 @@ def assign_confidence(
         The delimiter to use.
     prefixes : [str]
         The prefixes added to all output file names.
-
     decoys : bool, optional
         Save decoys confidence estimates as well?
     deduplication: bool
@@ -552,9 +551,7 @@ def assign_confidence(
 
     Returns
     -------
-    LinearConfidence
-        A :py:class:`~mokapot.confidence.LinearConfidence` object storing
-        the confidence estimates for the collection of PSMs.
+    None
     """
 
     if scores is None:
@@ -563,6 +560,9 @@ def assign_confidence(
             feat, _, _, desc = _psms.find_best_feature(eval_fdr)
             LOGGER.info("Selected %s as the best feature.", feat)
             scores.append(_psms.read_data(columns=[feat])[feat].values)
+
+    if descs is None:
+        descs = [True] * len(psms)
 
     # just take the first one for info (and make sure the other are the same)
     curr_psms = psms[0]

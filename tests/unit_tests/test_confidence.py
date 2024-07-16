@@ -178,7 +178,7 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
         assign_confidence(
             [copy.copy(psms_disk)],
             prefixes=[None],
-            descs=[True],
+            descs=None, # should default to [True] as in the first case
             dest_dir=tmp_path,
             max_workers=4,
             eval_fdr=0.02,
