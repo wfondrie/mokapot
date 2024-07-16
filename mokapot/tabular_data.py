@@ -1,3 +1,7 @@
+"""
+Classes for reading and writing data in tabular form.
+"""
+
 from __future__ import annotations
 
 import sqlite3
@@ -48,6 +52,14 @@ def get_score_column_type(suffix):
 
 @typechecked
 class TabularDataReader(ABC):
+    """
+    An abstract class that represents a source for tabular data that can be read
+    in either completely or chunk-wise.
+
+    Implementations can be classes that either read from files, from memory
+    (e.g. data frames), combine or modify other readers or represent computed
+    tabular results.
+    """
     @abstractmethod
     def get_column_names(self) -> list[str]:
         raise NotImplementedError
@@ -97,6 +109,17 @@ class TabularDataReader(ABC):
 
 @typechecked
 class ColumnMappedReader(TabularDataReader):
+    """
+    A tabular data reader that renames the columns of another tabular data
+    reader to new names.
+
+    Attributes:
+    -----------
+        reader : TabularDataReader
+            The underlying reader for the original data.
+        column_map : dict[str, str]
+            A dictionary that maps the original column names to the new column names.
+    """
     def __init__(self, reader: TabularDataReader, column_map: dict[str, str]):
         self.reader = reader
         self.column_map = column_map
@@ -151,6 +174,17 @@ class ColumnMappedReader(TabularDataReader):
 
 @typechecked
 class CSVFileReader(TabularDataReader):
+    """
+    A tabular data reader for reading CSV files.
+
+    Attributes:
+    -----------
+        file_name :  Path
+            The path to the CSV file.
+        stdargs : dict
+            Arguments for reading CSV file passed on to the pandas
+            `read_csv` function.
+    """
     def __init__(self, file_name: Path, sep: str = "\t"):
         self.file_name = file_name
         self.stdargs = {"sep": sep, "index_col": False}
@@ -187,6 +221,15 @@ class CSVFileReader(TabularDataReader):
 
 @typechecked
 class DataFrameReader(TabularDataReader):
+    """
+    This class allows reading pandas DataFrames in the context of tabular data
+    readers.
+
+    Attributes:
+    -----------
+        df : pd.DataFrame
+            The DataFrame being read from.
+    """
     df: pd.DataFrame
 
     def __init__(self, df: pd.DataFrame):
@@ -231,6 +274,15 @@ class DataFrameReader(TabularDataReader):
 
 @typechecked
 class ParquetFileReader(TabularDataReader):
+    """
+    A class for reading Parquet files and retrieving data in tabular format.
+
+    Attributes:
+    -----------
+    file_name : Path
+        The path to the Parquet file.
+    """
+
     def __init__(self, file_name: Path):
         self.file_name = file_name
 
@@ -265,6 +317,16 @@ class ParquetFileReader(TabularDataReader):
 
 @typechecked
 class TabularDataWriter(ABC):
+    """
+    Abstract base class for writing tabular data to different file formats.
+
+    Attributes:
+    -----------
+        columns : list[str]
+            List of column names
+        column_types : list | None
+            List of column types (optional)
+    """
     def __init__(
         self,
         columns: list[str],
@@ -287,7 +349,6 @@ class TabularDataWriter(ABC):
         raise NotImplementedError
 
     def check_valid_data(self, data: pd.DataFrame):
-        # todo: maybe an exception would be better suited than an assert
         columns = data.columns.tolist()
         if not columns == self.get_column_names():
             raise ValueError(
@@ -375,6 +436,21 @@ def auto_finalize(writers: list[TabularDataWriter]):
 
 @typechecked
 class BufferedWriter(TabularDataWriter):
+    """
+    This class represents a buffered writer for tabular data. It allows writing data to a tabular data writer in
+    batches, reducing the number of write operations.
+
+    Attributes:
+    -----------
+    writer : TabularDataWriter
+        The tabular data writer to which the data will be written.
+    buffer_size : int
+        The number of records to buffer before writing to the writer.
+    buffer_type : TableType
+        The type of buffer being used. Can be one of TableType.DataFrame, TableType.Dicts, or TableType.Records.
+    buffer : pd.DataFrame or list of dictionaries or np.recarray or None
+        The buffer containing the tabular data to be written. The buffer type depends on the buffer_type attribute.
+    """
     writer: TabularDataWriter
     buffer_size: int
     buffer_type: TableType
@@ -469,6 +545,17 @@ class BufferedWriter(TabularDataWriter):
 
 @typechecked
 class CSVFileWriter(TabularDataWriter):
+    """
+    CSVFileWriter class for writing tabular data to a CSV file.
+
+    Attributes:
+    -----------
+    file_name : Path
+        The file path where the CSV file will be written.
+
+    sep : str, optional
+        The separator string used to separate fields in the CSV file. Default is tab character ("\t").
+    """
     file_name: Path
 
     def __init__(
@@ -515,6 +602,15 @@ class CSVFileWriter(TabularDataWriter):
 
 @typechecked
 class ParquetFileWriter(TabularDataWriter):
+    """
+    This class is responsible for writing tabular data into Parquet files.
+
+
+    Attributes:
+    -----------
+    file_name : Path
+        The path to the Parquet file being written.
+    """
     file_name: Path
 
     def __init__(
@@ -563,6 +659,9 @@ class ParquetFileWriter(TabularDataWriter):
 
 @typechecked
 class SqliteWriter(TabularDataWriter, ABC):
+    """
+    SqliteWriter class for writing tabular data to SQLite database.
+    """
     connection: sqlite3.Connection
 
     def __init__(

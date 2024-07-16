@@ -1,3 +1,8 @@
+"""
+Helper classes and methods used for streaming of tabular data.
+"""
+
+
 from __future__ import annotations
 
 from typing import Generator, Callable, Iterator
@@ -12,6 +17,15 @@ from mokapot.tabular_data import TabularDataReader, TableType
 
 @typechecked
 class JoinedTabularDataReader(TabularDataReader):
+    """
+    Handles data from multiple tabular data sources, joining them horizontally.
+
+    Attributes:
+    -----------
+        readers : list[TabularDataReader]
+            A list of 'TabularDataReader' objects representing the individual
+            data sources.
+    """
     readers: list[TabularDataReader]
 
     def __init__(self, readers: list[TabularDataReader]):
@@ -74,6 +88,22 @@ class JoinedTabularDataReader(TabularDataReader):
 
 @typechecked
 class ComputedTabularDataReader(TabularDataReader):
+    """
+    A subclass of TabularDataReader that allows the computation of a specific
+    column that is joined horizontally to the columns of the reader.
+
+    Attributes:
+    -----------
+        reader : TabularDataReader
+            The underlying reader object.
+        column : str
+            The name of the column to compute.
+        dtype : np.dtype | pa.DataType
+            The data type of the computed column.
+        func : Callable
+            A function to apply to the existing columns of each chunk.
+    """
+
     def __init__(
         self,
         reader: TabularDataReader,
@@ -120,6 +150,29 @@ class ComputedTabularDataReader(TabularDataReader):
 
 @typechecked
 class MergedTabularDataReader(TabularDataReader):
+    """
+    Merges data from multiple tabular data sources vertically into a single data
+    source, ordering the rows (one by one) by the value of a priority column.
+    I.e. for each output row, the row of the input readers with the highest
+    value of the priority column is picked.
+
+    Attributes:
+    -----------
+        readers : list[TabularDataReader]
+            List of data readers to merge.
+        priority_column : str
+            Name of the priority column used for merging (highest value
+            determines which reader to pick next).
+        descending : bool
+            Flag indicating whether the merge should be in descending order
+            (default: True).
+        reader_chunk_size : int
+            Chunk size used when iterating over data readers (default: 1000).
+        column_names : list[str]
+            List of column names for the merged data.
+        column_types : list
+            List of column types for the merged data.
+    """
     def __init__(
         self,
         readers: list[TabularDataReader],
