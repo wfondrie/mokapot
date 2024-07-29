@@ -3,11 +3,7 @@ import scipy.stats as stats
 import matplotlib.pyplot as plt
 from triqler import qvality
 
-# TODO: Remove the next and uncomment the 2nd next line when
-#  scipy.optimize.nnls is fixed (see _nnls.py for explanation)
-from ._nnls import nnls
-
-# from scipy.optimize import nnls
+from scipy.optimize import nnls
 
 PEP_ALGORITHM = {
     "qvality": lambda scores, targets: peps_from_scores_qvality(

@@ -53,8 +53,8 @@ def get_score_column_type(suffix):
 @typechecked
 class TabularDataReader(ABC):
     """
-    An abstract class that represents a source for tabular data that can be read
-    in either completely or chunk-wise.
+    An abstract class that represents a source for tabular data that can be
+    read in either completely or chunk-wise.
 
     Implementations can be classes that either read from files, from memory
     (e.g. data frames), combine or modify other readers or represent computed
@@ -118,7 +118,8 @@ class ColumnMappedReader(TabularDataReader):
         reader : TabularDataReader
             The underlying reader for the original data.
         column_map : dict[str, str]
-            A dictionary that maps the original column names to the new column names.
+            A dictionary that maps the original column names to the new
+            column names.
     """
     def __init__(self, reader: TabularDataReader, column_map: dict[str, str]):
         self.reader = reader
@@ -437,8 +438,9 @@ def auto_finalize(writers: list[TabularDataWriter]):
 @typechecked
 class BufferedWriter(TabularDataWriter):
     """
-    This class represents a buffered writer for tabular data. It allows writing data to a tabular data writer in
-    batches, reducing the number of write operations.
+    This class represents a buffered writer for tabular data. It allows
+    writing data to a tabular data writer in batches, reducing the
+    number of write operations.
 
     Attributes:
     -----------
@@ -447,9 +449,11 @@ class BufferedWriter(TabularDataWriter):
     buffer_size : int
         The number of records to buffer before writing to the writer.
     buffer_type : TableType
-        The type of buffer being used. Can be one of TableType.DataFrame, TableType.Dicts, or TableType.Records.
+        The type of buffer being used. Can be one of TableType.DataFrame,
+        TableType.Dicts, or TableType.Records.
     buffer : pd.DataFrame or list of dictionaries or np.recarray or None
-        The buffer containing the tabular data to be written. The buffer type depends on the buffer_type attribute.
+        The buffer containing the tabular data to be written.
+        The buffer type depends on the buffer_type attribute.
     """
     writer: TabularDataWriter
     buffer_size: int
@@ -554,7 +558,8 @@ class CSVFileWriter(TabularDataWriter):
         The file path where the CSV file will be written.
 
     sep : str, optional
-        The separator string used to separate fields in the CSV file. Default is tab character ("\t").
+        The separator string used to separate fields in the CSV file.
+        Default is tab character ("\t").
     """
     file_name: Path
 

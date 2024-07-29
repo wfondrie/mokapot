@@ -390,9 +390,9 @@ def _parser():
         "--sqlite_db_path",
         default=None,
         type=Path,
-        help="Optionally, sets a path to an MSAID sqlite result database for writing "
-             "outputs to. If not set (None), results are written in the standard TSV "
-             "format.",
+        help="Optionally, sets a path to an MSAID sqlite result database "
+             "for writing outputs to. If not set (None), results are "
+             "written in the standard TSV format.",
     )
 
     return parser

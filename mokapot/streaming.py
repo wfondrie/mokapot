@@ -151,10 +151,10 @@ class ComputedTabularDataReader(TabularDataReader):
 @typechecked
 class MergedTabularDataReader(TabularDataReader):
     """
-    Merges data from multiple tabular data sources vertically into a single data
-    source, ordering the rows (one by one) by the value of a priority column.
-    I.e. for each output row, the row of the input readers with the highest
-    value of the priority column is picked.
+    Merges data from multiple tabular data sources vertically into a single
+    data source, ordering the rows (one by one) by the value of a priority
+    column. I.e. for each output row, the row of the input readers with the
+    highest value of the priority column is picked.
 
     Attributes:
     -----------

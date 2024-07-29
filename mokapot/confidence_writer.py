@@ -80,13 +80,18 @@ def write_confidences(
     data_iterator : Iterator[pd.DataFrame]
         An iterator that yields chunks of data as pandas DataFrames.
     q_value_iterator : Iterable[np.array]
-        A iterator that yields numpy arrays containing the q-values for each data chunk.
+        A iterator that yields numpy arrays containing the q-values for each
+        data chunk.
     pep_iterator : Iterable[np.array]
-        A iterator that yields numpy arrays containing the posterior error probabilities for each data chunk.
+        A iterator that yields numpy arrays containing the posterior error
+        probabilities for each data chunk.
     target_iterator : Iterable[np.array]
-        A iterator that yields numpy arrays indicating whether each data point is a target or decoy for each data chunk.
+        A iterator that yields numpy arrays indicating whether each data point
+        is a target or decoy for each data chunk.
     out_paths : list[Path]
-        A list of output file paths where the confidence data will be written. The first element contains the path for the targets and the second those for the decoys.
+        A list of output file paths where the confidence data will be written.
+        The first element contains the path for the targets and the second
+        those for the decoys.
     decoys : bool
         A boolean flag indicating whether to include decoy data in the output.
     level : str
@@ -96,7 +101,8 @@ def write_confidences(
     qvalue_column : str, optional
         The name of the column to store the q-values. Default is 'q_value'.
     pep_column : str, optional
-        The name of the column to store the posterior error probabilities. Default is 'posterior_error_prob'.
+        The name of the column to store the posterior error probabilities.
+        Default is 'posterior_error_prob'.
 
     Returns
     -------
