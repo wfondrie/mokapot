@@ -186,9 +186,9 @@ def test_dataframe_reader(psm_df_6):
         reader.read(), pd.DataFrame({"test": [1, 2, 3]})
     )
 
-    reader = DataFrameReader.from_array(np.array([1, 2, 3]), name="test")
+    reader = DataFrameReader.from_array(np.array([1, 2, 3], dtype=np.int32), name="test")
     pd.testing.assert_frame_equal(
-        reader.read(), pd.DataFrame({"test": [1, 2, 3]})
+        reader.read(), pd.DataFrame({"test": [1, 2, 3]}, dtype=np.int32)
     )
 
 
