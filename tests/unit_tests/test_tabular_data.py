@@ -186,9 +186,13 @@ def test_dataframe_reader(psm_df_6):
         reader.read(), pd.DataFrame({"test": [1, 2, 3]})
     )
 
-    reader = DataFrameReader.from_array(np.array([1, 2, 3], dtype=np.int32), name="test")
+    reader = DataFrameReader.from_array(
+        np.array([1, 2, 3],
+        dtype=np.int32), name="test"
+    )
     pd.testing.assert_frame_equal(
-        reader.read(), pd.DataFrame({"test": [1, 2, 3]}, dtype=np.int32)
+        reader.read(), 
+        pd.DataFrame({"test": [1, 2, 3]}, dtype=np.int32)
     )
 
 
@@ -215,13 +219,13 @@ def test_column_renaming(psm_df_6):
 
     assert (reader.read().values == orig_reader.read().values).all()
     assert (
-        reader.read(["Pep", "protein", "T", "feature_1"]).values
-        == orig_reader.read([
-            "peptide",
-            "protein",
-            "target",
-            "feature_1",
-        ]).values
+            reader.read(["Pep", "protein", "T", "feature_1"]).values
+            == orig_reader.read([
+        "peptide",
+        "protein",
+        "target",
+        "feature_1",
+    ]).values
     ).all()
 
     renamed_chunk = next(
