@@ -83,6 +83,7 @@ def _parser():
         "-d",
         "--dest_dir",
         type=Path,
+        default=Path("."),
         help=(
             "The directory in which to write the result files. Defaults to "
             "the current working directory"
