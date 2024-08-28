@@ -2,7 +2,6 @@ from pathlib import Path
 from io import StringIO
 from typing import TextIO
 from unittest.mock import Mock
-
 import argparse
 
 # PIN file specification from
@@ -49,7 +48,8 @@ def parse_pin_header_columns(
     >>> n_col, idx_protein_col
     (6, 5)
     """
-    columns = header.split(sep_column)
+    columns = header.strip().split(sep_column)
+    print(columns)
     assert "Proteins" in columns
     n_col = len(columns)
     idx_protein_col = columns.index("Proteins")
