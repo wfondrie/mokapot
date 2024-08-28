@@ -49,7 +49,6 @@ def parse_pin_header_columns(
     (6, 5)
     """
     columns = header.strip().split(sep_column)
-    print(columns)
     assert "Proteins" in columns
     n_col = len(columns)
     idx_protein_col = columns.index("Proteins")
