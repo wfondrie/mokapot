@@ -105,6 +105,53 @@ def convert_line_pin_to_tsv(
     return tsv_line
 
 
+def is_valid_tsv(
+        f_in: TextIO,
+        sep_column: str = PIN_SEP
+) -> bool:
+    """
+    This function verifies that:
+    1. All rows have the same number of columns as the header row.
+    2. The file does not contain a "DefaultDirection" line as the second line.
+
+    Parameters
+    ----------
+    f_in : TextIO
+        Input file object to read from. This should be an opened file or file-like
+        object that supports iteration.
+    sep_column : str, optional
+        Column separator (default is PIN_SEP, which is assumed to be a tab character).
+
+    Returns
+    -------
+    bool
+        True if the file is a valid TSV according to the specified criteria,
+        False otherwise.
+
+    Examples
+    --------
+    >>> input = StringIO(EXAMPLE_PIN)
+    >>> is_valid_tsv(input)
+    False
+    """
+    n_col_header = len(next(f_in).split(sep_column))
+    line_2 = next(f_in)
+
+    # check for optional DefaultDirection line
+    if line_2.startswith("DefaultDirection"):
+        return False
+    n_col = len(line_2.split(sep_column))
+    if n_col != n_col_header:
+        return False
+
+    # check if sep_column is really only used for columns
+    for line in f_in:
+        n_col = len(line.split(sep_column))
+        if n_col != n_col_header:
+            return False
+    return True
+
+
 def pin_to_valid_tsv(
         f_in: TextIO,
         f_out: TextIO,
