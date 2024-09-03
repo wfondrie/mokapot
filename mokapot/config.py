@@ -73,9 +73,17 @@ def _parser():
     )
 
     parser.add_argument(
+        "--verify_pin",
+        type=bool,
+        default=True,
+        help="Verify that PIN input files are valid TSVs. If not convert them.",
+    )
+
+    parser.add_argument(
         "-d",
         "--dest_dir",
         type=Path,
+        default=Path("."),
         help=(
             "The directory in which to write the result files. Defaults to "
             "the current working directory"
