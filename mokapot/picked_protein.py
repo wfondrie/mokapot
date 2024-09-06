@@ -2,6 +2,7 @@
 Implementation of the picked-protein approach for protein-level
 confidence estimates.
 """
+
 import logging
 import pandas as pd
 

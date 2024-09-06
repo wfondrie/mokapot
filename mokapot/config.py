@@ -2,8 +2,10 @@
 Contains all of the configuration details for running mokapot
 from the command line.
 """
+
 import argparse
 import textwrap
+from pathlib import Path
 
 from mokapot import __version__
 
@@ -12,8 +14,10 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
     """Format help text to keep newlines and whitespace"""
 
     def _fill_text(self, text, width, indent):
-        lines = text.splitlines(keepends=True)
-        return "\n".join(_process_line(txt, width, indent) for txt in lines)
+        text_list = text.splitlines(keepends=True)
+        return "\n".join(
+            _process_line(line, width, indent) for line in text_list
+        )
 
 
 class Config:
@@ -23,19 +27,20 @@ class Config:
     Options can be specified as command-line arguments.
     """
 
-    def __init__(self, parser=None) -> None:
+    def __init__(self, parser=None, main_args=None) -> None:
         """Initialize configuration values."""
         self._namespace = None
         if parser is None:
             self.parser = _parser()
         else:
             self.parser = parser
+        self.main_args = main_args
 
     @property
     def args(self):
         """Collect args lazily."""
         if self._namespace is None:
-            self._namespace = vars(self.parser.parse_args())
+            self._namespace = vars(self.parser.parse_args(self.main_args))
 
         return self._namespace
 
@@ -59,7 +64,7 @@ def _parser():
 
     parser.add_argument(
         "psm_files",
-        type=str,
+        type=Path,
         nargs="+",
         help=(
             "A collection of PSMs in the Percolator tab-delimited or PepXML "
@@ -68,9 +73,17 @@ def _parser():
     )
 
     parser.add_argument(
+        "--verify_pin",
+        type=bool,
+        default=True,
+        help="Verify that PIN input files are valid TSVs. If not convert them.",
+    )
+
+    parser.add_argument(
         "-d",
         "--dest_dir",
-        type=str,
+        type=Path,
+        default=Path("."),
         help=(
             "The directory in which to write the result files. Defaults to "
             "the current working directory"
@@ -98,7 +111,7 @@ def _parser():
 
     parser.add_argument(
         "--proteins",
-        type=str,
+        type=Path,
         help=(
             "The FASTA file used for the database search. Using this "
             "option enable protein-level confidence estimates using "
@@ -146,7 +159,10 @@ def _parser():
         "--clip_nterm_methionine",
         default=False,
         action="store_true",
-        help="Remove methionine residues that occur at the protein N-terminus.",
+        help=(
+            "Remove methionine residues that occur"
+            " at the protein N-terminus.",
+        ),
     )
 
     parser.add_argument(
@@ -266,20 +282,12 @@ def _parser():
 
     parser.add_argument(
         "--load_models",
-        type=str,
+        type=Path,
         nargs="+",
         help=(
             "Load previously saved models and skip model training."
             "Note that the number of models must match the value of --folds."
         ),
-    )
-
-    parser.add_argument(
-        "--plugin",
-        type=str,
-        action="append",
-        default=[],
-        help=("The names of the plugins to use."),
     )
 
     parser.add_argument(
@@ -290,6 +298,20 @@ def _parser():
     )
 
     parser.add_argument(
+        "--skip_deduplication",
+        default=False,
+        action="store_true",
+        help=("Keep deduplication of psms wrt scan number and expMass."),
+    )
+
+    parser.add_argument(
+        "--skip_rollup",
+        default=False,
+        action="store_true",
+        help=("Don't do the rollup to peptide (or other) levels."),
+    )
+
+    parser.add_argument(
         "--folds",
         type=int,
         default=3,
@@ -297,6 +319,40 @@ def _parser():
             "The number of cross-validation folds to use. "
             "PSMs originating from the same mass spectrum "
             "are always in the same fold."
+        ),
+    )
+
+    parser.add_argument(
+        "--ensemble",
+        default=False,
+        action="store_true",
+        help=("activate ensemble prediction. "),
+    )
+
+    parser.add_argument(
+        "--peps_error",
+        default=False,
+        action="store_true",
+        help=("raise error when all PEPs values are equal to 1."),
+    )
+
+    parser.add_argument(
+        "--peps_algorithm",
+        default="qvality",
+        choices=["qvality", "qvality_bin", "kde_nnls", "hist_nnls"],
+        help=(
+            "Specify the algorithm for pep computation. 'qvality_bin' works "
+            "only if the qvality binary is on the search path"
+        ),
+    )
+
+    parser.add_argument(
+        "--qvalue_algorithm",
+        default="tdc",
+        choices=["tdc", "from_peps", "from_counts"],
+        help=(
+            "Specify the algorithm for qvalue computation. `tdc is` "
+            "the default mokapot algorithm."
         ),
     )
 
@@ -326,6 +382,25 @@ def _parser():
             "verbosity: 0-errors, 1-warnings, 2-messages"
             ", 3-debug info."
         ),
+    )
+
+    parser.add_argument(
+        "--suppress_warnings",
+        default=False,
+        action="store_true",
+        help=(
+            "Suppress warning messages when running mokapot. "
+            "Should only be used when running mokapot in production."
+        ),
+    )
+
+    parser.add_argument(
+        "--sqlite_db_path",
+        default=None,
+        type=Path,
+        help="Optionally, sets a path to an MSAID sqlite result database "
+             "for writing outputs to. If not set (None), results are "
+             "written in the standard TSV format.",
     )
 
     return parser

@@ -1,0 +1,50 @@
+image: python:3.10.5
+
+variables:
+  PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.cache/pip"
+
+stages:
+  - publish
+  - test
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .cache/pip
+    - .venv
+
+.with_twine:
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install setuptools wheel twine build pip-licenses
+
+
+gather-licences:
+  extends: .with_twine
+  stage: publish
+  script:
+    - pip-licenses --from=mixed --order=license --with-system -f markdown --output-file LICENSES.md
+  artifacts:
+    when: always
+    paths:
+      - LICENSES.md
+    expire_in: 4 week
+
+
+publish:
+  extends: .with_twine
+  stage: publish
+  rules:
+    - if: '$CI_COMMIT_TAG != null'
+  script:
+    - python -m build --sdist --wheel .
+    - TWINE_PASSWORD=${CI_JOB_TOKEN} TWINE_USERNAME=gitlab-ci-token python -m twine upload --repository-url https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/packages/pypi dist/*
+
+unit_test:
+  extends: .with_twine
+  stage: test
+  script:
+    - pip install .[dev]
+    - pip install pytest
+    - pytest tests/
+

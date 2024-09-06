@@ -1,7 +1,10 @@
 """Test the utility functions"""
+
 import pytest
 import numpy as np
 import pandas as pd
+from pandas.testing import assert_series_equal
+
 from mokapot import utils
 
 
@@ -85,3 +88,146 @@ def test_tuplize():
     tuple_in = ("blah", 1, "x")
     tuple_out = ("blah", 1, "x")
     assert utils.tuplize(tuple_in) == tuple_out
+
+
+def test_merge_sort(merge_sort_data):
+    files_csv, files_parquet = merge_sort_data
+    iterable_csv = utils.merge_sort(files_csv, "score")
+    iterable_parquet = utils.merge_sort(files_parquet, "score")
+    a = list(iterable_csv)
+    b = list(iterable_parquet)
+
+    a_ids = [x["SpecId"] for x in a]
+    b_ids = [x["SpecId"] for x in b]
+
+    assert a_ids == b_ids, "Merge sort ids vary between parquet and csv"
+
+    # This only tests whether tho empty lists are the same, since the iterator
+    # is consumed when calling list on it.
+    # assert list(iterable_csv) == list(
+    #     iterable_parquet
+    # ), "Merge sort ids vary between parquet and csv"
+
+
+def test_create_chunks():
+    # Case 1: Chunk size is less than data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]
+
+    # Case 2: Chunk size is equal to data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 5) == [[1, 2, 3, 4, 5]]
+
+    # Case 3: Chunk size is greater than data length
+    assert utils.create_chunks([1, 2, 3, 4, 5], 10) == [[1, 2, 3, 4, 5]]
+
+    # Case 4: Chunk size is 1
+    assert utils.create_chunks([1, 2, 3, 4, 5], 1) == [[1], [2], [3], [4], [5]]
+
+    # Case 6: Empty data array, chunk size doesn't matter
+    assert utils.create_chunks([], 3) == []
+
+
+def test_convert_targets_column(psms_iterator):
+    df = pd.DataFrame(
+        psms_iterator,
+        columns=[
+            "PSMId",
+            "Label",
+            "Peptide",
+            "score",
+            "q-value",
+            "posterior_error_prob",
+            "proteinIds",
+        ],
+    )
+    labels = df["Label"].astype(int)
+    expect = pd.Series(
+        [True, False, False, True, True, False, True], name="Label"
+    )
+
+    # Test with values in [0, 1] as strings
+    df_out = utils.convert_targets_column(df, "Label")
+    assert df_out is df  # check that returned and original df are the same
+    assert_series_equal(df["Label"], expect)
+
+    # Test with values in [0, 1]
+    df["Label"] = labels
+    utils.convert_targets_column(df, "Label")
+    assert_series_equal(df["Label"], expect)
+
+    # Test with values in [-1, 1]
+    labels[labels == 0] = -1
+    df["Label"] = labels
+    utils.convert_targets_column(df, "Label")
+    assert_series_equal(df["Label"], expect)
+
+    # Test with values in [-1, 1] as strings
+    df["Label"] = labels.astype(str)
+    utils.convert_targets_column(df, "Label")
+    assert_series_equal(df["Label"], expect)
+
+    # Test with bool values (should be idempotent)
+    df["Label"] = labels == 1
+    utils.convert_targets_column(df, "Label")
+    assert_series_equal(df["Label"], expect)
+
+    # Junk in the target column should raise a ValueError
+    df["Label"] = labels + 3
+    with pytest.raises(ValueError):
+        utils.convert_targets_column(df, "Label")
+
+
+def test_map_columns_to_indices():
+    # Test with empty structure
+    assert utils.map_columns_to_indices([], []) == []
+    assert utils.map_columns_to_indices((), []) == ()
+
+    # Test with dict
+    assert utils.map_columns_to_indices(
+        {"key1": "a", "key2": "c"}, ["a", "b", "c"]
+    ) == {"key1": 0, "key2": 2}
+
+    # Test recursive
+    assert utils.map_columns_to_indices(
+        [("a", ("b", ["c"], ("b",), "c")), ("c", "b")], ["a", "b", "c"]
+    ) == [(0, (1, [2], (1,), 2)), (2, 1)]
+
+    # Test that an assertion is raised if a value isn't found
+    with pytest.raises(ValueError):
+        utils.map_columns_to_indices(["a", "b", "c", "d"], ["a", "b", "c"])
+
+    # Test with a real world case
+    columns = [
+        "SpecId",
+        "Label",
+        "ScanNr",
+        "ExpMass",
+        "Mass",
+        "MS8_feature_5",
+        "missedCleavages",
+        "MS8_feature_7",
+        "MS8_feature_13",
+        "MS8_feature_156",
+        "MS8_feature_157",
+        "MS8_feature_158",
+        "Peptide",
+        "Proteins",
+        "ModifiedPeptide",
+        "PCM",
+        "PeptideGroup",
+    ]
+    level_columns = [
+        ("SpecId", "ScanNr"),
+        "Peptide",
+        "Proteins",
+        "ModifiedPeptide",
+        "PCM",
+        "PeptideGroup",
+    ]
+    assert utils.map_columns_to_indices(level_columns, columns) == [
+        (0, 2),
+        12,
+        13,
+        14,
+        15,
+        16,
+    ]

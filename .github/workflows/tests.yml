@@ -2,9 +2,13 @@ name: tests
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - develop
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+      - develop
 
 jobs:
   build:
@@ -13,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.8', '3.9', '3.10',]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
         os: [ubuntu-latest, windows-latest, macos-latest]
         experimental: [false,]
 
@@ -29,7 +33,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest pytest-cov wheel
         pip install -e .
-        pip install -e ./tests/system_tests/sample_plugin/.
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names

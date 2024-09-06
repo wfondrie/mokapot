@@ -1,13 +1,3 @@
-<img src="https://raw.githubusercontent.com/wfondrie/mokapot/master/static/mokapot_logo_dark.svg" width=300>  
-
----  
-[![conda](https://img.shields.io/conda/vn/bioconda/mokapot?color=green)](http://bioconda.github.io/recipes/mokapot/README.html)
-[![PyPI](https://img.shields.io/pypi/v/mokapot?color=green)](https://pypi.org/project/mokapot/)
-[![tests](https://github.com/wfondrie/mokapot/workflows/tests/badge.svg)](https://github.com/wfondrie/mokapot/actions?query=workflow%3Atests)
-[![docs](https://readthedocs.org/projects/mokapot/badge/?version=latest)](https://mokapot.readthedocs.io/en/latest/?badge=latest)
-
-
-
 Fast and flexible semi-supervised learning for peptide detection.  
 
 mokapot is fundamentally a Python implementation of the semi-supervised learning
@@ -70,11 +60,12 @@ Alternatively, the Python API can be used to perform analyses in the Python
 interpreter and affords greater flexibility:
 
 ```Python
->>> import mokapot
->>> psms = mokapot.read_pin("psms.pin")
->>> results, models = mokapot.brew(psms)
->>> results.to_txt()
+import mokapot
+psms = mokapot.read_pin("psms.pin")
+results, models = mokapot.brew(psms)
+results.to_txt()
 ```
 
 Check out our [documentation](https://mokapot.readthedocs.io) for more details
 and examples of mokapot in action.
+

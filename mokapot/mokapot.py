@@ -1,37 +1,34 @@
 """
 This is the command line interface for mokapot
 """
+
 import datetime
 import logging
 import sys
 import time
-from functools import partial
+import warnings
+import shutil
 from pathlib import Path
 
 import numpy as np
 
 from . import __version__
-from .brew import brew
 from .config import Config
-from .model import PercolatorModel, load_model
-from .parsers.fasta import read_fasta
-from .parsers.pepxml import read_pepxml
 from .parsers.pin import read_pin
-from .plugins import get_plugins
+from .parsers.pin_to_tsv import is_valid_tsv, pin_to_valid_tsv
+from .parsers.fasta import read_fasta
+from .brew import brew
+from .model import PercolatorModel, load_model
+from .confidence import assign_confidence
 
 
-def main():
+def main(main_args=None):
     """The CLI entry point"""
     start = time.time()
-    plugins = get_plugins()
 
     # Get command line arguments
     parser = Config().parser
-    for plugin_name, plugin in plugins.items():
-        parsergroup = parser.add_argument_group(plugin_name)
-        plugin.add_arguments(parsergroup)
-
-    config = Config(parser)
+    config = Config(parser, main_args=main_args)
 
     # Setup logging
     verbosity_dict = {
@@ -46,6 +43,11 @@ def main():
         style="{",
         level=verbosity_dict[config.verbosity],
     )
+    logging.captureWarnings(True)
+
+    # Suppress warning if asked for
+    if config.suppress_warnings:
+        warnings.filterwarnings("ignore")
 
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
@@ -55,25 +57,32 @@ def main():
     logging.info("Command issued:")
     logging.info("%s", " ".join(sys.argv))
     logging.info("")
+
+    logging.info("Verify PIN format")
+    logging.info("=================")
+    if config.verify_pin:
+        for path_pin in config.psm_files:
+            with open(path_pin, 'r') as f_pin:
+                valid_tsv = is_valid_tsv(f_pin)
+            if not valid_tsv:
+                logging.info(f"{path_pin} invalid tsv, converting")
+                path_tsv = f"{path_pin}.tsv"
+                with open(path_pin, 'r') as f_pin:
+                    with open(path_tsv, 'a') as f_tsv:
+                        pin_to_valid_tsv(f_in=f_pin, f_out=f_tsv)
+                shutil.move(path_tsv, path_pin)
+
     logging.info("Starting Analysis")
     logging.info("=================")
-    logging.debug("Loaded plugins: %s", plugins.keys())
 
     np.random.seed(config.seed)
 
-    # Parse Datasets
-    parse = get_parser(config)
-    enabled_plugins = {p: plugins[p]() for p in config.plugin}
-
+    # Parse
+    datasets = read_pin(config.psm_files, max_workers=config.max_workers)
     if config.aggregate or len(config.psm_files) == 1:
-        datasets = parse(config.psm_files)
-        for plugin in enabled_plugins.values():
-            datasets = plugin.process_data(datasets, config)
+        prefixes = ["" for f in config.psm_files]
     else:
-        datasets = [parse(f) for f in config.psm_files]
-        for plugin in enabled_plugins.values():
-            datasets = [plugin.process_data(ds, config) for ds in datasets]
-        prefixes = [Path(f).stem for f in config.psm_files]
+        prefixes = [f.stem for f in config.psm_files]
 
     # Parse FASTA, if required:
     if config.proteins is not None:
@@ -88,39 +97,13 @@ def main():
             semi=config.semi,
             decoy_prefix=config.decoy_prefix,
         )
-
-        if config.aggregate or len(config.psm_files) == 1:
-            datasets.add_proteins(proteins)
-        else:
-            for dataset in datasets:
-                dataset.add_proteins(proteins)
+    else:
+        proteins = None
 
     # Define a model:
     model = None
     if config.load_models:
         model = [load_model(model_file) for model_file in config.load_models]
-    elif enabled_plugins:
-        plugin_models = {}
-        for plugin_name, plugin in enabled_plugins.items():
-            model = plugin.get_model(config)
-            if model is not None:
-                logging.debug(f"Loaded model for {plugin_name}")
-                plugin_models[plugin_name] = model
-
-        if not plugin_models:
-            logging.info(
-                "No models were defined by plugins. Using default model."
-            )
-            model = None
-        else:
-            first_mod_name = list(plugin_models.keys())[0]
-            if len(plugin_models) > 1:
-                logging.warning(
-                    "More than one model was defined by plugins."
-                    " Using the first one. (%s)",
-                    first_mod_name,
-                )
-            model = list(plugin_models.values())[0]
 
     if model is None:
         logging.debug("Loading Percolator model.")
@@ -129,52 +112,60 @@ def main():
             max_iter=config.max_iter,
             direction=config.direction,
             override=config.override,
-            subset_max_train=config.subset_max_train,
+            rng=config.seed,
         )
 
     # Fit the models:
-    psms, models = brew(
+    psms, models, scores, desc = brew(
         datasets,
         model=model,
         test_fdr=config.test_fdr,
         folds=config.folds,
         max_workers=config.max_workers,
+        subset_max_train=config.subset_max_train,
+        ensemble=config.ensemble,
+        rng=config.seed,
     )
+    logging.info("")
 
     if config.dest_dir is not None:
-        Path(config.dest_dir).mkdir(exist_ok=True)
+        config.dest_dir.mkdir(exist_ok=True)
+
+    if config.file_root is not None:
+        file_root = f"{config.file_root}."
+    else:
+        file_root = ""
+
+    assign_confidence(
+        psms=psms,
+        max_workers=config.max_workers,
+        scores=scores,
+        descs=desc,
+        eval_fdr=config.test_fdr,
+        dest_dir=config.dest_dir,
+        file_root=file_root,
+        prefixes=prefixes,
+        decoys=config.keep_decoys,
+        do_rollup=not config.skip_rollup,
+        proteins=proteins,
+        peps_error=config.peps_error,
+        peps_algorithm=config.peps_algorithm,
+        qvalue_algorithm=config.qvalue_algorithm,
+        sqlite_path=config.sqlite_db_path,
+    )
 
     if config.save_models:
         logging.info("Saving models...")
         for i, trained_model in enumerate(models):
-            out_file = f"mokapot.model_fold-{i+1}.pkl"
+            out_file = Path(f"mokapot.model_fold-{i + 1}.pkl")
 
             if config.file_root is not None:
-                out_file = ".".join([config.file_root, out_file])
+                out_file = Path(config.file_root + "." + out_file.name)
 
             if config.dest_dir is not None:
-                out_file = Path(config.dest_dir, out_file)
+                out_file = config.dest_dir / out_file
 
-            trained_model.save(str(out_file))
-
-    # Determine how to write the results:
-    logging.info("Writing results...")
-    if config.aggregate or len(config.psm_files) == 1:
-        psms.to_txt(
-            dest_dir=config.dest_dir,
-            file_root=config.file_root,
-            decoys=config.keep_decoys,
-        )
-    else:
-        for dat, prefix in zip(psms, prefixes):
-            if config.file_root is not None:
-                prefix = ".".join([config.file_root, prefix])
-
-            dat.to_txt(
-                dest_dir=config.dest_dir,
-                file_root=prefix,
-                decoys=config.keep_decoys,
-            )
+            trained_model.save(out_file)
 
     total_time = round(time.time() - start)
     total_time = str(datetime.timedelta(seconds=total_time))
@@ -184,45 +175,17 @@ def main():
     logging.info("mokapot analysis completed in %s", total_time)
 
 
-def get_parser(config):
-    """Figure out which parser to use.
-
-    Note that this just looks at file extensions, but in the future it might be
-    good to check the contents of the file. I'm just not sure how to do this
-    in an efficient way, particularly for gzipped files.
-
-    Parameters
-    ----------
-    config : argparse object
-         The configuration details.
-
-    Returns
-    -------
-    callable
-         Returns the correct parser for the files.
-
-    """
-    pepxml_ext = {".pep.xml", ".pepxml", ".xml"}
-    num_pepxml = 0
-    for psm_file in config.psm_files:
-        ext = Path(psm_file).suffixes
-        if len(ext) > 2:
-            ext = "".join(ext[-2:])
-        else:
-            ext = "".join(ext)
-
-        if ext.lower() in pepxml_ext:
-            num_pepxml += 1
-
-    if num_pepxml == len(config.psm_files):
-        return partial(
-            read_pepxml,
-            open_modification_bin_size=config.open_modification_bin_size,
-            decoy_prefix=config.decoy_prefix,
-        )
-
-    return read_pin
-
-
 if __name__ == "__main__":
-    main()
+    import traceback
+
+    try:
+        main()
+    except RuntimeError as _e:
+        logging.error(f"[Error] {traceback.format_exc()}")
+        sys.exit(250)  # input failure
+    except ValueError as _e:
+        logging.error(f"[Error] {traceback.format_exc()}")
+        sys.exit(250)  # input failure
+    except Exception as _e:
+        logging.error(f"[Error] {traceback.format_exc()}")
+        sys.exit(252)

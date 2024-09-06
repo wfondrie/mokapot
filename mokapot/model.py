@@ -13,9 +13,10 @@ typical use cases. For example, use :py:class:`PercolatorModel` if you
 want to emulate the behavior of Percolator.
 
 """
-import copy
+
 import logging
 import pickle
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -25,6 +26,7 @@ from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.exceptions import NotFittedError
+from typeguard import typechecked
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,11 +81,6 @@ class Model:
     override : bool, optional
         If the learned model performs worse than the best feature, should
         the model still be used?
-    subset_max_train : int or None, optional
-        Use only a random subset of the PSMs for training. This is useful
-        for very large datasets or models that scale poorly with the
-        number of PSMs. The default, :code:`None` will use all of the
-        PSMs.
     shuffle : bool, optional
         Should the order of PSMs be randomized for training? For deterministic
         algorithms, this will have no effect.
@@ -112,8 +109,6 @@ class Model:
     override : bool
         If the learned model performs worse than the best feature, should
         the model still be used?
-    subset_max_train : int
-        The number of PSMs for training.
     shuffle : bool
         Is the order of PSMs shuffled for training?
     fold : int or None
@@ -130,7 +125,6 @@ class Model:
         max_iter=10,
         direction=None,
         override=False,
-        subset_max_train=None,
         shuffle=True,
         rng=None,
     ):
@@ -138,7 +132,9 @@ class Model:
         self.estimator = clone(estimator)
         self.features = None
         self.is_trained = False
-        self.subset_max_train = subset_max_train
+        self.feat_pass = None
+        self.best_feat = None
+        self.desc = None
 
         if scaler == "as-is":
             self.scaler = DummyScaler()
@@ -185,7 +181,8 @@ class Model:
         """Set the random number generator"""
         self._rng = np.random.default_rng(rng)
 
-    def save(self, out_file):
+    @typechecked
+    def save(self, out_file: Path):
         """
         Save the model to a file.
 
@@ -278,30 +275,13 @@ class Model:
                 len(psms.data),
             )
 
-        if self.subset_max_train is not None:
-            if self.subset_max_train > len(psms):
-                LOGGER.warning(
-                    "The provided subset value (%i) is larger than the number "
-                    "of psms in the training split (%i), so it will be "
-                    "ignored.",
-                    self.subset_max_train,
-                    len(psms),
-                )
-            else:
-                LOGGER.info(
-                    "Subsetting PSMs (%i) to (%i).",
-                    len(psms),
-                    self.subset_max_train,
-                )
-                subset_idx = self.rng.choice(
-                    len(psms), self.subset_max_train, replace=False
-                )
-
-                psms = copy.copy(psms)
-                psms._data = psms._data.iloc[subset_idx, :]
-
         # Choose the initial direction
-        start_labels, feat_pass = _get_starting_labels(psms, self)
+        (
+            start_labels,
+            self.feat_pass,
+            self.best_feat,
+            self.desc,
+        ) = _get_starting_labels(psms, self)
 
         # Normalize Features
         self.features = psms.features.columns.tolist()
@@ -336,14 +316,17 @@ class Model:
             target = target[shuffled_idx]
             num_passed.append((target == 1).sum())
 
-            LOGGER.info(
+            LOGGER.debug(
                 "\t- Iteration %i: %i training PSMs passed.", i, num_passed[i]
             )
+
+            if num_passed[i] == 0:
+                raise RuntimeError("Model performs worse after training.")
 
         # If the model performs worse than what was initialized:
         if (
             num_passed[-1] < (start_labels == 1).sum()
-            or num_passed[-1] < feat_pass
+            or num_passed[-1] < self.feat_pass
         ):
             if self.override:
                 LOGGER.warning("Model performs worse after training.")
@@ -353,9 +336,9 @@ class Model:
         self.estimator = model
         weights = _get_weights(self.estimator, self.features)
         if weights is not None:
-            LOGGER.info("Normalized feature weights in the learned model:")
+            LOGGER.debug("Normalized feature weights in the learned model:")
             for line in weights:
-                LOGGER.info("    %s", line)
+                LOGGER.debug("    %s", line)
 
         self.is_trained = True
         LOGGER.info("Done training.")
@@ -396,11 +379,6 @@ class PercolatorModel(Model):
     override : bool, optional
         If the learned model performs worse than the best feature, should
         the model still be used?
-    subset_max_train : int or None, optional
-        Use only a random subset of the PSMs for training. This is useful
-        for very large datasets or models that scale poorly with the
-        number of PSMs. The default, :code:`None` will use all of the
-        PSMs.
     n_jobs : int, optional
         The number of jobs used to parallelize the hyperparameter grid search.
     rng : int or numpy.random.Generator, optional
@@ -428,8 +406,6 @@ class PercolatorModel(Model):
     override : bool
         If the learned model performs worse than the best feature, should
         the model still be used?
-    subset_max_train : int or None
-        The number of PSMs for training.
     n_jobs : int
         The number of jobs to use for parallizing the hyperparameter
         grid search.
@@ -444,8 +420,7 @@ class PercolatorModel(Model):
         max_iter=10,
         direction=None,
         override=False,
-        subset_max_train=None,
-        n_jobs=-1,
+        n_jobs=1,
         rng=None,
     ):
         """Initialize a PercolatorModel"""
@@ -467,7 +442,6 @@ class PercolatorModel(Model):
             max_iter=max_iter,
             direction=direction,
             override=override,
-            subset_max_train=subset_max_train,
             rng=rng,
         )
 
@@ -491,7 +465,8 @@ class DummyScaler:
 
 
 # Functions -------------------------------------------------------------------
-def save_model(model, out_file):
+@typechecked
+def save_model(model, out_file: Path):
     """
     Save a :py:class:`mokapot.model.Model` object to a file.
 
@@ -514,7 +489,8 @@ def save_model(model, out_file):
     return model.save(out_file)
 
 
-def load_model(model_file):
+@typechecked
+def load_model(model_file: Path):
     """
     Load a saved model for mokapot.
 
@@ -543,7 +519,7 @@ def load_model(model_file):
         LOGGER.info("Loading the Percolator model.")
 
         weight_cols = [c for c in weights.index if c != "m0"]
-        model = Model(estimator=LinearSVC(), scaler="as-is")
+        model = Model(estimator=LinearSVC(), scaler=StandardScaler())
         weight_vals = weights.loc[weight_cols]
         weight_vals = weight_vals[np.newaxis, :]
         model.estimator.coef_ = weight_vals
@@ -579,10 +555,10 @@ def _get_starting_labels(psms, model):
     feat_pass : int
         The number of passing PSMs with the best feature.
     """
-    LOGGER.info("Finding initial direction...")
+    LOGGER.debug("Finding initial direction...")
     if model.direction is None and not model.is_trained:
         feat_res = psms._find_best_feature(model.train_fdr)
-        best_feat, feat_pass, start_labels, _ = feat_res
+        best_feat, feat_pass, start_labels, desc = feat_res
         LOGGER.info(
             "\t- Selected feature %s with %i PSMs at q<=%g.",
             best_feat,
@@ -592,14 +568,17 @@ def _get_starting_labels(psms, model):
 
     elif model.is_trained:
         try:
-            scores = model.estimator.decision_function(psms.features)
+            scores = model.estimator.decision_function(psms.features.values)
         except AttributeError:
             scores = model.estimator.predict_proba(psms.features).flatten()
 
         start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
+        feat_pass = (start_labels == 1).sum()
+        best_feat = model.best_feat
+        desc = model.desc
         LOGGER.info(
             "\t- The pretrained model found %i PSMs at q<=%g.",
-            (start_labels == 1).sum(),
+            feat_pass,
             model.train_fdr,
         )
 
@@ -607,15 +586,18 @@ def _get_starting_labels(psms, model):
         feat = psms.features[model.direction].values
         desc_labels = psms._update_labels(feat, model.train_fdr, desc=True)
         asc_labels = psms._update_labels(feat, model.train_fdr, desc=False)
+        best_feat = feat
 
         desc_pass = (desc_labels == 1).sum()
         asc_pass = (asc_labels == 1).sum()
         if desc_pass >= asc_pass:
             start_labels = desc_labels
             feat_pass = desc_pass
+            desc = True
         else:
             start_labels = asc_labels
             feat_pass = asc_pass
+            desc = False
 
         LOGGER.info(
             "  - Selected feature %s with %i PSMs at q<=%g.",
@@ -630,7 +612,7 @@ def _get_starting_labels(psms, model):
             "Consider changing it to a higher value."
         )
 
-    return start_labels, feat_pass
+    return start_labels, feat_pass, best_feat, desc
 
 
 def _find_hyperparameters(model, features, labels):
@@ -651,7 +633,7 @@ def _find_hyperparameters(model, features, labels):
     An estimator.
     """
     if model._needs_cv:
-        LOGGER.info("Selecting hyperparameters...")
+        LOGGER.debug("Selecting hyperparameters...")
         cv_samples = features[labels.astype(bool), :]
         cv_targ = (labels[labels.astype(bool)] + 1) / 2
 
@@ -664,7 +646,7 @@ def _find_hyperparameters(model, features, labels):
         new_est.set_params(**best_params)
         model._needs_cv = False
         for param, value in best_params.items():
-            LOGGER.info("\t- %s = %s", param, value)
+            LOGGER.debug("\t- %s = %s", param, value)
     else:
         new_est = model.estimator
 

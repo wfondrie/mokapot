@@ -1,4 +1,5 @@
 """Test the picked protein approach functions"""
+
 import pandas as pd
 
 from mokapot.picked_protein import strip_peptides

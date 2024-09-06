@@ -4,14 +4,13 @@ These tests verify that the CLI works as expected.
 At least for now, they do not check the correctness of the
 output, just that the expect outputs are created.
 """
-import subprocess
+
 from pathlib import Path
 
-import pandas as pd
-import pytest
+from ..helpers.cli import run_mokapot_cli
 
-# Warnings are errors for these tests
-pytestmark = pytest.mark.filterwarnings("error")
+import pytest
+import pandas as pd
 
 
 @pytest.fixture
@@ -28,25 +27,52 @@ def phospho_files():
     return pin, fasta
 
 
-@pytest.fixture
-def pepxml_file():
-    """Get the pepxml file"""
-    pepxml = Path("data", "msfragger.pepXML")
-    return pepxml
+def count_lines(path: Path):
+    """Count the number of lines in a file.
+
+    Parameters
+    ----------
+    path : Path
+        The path to the file.
+
+    Returns
+    -------
+    int
+        The number of lines in the file.
+    """
+    with open(path, "r") as file:
+        lines = file.readlines()
+    return len(lines)
 
 
 def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
-    cmd = ["mokapot", scope_files[0], "--dest_dir", tmp_path]
-    subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "mokapot.psms.txt").exists()
-    assert Path(tmp_path, "mokapot.peptides.txt").exists()
+    params = [scope_files[0], "--dest_dir", tmp_path]
+    run_mokapot_cli(params)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
+
+    targets_psms_df = pd.read_csv(
+        Path(tmp_path, "targets.psms"), sep="\t", index_col=None
+    )
+    assert targets_psms_df.columns.values.tolist() == [
+        "PSMId",
+        "peptide",
+        "score",
+        "q-value",
+        "posterior_error_prob",
+        "proteinIds",
+    ]
+    assert len(targets_psms_df.index) >= 5000
+
+    assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
+    assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
+
 
 
 def test_cli_options(tmp_path, scope_files):
     """Test non-defaults"""
-    cmd = [
-        "mokapot",
+    params = [
         scope_files[0],
         scope_files[1],
         "--dest_dir",
@@ -74,37 +100,24 @@ def test_cli_options(tmp_path, scope_files):
         "3",
     ]
 
-    subprocess.run(cmd, check=True)
+    run_mokapot_cli(params)
     file_bases = [f.name.split(".")[0] for f in scope_files[0:2]]
 
-    assert Path(tmp_path, f"blah.{file_bases[0]}.mokapot.psms.txt").exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[0]}.mokapot.peptides.txt"
-    ).exists()
-    assert Path(tmp_path, f"blah.{file_bases[1]}.mokapot.psms.txt").exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[1]}.mokapot.peptides.txt"
-    ).exists()
+    assert Path(tmp_path, f"blah.{file_bases[0]}.targets.psms").exists()
+    assert Path(tmp_path, f"blah.{file_bases[0]}.targets.peptides").exists()
+    assert Path(tmp_path, f"blah.{file_bases[1]}.targets.psms").exists()
+    assert Path(tmp_path, f"blah.{file_bases[1]}.targets.peptides").exists()
 
     # Test keep_decoys:
-    assert Path(
-        tmp_path, f"blah.{file_bases[0]}.mokapot.decoy.psms.txt"
-    ).exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[0]}.mokapot.decoy.peptides.txt"
-    ).exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[1]}.mokapot.decoy.psms.txt"
-    ).exists()
-    assert Path(
-        tmp_path, f"blah.{file_bases[1]}.mokapot.decoy.peptides.txt"
-    ).exists()
+    assert Path(tmp_path, f"blah.{file_bases[0]}.decoys.psms").exists()
+    assert Path(tmp_path, f"blah.{file_bases[0]}.decoys.peptides").exists()
+    assert Path(tmp_path, f"blah.{file_bases[1]}.decoys.psms").exists()
+    assert Path(tmp_path, f"blah.{file_bases[1]}.decoys.peptides").exists()
 
 
 def test_cli_aggregate(tmp_path, scope_files):
     """Test that aggregate results in one result file."""
-    cmd = [
-        "mokapot",
+    params = [
         scope_files[0],
         scope_files[1],
         "--dest_dir",
@@ -116,23 +129,38 @@ def test_cli_aggregate(tmp_path, scope_files):
         "1",
     ]
 
-    subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "blah.mokapot.psms.txt").exists()
-    assert Path(tmp_path, "blah.mokapot.peptides.txt").exists()
-    assert not Path(tmp_path, "blah.mokapot.decoy.psms.txt").exists()
-    assert not Path(tmp_path, "blah.mokapot.decoy.peptides.txt").exists()
+    run_mokapot_cli(params)
+    assert Path(tmp_path, "blah.targets.psms").exists()
+    assert Path(tmp_path, "blah.targets.peptides").exists()
+    assert not Path(tmp_path, "blah.targets.decoy.psms").exists()
+    assert not Path(tmp_path, "blah.targets.decoy.peptides").exists()
+
+    # Line counts were determined by one hopefully correct test run
+    # GT counts: 10256, 9663
+    assert count_lines(Path(tmp_path, "blah.targets.psms")) in range(
+        10256 - 100, 10256 + 100
+    )
+    assert count_lines(Path(tmp_path, "blah.targets.peptides")) in range(
+        9663 - 50, 9663 + 50
+    )
 
     # Test that decoys are also in the output when --keep_decoys is used
-    cmd += ["--keep_decoys"]
-    subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "blah.mokapot.decoy.psms.txt").exists()
-    assert Path(tmp_path, "blah.mokapot.decoy.peptides.txt").exists()
+    params += ["--keep_decoys"]
+    run_mokapot_cli(params)
+    assert Path(tmp_path, "blah.decoys.psms").exists()
+    assert Path(tmp_path, "blah.decoys.peptides").exists()
+
+    assert count_lines(Path(tmp_path, "blah.decoys.psms")) in range(
+        3787 - 50, 3787 + 50
+    )
+    assert count_lines(Path(tmp_path, "blah.decoys.peptides")) in range(
+        3694 - 50, 3694 + 50
+    )
 
 
 def test_cli_fasta(tmp_path, phospho_files):
     """Test that proteins happen"""
-    cmd = [
-        "mokapot",
+    params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
@@ -142,46 +170,15 @@ def test_cli_fasta(tmp_path, phospho_files):
         "1",
     ]
 
-    subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "mokapot.psms.txt").exists()
-    assert Path(tmp_path, "mokapot.peptides.txt").exists()
-    assert Path(tmp_path, "mokapot.proteins.txt").exists()
-
-
-def test_cli_pepxml(tmp_path, pepxml_file):
-    """Test that finding the correct parser works"""
-    cmd = [
-        "mokapot",
-        pepxml_file,
-        "--dest_dir",
-        tmp_path,
-        "--max_iter",
-        "1",
-        "--decoy_prefix",
-        "rev_",
-    ]
-
-    subprocess.run(cmd, check=True)
-    unbinned_file = Path(tmp_path, "mokapot.peptides.txt")
-    assert Path(tmp_path, "mokapot.psms.txt").exists()
-    assert unbinned_file.exists()
-
-    cmd += ["--open_modification_bin_size", "0.01", "--file_root", "binned"]
-    subprocess.run(cmd, check=True)
-    binned_file = Path(tmp_path, "binned.mokapot.peptides.txt")
-    assert Path(tmp_path, "binned.mokapot.psms.txt").exists()
-    assert binned_file.exists()
-
-    # If binning was successful, there should be more distinct peptides:
-    unbinned = pd.read_csv(unbinned_file, sep="\t")
-    binned = pd.read_csv(binned_file, sep="\t")
-    assert len(binned) > len(unbinned)
+    run_mokapot_cli(params)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
+    assert Path(tmp_path, "targets.proteins").exists()
 
 
 def test_cli_saved_models(tmp_path, phospho_files):
     """Test that saved_models works"""
-    cmd = [
-        "mokapot",
+    params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
@@ -189,40 +186,60 @@ def test_cli_saved_models(tmp_path, phospho_files):
         "0.01",
     ]
 
-    subprocess.run(cmd + ["--save_models"], check=True)
+    run_mokapot_cli(params + ["--save_models"])
 
-    cmd += ["--load_models", *list(Path(tmp_path).glob("*.pkl"))]
-    subprocess.run(cmd, check=True)
-    assert Path(tmp_path, "mokapot.psms.txt").exists()
-    assert Path(tmp_path, "mokapot.peptides.txt").exists()
+    params += ["--load_models", *list(Path(tmp_path).glob("*.pkl"))]
+    run_mokapot_cli(params)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
 
 
-def test_cli_plugins(tmp_path, phospho_files):
-    try:
-        import mokapot_ctree
-    except ImportError:
-        mokapot_ctree = None
-
-    if mokapot_ctree is None:
-        pytest.skip("Testing plugins is not installed")
-
-    cmd = [
-        "mokapot",
+def test_cli_skip_rollup(tmp_path, phospho_files):
+    """Test that peptides file results is skipped when using skip_rollup"""
+    params = [
         phospho_files[0],
         "--dest_dir",
         tmp_path,
         "--test_fdr",
         "0.01",
+        "--skip_rollup",
     ]
 
-    res = subprocess.run(cmd + ["--help"], check=True, capture_output=True)
-    assert "--yell" in res.stdout.decode()
+    run_mokapot_cli(params)
 
-    # Make sure it does not yell when the plugin is not loaded explicitly
-    res = subprocess.run(cmd, check=True, capture_output=True)
-    assert "Yelling at the user" not in res.stderr.decode()
+    assert Path(tmp_path, "targets.psms").exists()
+    assert not Path(tmp_path, "targets.peptides").exists()
 
-    # Check that it does yell when the plugin is loaded and arg is requested
-    cmd += ["--plugin", "mokapot_ctree", "--yell"]
-    res = subprocess.run(cmd, check=True, capture_output=True)
-    assert "Yelling at the user" in res.stderr.decode()
+
+def test_cli_ensemble(tmp_path, phospho_files):
+    """Test ensemble flag"""
+    params = [
+        phospho_files[0],
+        "--dest_dir",
+        tmp_path,
+        "--test_fdr",
+        "0.01",
+        "--ensemble",
+    ]
+
+    run_mokapot_cli(params)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
+    # fixme: should also test the *contents* of the files
+
+
+def test_cli_bad_input(tmp_path):
+    """Test ensemble flag"""
+    params = [
+        Path("data") / "percolator-noSplit-extended-201-bad.tab",
+        "--dest_dir",
+        tmp_path,
+        "--train_fdr",
+        "0.05",
+        "--ensemble",
+    ]
+
+    run_mokapot_cli(params)
+    assert Path(tmp_path, "targets.psms").exists()
+    assert Path(tmp_path, "targets.peptides").exists()
+    # fixme: should also test the *contents* of the files

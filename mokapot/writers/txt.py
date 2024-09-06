@@ -1,4 +1,5 @@
 """Writer to save results in a tab-delmited format"""
+
 from pathlib import Path
 from collections import defaultdict
 
@@ -37,6 +38,9 @@ def to_txt(conf, dest_dir=None, file_root=None, sep="\t", decoys=False):
         The paths to the saved files.
 
     """
+
+    # todo: I think this function is only referenced in test_writer_txt and can
+    #  be safely removed in the future (if the test is also removed of course)
     try:
         assert not isinstance(conf, str)
         iter(conf)

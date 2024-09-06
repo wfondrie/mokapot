@@ -1,4 +1,5 @@
 """Test that models work as expected"""
+
 import pytest
 import mokapot
 import numpy as np
@@ -19,7 +20,6 @@ def test_model_init():
         max_iter=1,
         direction="score",
         override=True,
-        subset_max_train=500,
         shuffle=False,
     )
 
@@ -29,7 +29,6 @@ def test_model_init():
     assert model.max_iter == 1
     assert model.direction == "score"
     assert model.override
-    assert model.subset_max_train == 500
     assert not model.shuffle
     assert not model.is_trained
 
@@ -48,7 +47,6 @@ def test_perc_init():
         max_iter=1,
         direction="score",
         override=True,
-        subset_max_train=500,
     )
     assert isinstance(model.estimator, GridSearchCV)
     assert isinstance(model.estimator.estimator, LinearSVC)
@@ -57,7 +55,6 @@ def test_perc_init():
     assert model.max_iter == 1
     assert model.direction == "score"
     assert model.override
-    assert model.subset_max_train == 500
 
 
 def test_model_fit(psms):
@@ -87,7 +84,6 @@ def test_model_fit_large_subset(psms):
         LogisticRegression(),
         train_fdr=0.05,
         max_iter=1,
-        subset_max_train=2_000_000_000,
     )
     model.fit(psms)
 
@@ -117,7 +113,7 @@ def test_model_predict(psms):
 
 def test_model_persistance(tmp_path):
     """test that we can save and load a model"""
-    model_file = str(tmp_path / "model.pkl")
+    model_file = tmp_path / "model.pkl"
 
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
     mokapot.save_model(model, model_file)
