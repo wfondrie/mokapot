@@ -60,6 +60,7 @@ class TabularDataReader(ABC):
     (e.g. data frames), combine or modify other readers or represent computed
     tabular results.
     """
+
     @abstractmethod
     def get_column_names(self) -> list[str]:
         raise NotImplementedError
@@ -121,6 +122,7 @@ class ColumnMappedReader(TabularDataReader):
             A dictionary that maps the original column names to the new
             column names.
     """
+
     def __init__(self, reader: TabularDataReader, column_map: dict[str, str]):
         self.reader = reader
         self.column_map = column_map
@@ -186,6 +188,7 @@ class CSVFileReader(TabularDataReader):
             Arguments for reading CSV file passed on to the pandas
             `read_csv` function.
     """
+
     def __init__(self, file_name: Path, sep: str = "\t"):
         self.file_name = file_name
         self.stdargs = {"sep": sep, "index_col": False}
@@ -231,6 +234,7 @@ class DataFrameReader(TabularDataReader):
         df : pd.DataFrame
             The DataFrame being read from.
     """
+
     df: pd.DataFrame
 
     def __init__(self, df: pd.DataFrame):
@@ -328,6 +332,7 @@ class TabularDataWriter(ABC):
         column_types : list | None
             List of column types (optional)
     """
+
     def __init__(
         self,
         columns: list[str],
@@ -455,6 +460,7 @@ class BufferedWriter(TabularDataWriter):
         The buffer containing the tabular data to be written.
         The buffer type depends on the buffer_type attribute.
     """
+
     writer: TabularDataWriter
     buffer_size: int
     buffer_type: TableType
@@ -561,6 +567,7 @@ class CSVFileWriter(TabularDataWriter):
         The separator string used to separate fields in the CSV file.
         Default is tab character ("\t").
     """
+
     file_name: Path
 
     def __init__(
@@ -616,6 +623,7 @@ class ParquetFileWriter(TabularDataWriter):
     file_name : Path
         The path to the Parquet file being written.
     """
+
     file_name: Path
 
     def __init__(
@@ -667,6 +675,7 @@ class SqliteWriter(TabularDataWriter, ABC):
     """
     SqliteWriter class for writing tabular data to SQLite database.
     """
+
     connection: sqlite3.Connection
 
     def __init__(
