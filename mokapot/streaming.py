@@ -2,7 +2,6 @@
 Helper classes and methods used for streaming of tabular data.
 """
 
-
 from __future__ import annotations
 
 from typing import Generator, Callable, Iterator
@@ -26,6 +25,7 @@ class JoinedTabularDataReader(TabularDataReader):
             A list of 'TabularDataReader' objects representing the individual
             data sources.
     """
+
     readers: list[TabularDataReader]
 
     def __init__(self, readers: list[TabularDataReader]):
@@ -173,6 +173,7 @@ class MergedTabularDataReader(TabularDataReader):
         column_types : list
             List of column types for the merged data.
     """
+
     def __init__(
         self,
         readers: list[TabularDataReader],

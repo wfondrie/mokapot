@@ -488,7 +488,7 @@ def assign_confidence(
     psms: list[OnDiskPsmDataset],
     max_workers,
     scores=None,
-    descs: list[bool] | None=None,
+    descs: list[bool] | None = None,
     eval_fdr=0.01,
     dest_dir: Path | None = None,
     file_root: str = "",

@@ -62,13 +62,13 @@ def main(main_args=None):
     logging.info("=================")
     if config.verify_pin:
         for path_pin in config.psm_files:
-            with open(path_pin, 'r') as f_pin:
+            with open(path_pin, "r") as f_pin:
                 valid_tsv = is_valid_tsv(f_pin)
             if not valid_tsv:
                 logging.info(f"{path_pin} invalid tsv, converting")
                 path_tsv = f"{path_pin}.tsv"
-                with open(path_pin, 'r') as f_pin:
-                    with open(path_tsv, 'a') as f_tsv:
+                with open(path_pin, "r") as f_pin:
+                    with open(path_tsv, "a") as f_tsv:
                         pin_to_valid_tsv(f_in=f_pin, f_out=f_tsv)
                 shutil.move(path_tsv, path_pin)
 
