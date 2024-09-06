@@ -94,7 +94,7 @@ def is_traditional_pin(path: Path) -> bool:
         num_fields = len(header)
         for line in f:
             line = line.strip()
-            if line.startswith("#"):
+            if line.startswith("#") or line.startswith("DefaultDirection"):
                 continue
 
             local_num_fields = len(line.split("\t"))
