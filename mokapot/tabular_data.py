@@ -6,21 +6,23 @@ from __future__ import annotations
 
 import sqlite3
 import warnings
+
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
+from io import StringIO
 from enum import Enum
 from typing import Generator
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from abc import ABC, abstractmethod
-from pathlib import Path
 import pyarrow.parquet as pq
-from typeguard import typechecked
 import pyarrow as pa
+
+from typeguard import typechecked
 
 CSV_SUFFIXES = [
     ".csv",
-    ".pin",
     ".tab",
     ".peptides",
     ".psms",
@@ -31,6 +33,7 @@ CSV_SUFFIXES = [
     ".peptide_groups",
     ".precursors",
 ]
+PIN_SUFFIXES = [".pin"]
 PARQUET_SUFFIXES = [".parquet"]
 SQLITE_SUFFIXES = [".db"]
 
@@ -50,6 +53,114 @@ def get_score_column_type(suffix):
         raise ValueError(f"Suffix '{suffix}' does not match expected formats")
 
 
+def is_traditional_pin(path: Path) -> bool:
+    """Check if the PIN file is a traditional PIN file.
+
+    The traditional PIN file uses tabs both as field delimiters
+    and as the separator for multiple proteins in the last column.
+
+    So it can be identified if:
+    1. The last column name is `protein(s)?`.
+    2. The header is tab delimited.
+    3. The rest of the file is tab delimited.
+    4. The number of delimiters in the other rows is >= number of columns.
+
+    Parameters
+    ----------
+    path : Path
+        The path to the PIN file.
+
+    Returns
+    -------
+    bool
+        True if the PIN file is a traditional PIN file, False otherwise.
+
+    Raises
+    ------
+    ValueError
+        If the PIN file is not a PIN file. (or is corrupted)
+    """
+    with open(path) as f:
+        header = f.readline().strip()
+        header = header.split("\t")
+        if len(header) == 1:
+            raise ValueError("PIN file is not a PIN file.")
+
+        if not header[-1].lower().startswith("protein"):
+            raise ValueError(
+                "PIN file is not a PIN file (last column is not protein)."
+            )
+
+        num_fields = len(header)
+        for line in f:
+            line = line.strip()
+            if line.startswith("#"):
+                continue
+
+            local_num_fields = len(line.split("\t"))
+            if local_num_fields < num_fields:
+                raise ValueError(
+                    "PIN file is not a PIN file "
+                    "(number of fields is less than number of columns)."
+                )
+
+            if local_num_fields > num_fields:
+                return True
+
+        return False
+
+
+def read_traditional_pin(path) -> pd.DataFrame:
+    """Reads the file in memory and bundles the proteins.
+
+    The PIN file is assumed to be a traditional PIN file.
+    The PIN file is read in memory and the proteins are bundled into a single
+    column.
+
+    Parameters
+    ----------
+    path : Path
+        The path to the PIN file.
+
+    Returns
+    -------
+    pd.DataFrame
+        The PIN file as a pandas DataFrame.
+    """
+    header_names = None
+    num_cols = None
+
+    out_lines = []
+
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("#"):
+                continue
+
+            if header_names is None:
+                header_names = line.split("\t")
+                num_cols = len(header_names)
+                continue
+
+            line_data = line.split("\t")
+            line_data = line_data[: num_cols - 1] + [
+                ":".join(line_data[num_cols - 1 :])
+            ]
+            if len(line_data) != num_cols:
+                raise RuntimeError(
+                    "Error parsing PIN file. "
+                    f" Line: {line}"
+                    f" Expected: {num_cols} columns"
+                )
+            out_lines.append("\t".join(line_data))
+
+    with StringIO("\n".join(out_lines)) as f:
+        df = pd.read_csv(f, sep="\t", header=None)
+        df.columns = header_names
+        return df
+
+
 @typechecked
 class TabularDataReader(ABC):
     """
@@ -60,6 +171,7 @@ class TabularDataReader(ABC):
     (e.g. data frames), combine or modify other readers or represent computed
     tabular results.
     """
+
     @abstractmethod
     def get_column_names(self) -> list[str]:
         raise NotImplementedError
@@ -89,7 +201,12 @@ class TabularDataReader(ABC):
         # could also look into the file itself (is it ascii? does it have
         # some "magic bytes"? ...)
         suffix = file_name.suffix
-        if suffix in CSV_SUFFIXES:
+        if suffix in PIN_SUFFIXES:
+            if is_traditional_pin(file_name):
+                reader = DataFrameReader(read_traditional_pin(file_name))
+            else:
+                reader = CSVFileReader(file_name, **kwargs)
+        elif suffix in CSV_SUFFIXES:
             reader = CSVFileReader(file_name, **kwargs)
         elif suffix in PARQUET_SUFFIXES:
             reader = ParquetFileReader(file_name, **kwargs)
@@ -121,6 +238,7 @@ class ColumnMappedReader(TabularDataReader):
             A dictionary that maps the original column names to the new
             column names.
     """
+
     def __init__(self, reader: TabularDataReader, column_map: dict[str, str]):
         self.reader = reader
         self.column_map = column_map
@@ -186,6 +304,7 @@ class CSVFileReader(TabularDataReader):
             Arguments for reading CSV file passed on to the pandas
             `read_csv` function.
     """
+
     def __init__(self, file_name: Path, sep: str = "\t"):
         self.file_name = file_name
         self.stdargs = {"sep": sep, "index_col": False}
@@ -231,6 +350,7 @@ class DataFrameReader(TabularDataReader):
         df : pd.DataFrame
             The DataFrame being read from.
     """
+
     df: pd.DataFrame
 
     def __init__(self, df: pd.DataFrame):
@@ -328,6 +448,7 @@ class TabularDataWriter(ABC):
         column_types : list | None
             List of column types (optional)
     """
+
     def __init__(
         self,
         columns: list[str],
@@ -401,7 +522,9 @@ class TabularDataWriter(ABC):
         **kwargs,
     ) -> "TabularDataWriter":
         suffix = file_name.suffix
-        if suffix in CSV_SUFFIXES:
+        if suffix in PIN_SUFFIXES:
+            writer = CSVFileWriter(file_name, columns, **kwargs)
+        elif suffix in CSV_SUFFIXES:
             writer = CSVFileWriter(file_name, columns, **kwargs)
         elif suffix in PARQUET_SUFFIXES:
             writer = ParquetFileWriter(file_name, columns, **kwargs)
@@ -455,6 +578,7 @@ class BufferedWriter(TabularDataWriter):
         The buffer containing the tabular data to be written.
         The buffer type depends on the buffer_type attribute.
     """
+
     writer: TabularDataWriter
     buffer_size: int
     buffer_type: TableType
@@ -561,6 +685,7 @@ class CSVFileWriter(TabularDataWriter):
         The separator string used to separate fields in the CSV file.
         Default is tab character ("\t").
     """
+
     file_name: Path
 
     def __init__(
@@ -616,6 +741,7 @@ class ParquetFileWriter(TabularDataWriter):
     file_name : Path
         The path to the Parquet file being written.
     """
+
     file_name: Path
 
     def __init__(
@@ -667,6 +793,7 @@ class SqliteWriter(TabularDataWriter, ABC):
     """
     SqliteWriter class for writing tabular data to SQLite database.
     """
+
     connection: sqlite3.Connection
 
     def __init__(

@@ -155,7 +155,7 @@ def monotonize_nnls(x, w=None, ascending=True):
 
 
 def estimate_pi0_by_slope(target_pdf, decoy_pdf, threshold=0.9):
-    """
+    r"""
     Estimate pi0 using the slope of decoy vs target PDFs.
     The idea is that :math:`f_T(s) = \pi_0 f_D(s) + (1-\pi_0) f_{TT}(s)` and that for small scores `s` and a scoring
     function that sufficiently separates targets and decoys (or false targets) it holds that :math:`f_T(s) \simeq \pi_0 f_D(s)`.
