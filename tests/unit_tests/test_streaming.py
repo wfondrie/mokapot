@@ -15,14 +15,18 @@ import pytest
 @pytest.fixture
 def readers_to_merge():
     # Prepare two dataframe readers
-    df1 = pd.DataFrame({
-        "foo": [1, 3, 4, 5, 8, 10],
-        "bar": [20, 6, 3, 2, 1, 0],
-    })
-    df2 = pd.DataFrame({
-        "foo": [2, 2, 6, 9, 11, 13, 15],
-        "bar": [18, 16, 13, 6, 5, 5, 0],
-    })
+    df1 = pd.DataFrame(
+        {
+            "foo": [1, 3, 4, 5, 8, 10],
+            "bar": [20, 6, 3, 2, 1, 0],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "foo": [2, 2, 6, 9, 11, 13, 15],
+            "bar": [18, 16, 13, 6, 5, 5, 0],
+        }
+    )
     reader1 = DataFrameReader(df1)
     reader2 = DataFrameReader(df2)
     return [reader1, reader2]
@@ -31,14 +35,18 @@ def readers_to_merge():
 @pytest.fixture
 def readers_to_join():
     # Prepare two dataframe readers
-    df1 = pd.DataFrame({
-        "foo": [1, 3, 4, 5, 8, 10],
-        "bar": [20, 6, 3, 2, 1, 0],
-    })
-    df2 = pd.DataFrame({
-        "baz": [11, 13, 14, 15, 18, 110],
-        "quux": [220, 26, 23, 22, 21, 20],
-    })
+    df1 = pd.DataFrame(
+        {
+            "foo": [1, 3, 4, 5, 8, 10],
+            "bar": [20, 6, 3, 2, 1, 0],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "baz": [11, 13, 14, 15, 18, 110],
+            "quux": [220, 26, 23, 22, 21, 20],
+        }
+    )
     reader1 = DataFrameReader(df1)
     reader2 = DataFrameReader(df2)
     return [reader1, reader2]
@@ -51,10 +59,12 @@ def test_merged_tabular_data_reader(readers_to_merge):
     )
     pd.testing.assert_frame_equal(
         reader.read(),
-        pd.DataFrame({
-            "foo": [1, 2, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13, 15],
-            "bar": [20, 18, 16, 6, 3, 2, 13, 1, 6, 0, 5, 5, 0],
-        }),
+        pd.DataFrame(
+            {
+                "foo": [1, 2, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13, 15],
+                "bar": [20, 18, 16, 6, 3, 2, 13, 1, 6, 0, 5, 5, 0],
+            }
+        ),
     )
 
     # Check that chunked read works
