@@ -73,13 +73,6 @@ def _parser():
     )
 
     parser.add_argument(
-        "--verify_pin",
-        type=bool,
-        default=True,
-        help="Verify that PIN input files are valid TSVs. If not convert them.",
-    )
-
-    parser.add_argument(
         "-d",
         "--dest_dir",
         type=Path,
@@ -399,8 +392,8 @@ def _parser():
         default=None,
         type=Path,
         help="Optionally, sets a path to an MSAID sqlite result database "
-             "for writing outputs to. If not set (None), results are "
-             "written in the standard TSV format.",
+        "for writing outputs to. If not set (None), results are "
+        "written in the standard TSV format.",
     )
 
     return parser

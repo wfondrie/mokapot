@@ -24,6 +24,7 @@ from typeguard import typechecked
 CSV_SUFFIXES = [
     ".csv",
     ".tab",
+    ".tsv",
     ".peptides",
     ".psms",
     ".proteins",
@@ -48,6 +49,8 @@ def get_score_column_type(suffix):
     if suffix in PARQUET_SUFFIXES:
         return pa.float64()
     elif suffix in CSV_SUFFIXES:
+        return "float"
+    elif suffix in PIN_SUFFIXES:
         return "float"
     else:
         raise ValueError(f"Suffix '{suffix}' does not match expected formats")
@@ -84,11 +87,12 @@ def is_traditional_pin(path: Path) -> bool:
         header = f.readline().strip()
         header = header.split("\t")
         if len(header) == 1:
-            raise ValueError("PIN file is not a PIN file.")
+            raise ValueError(f"File '{path}' file is not a PIN file.")
 
         if not header[-1].lower().startswith("protein"):
             raise ValueError(
-                "PIN file is not a PIN file (last column is not protein)."
+                f"File '{path}' is not a PIN file "
+                f"(last column '{header[-1]}' is not protein)."
             )
 
         num_fields = len(header)
@@ -100,7 +104,7 @@ def is_traditional_pin(path: Path) -> bool:
             local_num_fields = len(line.split("\t"))
             if local_num_fields < num_fields:
                 raise ValueError(
-                    "PIN file is not a PIN file "
+                    f"File '{path}' is not a PIN file "
                     "(number of fields is less than number of columns)."
                 )
 

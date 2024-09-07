@@ -7,7 +7,6 @@ import logging
 import sys
 import time
 import warnings
-import shutil
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +14,6 @@ import numpy as np
 from . import __version__
 from .config import Config
 from .parsers.pin import read_pin
-from .parsers.pin_to_tsv import is_valid_tsv, pin_to_valid_tsv
 from .parsers.fasta import read_fasta
 from .brew import brew
 from .model import PercolatorModel, load_model
@@ -57,20 +55,6 @@ def main(main_args=None):
     logging.info("Command issued:")
     logging.info("%s", " ".join(sys.argv))
     logging.info("")
-
-    logging.info("Verify PIN format")
-    logging.info("=================")
-    if config.verify_pin:
-        for path_pin in config.psm_files:
-            with open(path_pin, 'r') as f_pin:
-                valid_tsv = is_valid_tsv(f_pin)
-            if not valid_tsv:
-                logging.info(f"{path_pin} invalid tsv, converting")
-                path_tsv = f"{path_pin}.tsv"
-                with open(path_pin, 'r') as f_pin:
-                    with open(path_tsv, 'a') as f_tsv:
-                        pin_to_valid_tsv(f_in=f_pin, f_out=f_tsv)
-                shutil.move(path_tsv, path_pin)
 
     logging.info("Starting Analysis")
     logging.info("=================")
