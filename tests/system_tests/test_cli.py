@@ -69,7 +69,6 @@ def test_basic_cli(tmp_path, scope_files):
     assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
 
 
-
 def test_cli_options(tmp_path, scope_files):
     """Test non-defaults"""
     params = [

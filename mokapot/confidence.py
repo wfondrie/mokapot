@@ -488,7 +488,7 @@ def assign_confidence(
     psms: list[OnDiskPsmDataset],
     max_workers,
     scores=None,
-    descs: list[bool] | None=None,
+    descs: list[bool] | None = None,
     eval_fdr=0.01,
     dest_dir: Path | None = None,
     file_root: str = "",
@@ -567,6 +567,8 @@ def assign_confidence(
     # just take the first one for info (and make sure the other are the same)
     curr_psms = psms[0]
     file_ext = os.path.splitext(curr_psms.filename)[-1]
+    if file_ext == ".pin":
+        file_ext = ".tsv"
     for _psms in psms[1:]:
         assert _psms.columns == curr_psms.columns
 
@@ -805,11 +807,15 @@ def create_sorted_file_iterator(
 
     # a) Create a reader that only reads columns given in
     #    psms.metadata_columns in chunks of size CONFIDENCE_CHUNK_SIZE
-    reader = TabularDataReader.from_path(_psms.filename)
+    filename_use = _psms.filename
+    outfile_ext = filename_use.suffix
+    if _psms.filename.suffix == ".pin":
+        outfile_ext = ".tsv"
+
+    reader = TabularDataReader.from_path(filename_use)
     file_iterator = reader.get_chunked_data_iterator(
         CONFIDENCE_CHUNK_SIZE, _psms.metadata_columns
     )
-    outfile_ext = _psms.filename.suffix
 
     # b) Split the scores in chunks of the same size
     scores_slices = create_chunks(score, chunk_size=CONFIDENCE_CHUNK_SIZE)

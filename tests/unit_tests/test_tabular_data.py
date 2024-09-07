@@ -29,11 +29,14 @@ def test_from_path(tmp_path):
 
 
 @pytest.mark.filterwarnings("ignore::pandas.errors.ParserWarning")
-def test_csv_file_reader():
+@pytest.mark.parametrize(
+    "file_use", ["phospho_rep1.pin", "phospho_rep1.traditional.pin"]
+)
+def test_csv_file_reader(file_use):
     # Note: this pin file is kinda "non-standard" which is why I put the
     # filterwarnings decorator before the test function
 
-    path = Path("data", "phospho_rep1.pin")
+    path = Path("data", file_use)
     reader = TabularDataReader.from_path(path)
     names = reader.get_column_names()
     types = reader.get_column_types()
@@ -73,8 +76,12 @@ def test_csv_file_reader():
     for name, type in expected_column_to_types.items():
         assert column_to_types[name] == type
 
-    df = reader.read(["ScanNr", "SpecId"])
-    assert df.columns.tolist() == ["ScanNr", "SpecId"]
+    df = reader.read(["ScanNr", "SpecId", "Proteins"])
+
+    assert (
+        "sp|Q96QR8|PURB_HUMAN:sp|Q00577|PURA_HUMAN" in df["Proteins"].tolist()
+    )
+    assert df.columns.tolist() == ["ScanNr", "SpecId", "Proteins"]
     assert len(df) == 55398
 
     chunk_iterator = reader.get_chunked_data_iterator(
@@ -187,12 +194,10 @@ def test_dataframe_reader(psm_df_6):
     )
 
     reader = DataFrameReader.from_array(
-        np.array([1, 2, 3],
-        dtype=np.int32), name="test"
+        np.array([1, 2, 3], dtype=np.int32), name="test"
     )
     pd.testing.assert_frame_equal(
-        reader.read(), 
-        pd.DataFrame({"test": [1, 2, 3]}, dtype=np.int32)
+        reader.read(), pd.DataFrame({"test": [1, 2, 3]}, dtype=np.int32)
     )
 
 
@@ -219,13 +224,15 @@ def test_column_renaming(psm_df_6):
 
     assert (reader.read().values == orig_reader.read().values).all()
     assert (
-            reader.read(["Pep", "protein", "T", "feature_1"]).values
-            == orig_reader.read([
-        "peptide",
-        "protein",
-        "target",
-        "feature_1",
-    ]).values
+        reader.read(["Pep", "protein", "T", "feature_1"]).values
+        == orig_reader.read(
+            [
+                "peptide",
+                "protein",
+                "target",
+                "feature_1",
+            ]
+        ).values
     ).all()
 
     renamed_chunk = next(
