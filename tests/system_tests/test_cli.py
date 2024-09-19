@@ -16,7 +16,7 @@ import pandas as pd
 @pytest.fixture
 def scope_files():
     """Get the scope-ms files"""
-    return sorted(list(Path("data").glob("scope*")))
+    return sorted(list(Path("data").glob("scope*.pin")))
 
 
 @pytest.fixture
@@ -67,7 +67,6 @@ def test_basic_cli(tmp_path, scope_files):
 
     assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
     assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
-
 
 
 def test_cli_options(tmp_path, scope_files):

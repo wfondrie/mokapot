@@ -67,6 +67,7 @@ find = {namespaces = false}
 [tool.setuptools_scm]
 
 [tool.ruff]
+exclude = ["*.ipynb"]
 extend-exclude = ["docs/source/conf.py"]
 line-length = 79
 target-version = "py39"
@@ -80,3 +81,4 @@ select = ["E", "F", "T20"]  # T20 is for print() statements.
 
 [tool.ruff.format]
 docstring-code-format = true
+preview = true

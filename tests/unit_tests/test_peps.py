@@ -1,10 +1,10 @@
+import logging
 import time
 
-import pytest
-import logging
-from pytest import approx
 import numpy as np
 import numpy.testing as testing
+import pytest
+from pytest import approx
 from scipy import stats
 
 import mokapot.peps as peps
@@ -17,20 +17,16 @@ def get_target_decoy_data():
     R1 = stats.norm(loc=3, scale=2)
     NT0 = int(np.round(pi0 * N))
     NT1 = N - NT0
-    target_scores = np.concatenate(
-        (
-            np.maximum(R1.rvs(NT1), R0.rvs(NT1)),
-            R0.rvs(NT0),
-        )
-    )
+    target_scores = np.concatenate((
+        np.maximum(R1.rvs(NT1), R0.rvs(NT1)),
+        R0.rvs(NT0),
+    ))
     decoy_scores = R0.rvs(N)
     all_scores = np.concatenate((target_scores, decoy_scores))
-    is_target = np.concatenate(
-        (
-            np.full(len(target_scores), True),
-            np.full(len(decoy_scores), False),
-        )
-    )
+    is_target = np.concatenate((
+        np.full(len(target_scores), True),
+        np.full(len(decoy_scores), False),
+    ))
 
     sortIdx = np.argsort(-all_scores)
     return [all_scores[sortIdx], is_target[sortIdx]]
@@ -105,9 +101,15 @@ def test_monotonize():
 def test_fit_nnls0():
     # n = np.array([3, 2, 0, 0, 1, 1, 3])
     # k = np.array([0, 0, 1, 1, 1, 1, 3])
-    n = np.array([2, 1, 0, 1, 0, 2])
-    k = np.array([0, 0, 1, 1, 1, 2])
-    _ = peps.fit_nnls(n, k, ascending=True)
+    n = np.array([0, 2, 1, 0, 1, 0, 2, 0])
+    k = np.array([1, 0, 0, 1, 1, 1, 2, 1])
+    p_asc = np.array([0, 0, 0, 1 / 2, 1, 1, 1, 1])
+
+    p1 = peps.fit_nnls(n, k, ascending=True, erase_zeros=True)
+    np.testing.assert_allclose(p1, p_asc, atol=1e-15)
+    p2 = peps.fit_nnls(n, k, ascending=True, erase_zeros=False)
+    np.testing.assert_allclose(p2, p_asc, atol=1e-15)
+
     _ = peps.fit_nnls(n, k, ascending=False)
 
 
@@ -120,7 +122,7 @@ def test_fit_nnls_zeros():
     p = peps.fit_nnls(n, k, ascending=True)
     assert p == approx([0, 1 / 2, 1])
     p = peps.fit_nnls(n, k, ascending=True, erase_zeros=True)
-    assert p == approx([0, 1, 1])
+    assert p == approx([0, 1 / 2, 1])
 
     # Two zeros after each other
     n = np.array([1, 1, 0, 0, 1, 1])
@@ -128,7 +130,7 @@ def test_fit_nnls_zeros():
     p = peps.fit_nnls(n, k, ascending=True)
     assert p == approx([0, 0, 1 / 3, 2 / 3, 1, 1])
     p = peps.fit_nnls(n, k, ascending=True, erase_zeros=True)
-    assert p == approx([0, 0, 1, 1, 1, 1])
+    assert p == approx([0, 0, 1 / 3, 2 / 3, 1, 1])
 
     # Tricky: n==0 at the end
     n = np.array([1, 1, 0, 0, 1, 0])
@@ -136,7 +138,7 @@ def test_fit_nnls_zeros():
     p = peps.fit_nnls(n, k, ascending=True)
     assert p == approx([0, 0, 1 / 3, 2 / 3, 1, 1])
     p = peps.fit_nnls(n, k, ascending=True, erase_zeros=True)
-    assert p == approx([0, 0, 1, 1, 1, 1])
+    assert p == approx([0, 0, 1 / 3, 2 / 3, 1, 1])
 
     # Descending
     n = np.array([1, 1, 0, 0, 1, 1])
@@ -163,148 +165,144 @@ def test_fit_nnls_zeros_mult(caplog):
 def test_fit_nnls_peps():
     # This is from a real test case that failed due to a problem in
     # the scipy._nnls implementation
-    n0 = np.array(
-        [
-            3,
-            2,
-            0,
-            1,
-            1,
-            1,
-            3,
-            8,
-            14,
-            16,
-            29,
-            23,
-            41,
-            47,
-            53,
-            57,
-            67,
-            76,
-            103,
-            89,
-            97,
-            94,
-            85,
-            95,
-            78,
-            78,
-            78,
-            77,
-            73,
-            50,
-            50,
-            56,
-            68,
-            98,
-            95,
-            112,
-            134,
-            145,
-            158,
-            172,
-            213,
-            234,
-            222,
-            215,
-            216,
-            216,
-            206,
-            183,
-            135,
-            156,
-            110,
-            92,
-            63,
-            60,
-            52,
-            29,
-            20,
-            16,
-            12,
-            5,
-            5,
-            5,
-            1,
-            2,
-            3,
-            0,
-            2,
-        ]
-    )
-    k0 = np.array(
-        [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.7205812007860187,
-            0.0,
-            1.4411624015720375,
-            0.7205812007860187,
-            2.882324803144075,
-            5.76464960628815,
-            5.76464960628815,
-            12.249880413362318,
-            15.132205216506394,
-            20.176273622008523,
-            27.382085629868712,
-            48.27894045266326,
-            47.558359251877235,
-            68.45521407467177,
-            97.99904330689854,
-            108.0871801179028,
-            135.46926574777152,
-            140.51333415327366,
-            184.4687874012208,
-            171.49832578707245,
-            205.36564222401535,
-            244.27702706646033,
-            214.01261663344755,
-            228.42424064916793,
-            232.02714665309804,
-            205.36564222401535,
-            172.9394881886445,
-            191.67459940908097,
-            162.1307701768542,
-            153.48379576742198,
-            110.96950492104689,
-            103.04311171240067,
-            86.46974409432225,
-            60.528820866025576,
-            43.234872047161126,
-            23.779179625938617,
-            24.499760826724636,
-            17.29394881886445,
-            11.5292992125763,
-            5.76464960628815,
-            5.044068405502131,
-            3.6029060039300935,
-            0.0,
-            2.882324803144075,
-            0.0,
-            0.0,
-            0.0,
-        ]
-    )
+    n0 = np.array([
+        3,
+        2,
+        0,
+        1,
+        1,
+        1,
+        3,
+        8,
+        14,
+        16,
+        29,
+        23,
+        41,
+        47,
+        53,
+        57,
+        67,
+        76,
+        103,
+        89,
+        97,
+        94,
+        85,
+        95,
+        78,
+        78,
+        78,
+        77,
+        73,
+        50,
+        50,
+        56,
+        68,
+        98,
+        95,
+        112,
+        134,
+        145,
+        158,
+        172,
+        213,
+        234,
+        222,
+        215,
+        216,
+        216,
+        206,
+        183,
+        135,
+        156,
+        110,
+        92,
+        63,
+        60,
+        52,
+        29,
+        20,
+        16,
+        12,
+        5,
+        5,
+        5,
+        1,
+        2,
+        3,
+        0,
+        2,
+    ])
+    k0 = np.array([
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.7205812007860187,
+        0.0,
+        1.4411624015720375,
+        0.7205812007860187,
+        2.882324803144075,
+        5.76464960628815,
+        5.76464960628815,
+        12.249880413362318,
+        15.132205216506394,
+        20.176273622008523,
+        27.382085629868712,
+        48.27894045266326,
+        47.558359251877235,
+        68.45521407467177,
+        97.99904330689854,
+        108.0871801179028,
+        135.46926574777152,
+        140.51333415327366,
+        184.4687874012208,
+        171.49832578707245,
+        205.36564222401535,
+        244.27702706646033,
+        214.01261663344755,
+        228.42424064916793,
+        232.02714665309804,
+        205.36564222401535,
+        172.9394881886445,
+        191.67459940908097,
+        162.1307701768542,
+        153.48379576742198,
+        110.96950492104689,
+        103.04311171240067,
+        86.46974409432225,
+        60.528820866025576,
+        43.234872047161126,
+        23.779179625938617,
+        24.499760826724636,
+        17.29394881886445,
+        11.5292992125763,
+        5.76464960628815,
+        5.044068405502131,
+        3.6029060039300935,
+        0.0,
+        2.882324803144075,
+        0.0,
+        0.0,
+        0.0,
+    ])
     p = peps.fit_nnls(n0, k0, ascending=True, erase_zeros=True)
     assert np.all(np.diff(p) >= 0)
     assert np.linalg.norm(k0 - n0 * p, np.inf) < 40

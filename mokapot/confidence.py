@@ -19,18 +19,27 @@ confidence estimates, rather than initializing the classes below directly.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+import os
 from contextlib import contextmanager
+from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 from typeguard import typechecked
-import os
 
 from . import qvalues
-from .peps import peps_from_scores
+from .confidence_writer import write_confidences
+from .constants import CONFIDENCE_CHUNK_SIZE
+from .dataset import OnDiskPsmDataset
+from .peps import peps_from_scores, PepsConvergenceError
+from .picked_protein import picked_protein
+from .tabular_data import (
+    TabularDataWriter,
+    TabularDataReader,
+    get_score_column_type,
+)
 from .utils import (
     create_chunks,
     groupby_max,
@@ -38,16 +47,7 @@ from .utils import (
     merge_sort,
     get_dataframe_from_records,
 )
-from .dataset import OnDiskPsmDataset
-from .picked_protein import picked_protein
 from .writers import to_flashlfq
-from .tabular_data import (
-    TabularDataWriter,
-    TabularDataReader,
-    get_score_column_type,
-)
-from .confidence_writer import write_confidences
-from .constants import CONFIDENCE_CHUNK_SIZE
 
 LOGGER = logging.getLogger(__name__)
 
@@ -433,11 +433,15 @@ class LinearConfidence(Confidence):
                 self.peps = peps_from_scores(
                     self.scores, self.targets, peps_algorithm
                 )
-            except SystemExit as msg:
-                if "no decoy hits available for PEP calculation" in str(msg):
-                    self.peps = 0
-                else:
-                    raise
+            except PepsConvergenceError:
+                LOGGER.info(
+                    "\t- Encountered convergence problems in `nnls`. "
+                    "Falling back to qvality ...",
+                )
+                self.peps = peps_from_scores(
+                    self.scores, self.targets, "qvality"
+                )
+
             if peps_error and all(self.peps == 1):
                 raise ValueError("PEP values are all equal to 1.")
 
@@ -488,7 +492,7 @@ def assign_confidence(
     psms: list[OnDiskPsmDataset],
     max_workers,
     scores=None,
-    descs: list[bool] | None=None,
+    descs: list[bool] | None = None,
     eval_fdr=0.01,
     dest_dir: Path | None = None,
     file_root: str = "",
@@ -721,12 +725,10 @@ def assign_confidence(
                 psm_count += 1
                 for level in levels:
                     if level != "psms" or deduplication:
-                        psm_hash = str(
-                            [
-                                data_row.get(col)
-                                for col in level_hash_columns[level]
-                            ]
-                        )
+                        psm_hash = str([
+                            data_row.get(col)
+                            for col in level_hash_columns[level]
+                        ])
                         if psm_hash in seen_level_entities[level]:
                             if level == "psms":
                                 break

@@ -1,9 +1,8 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as stats
-import matplotlib.pyplot as plt
-from triqler import qvality
-
 from scipy.optimize import nnls
+from triqler import qvality
 
 PEP_ALGORITHM = {
     "qvality": lambda scores, targets: peps_from_scores_qvality(
@@ -19,6 +18,12 @@ PEP_ALGORITHM = {
         scores, targets
     ),
 }
+
+
+class PepsConvergenceError(Exception):
+    """Raised when nnls iterations do not converge."""
+
+    pass
 
 
 def peps_from_scores(scores, targets, pep_algorithm="qvality"):
@@ -67,14 +72,23 @@ def peps_from_scores_qvality(scores, targets, use_binary=False):
         else qvality.getQvaluesFromScores
     )
     old_verbosity, qvality.VERB = qvality.VERB, 0
-    _, peps = qvalues_from_scores(
-        scores[targets],
-        scores[~targets],
-        includeDecoys=True,
-        includePEPs=True,
-        tdcInput=False,
-    )
-    qvality.VERB = old_verbosity
+
+    try:
+        _, peps = qvalues_from_scores(
+            scores[targets],
+            scores[~targets],
+            includeDecoys=True,
+            includePEPs=True,
+            tdcInput=False,
+        )
+    except SystemExit as msg:
+        if "no decoy hits available for PEP calculation" in str(msg):
+            peps = 0
+        else:
+            raise
+    finally:
+        qvality.VERB = old_verbosity
+
     return peps
 
 
@@ -248,7 +262,7 @@ def peps_from_scores_kde_nnls(
     return peps
 
 
-def fit_nnls(n, k, ascending=True, *, weight_exponent=1, erase_zeros=False):
+def fit_nnls(n, k, ascending=True, *, weight_exponent=-1, erase_zeros=False):
     """
     This method performs a non-negative least squares (NNLS) fit on given input parameters 'n' and 'k', such that
     `k[i]` is close to `p[i] * n[i]` in a weighted least squared sense (weight is determined by `n[i] ** weightExponent`)
@@ -260,7 +274,7 @@ def fit_nnls(n, k, ascending=True, *, weight_exponent=1, erase_zeros=False):
         - n: The input array of length N.
         - k: The input array of length N.
         - ascending: (optional) A boolean value indicating whether the output array should be in ascending order. Default value is True.
-        - weight_exponent: (optional) The exponent to be used for the weight array. Default value is 1.
+        - weight_exponent: (optional) The exponent to be used for the weight array. Default value is -1.
         - erase_zeros: (optional) If True, rows corresponding to n==0 will be erased from the system of equations,
             whereas if False (default), there will be equations inserted that try to minimize the jump in probabilities,
             i.e. distribute the jumps evenly
@@ -273,23 +287,45 @@ def fit_nnls(n, k, ascending=True, *, weight_exponent=1, erase_zeros=False):
     # This is more or less the same, just with
     # JSPP Q: With what??
     if not ascending:
-        return fit_nnls(n[::-1], k[::-1])[::-1]
+        n = n[::-1]
+        k = k[::-1]
+
     N = len(n)
     D = np.diag(n)
     A = D @ np.tril(np.ones((N, N)))
-    w = n ** (0.5 * weight_exponent)
+    w = np.zeros_like(n, dtype=float)
+    w[n != 0] = n[n != 0] ** (0.5 * weight_exponent)
     W = np.diag(w)
+    R = np.eye(N)
 
-    nz = (n == 0).nonzero()[0]
-    if len(nz) > 0:
-        if not erase_zeros:
-            A[nz, nz] = 1
-            A[nz, np.minimum(nz + 1, N - 1)] = -1
-            w[nz] = 1
-            k[nz] = 0
-            W = np.diag(w)
-        else:
-            W = np.delete(W, nz, axis=0)
+    zeros = (n == 0).nonzero()[0]
+    if len(zeros) > 0:
+        A[zeros, zeros] = 1
+        A[zeros, np.minimum(zeros + 1, N - 1)] = -1
+        w[zeros] = 1
+        k[zeros] = 0
+        W = np.diag(w)
+
+        if erase_zeros:
+            # The following lines remove variables that will end up being the
+            # same (matrix R) as well as equations that are essentially zero on
+            # both sides U). However, since this is a bit tricky, and difficult
+            # to maintain and does not seem to lower the condition of the
+            # matrix substantially, it is only activated on demand and left
+            # here more for further reference, in case it will be needed in the
+            # future.
+            nnz = n != 0
+            nnz[-1] = True
+            nnz2 = np.insert(nnz, 0, True)[:-1]
+
+            def make_perm_mat(rows, cols):
+                M = np.zeros((np.max(rows) + 1, np.max(cols) + 1))
+                M[rows, cols] = 1
+                return M
+
+            R = make_perm_mat(np.arange(N), nnz2.cumsum() - 1)
+            U = make_perm_mat(np.arange(sum(nnz)), nnz.nonzero()[0])
+            W = U @ W
 
     # The default tolerance of nnls is too low, leading sometimes to
     # non-convergent iterations and subsequent failures. A good tolerance
@@ -301,9 +337,13 @@ def fit_nnls(n, k, ascending=True, *, weight_exponent=1, erase_zeros=False):
     # non-convergence and b) is fitting for the typical condition numbers and
     # values of k seen in experiments.
     tol = 1e-7
-    d, _ = nnls(W @ A, W @ k, atol=tol)
-    p = np.cumsum(d)
-    return p
+    d, _ = nnls(W @ A @ R, W @ k, atol=tol)
+    p = np.cumsum(R @ d)
+
+    if not ascending:
+        return p[::-1]
+    else:
+        return p
 
 
 def hist_data_from_scores(scores, targets, bins=None, density=False):
@@ -386,7 +426,10 @@ def peps_from_scores_hist_nnls(scores, targets, scale_to_one=True):
 
     # Do monotone fit, minimizing || n - diag(p) * k || with weights n over
     # monotone descending p
-    pep_est = fit_nnls(n, k, ascending=False)
+    try:
+        pep_est = fit_nnls(n, k, ascending=False, weight_exponent=-1)
+    except RuntimeError as e:
+        raise PepsConvergenceError from e
 
     if scale_to_one and pep_est[0] < 1:
         pep_est = pep_est / pep_est[0]
