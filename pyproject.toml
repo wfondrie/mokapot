@@ -27,6 +27,7 @@ dependencies = [
     "typeguard>=4.1.5",
     "pyarrow>=15.0.0",
     "scipy>=1.13.0",
+    "filelock>=3.16.1",
 ]
 dynamic = ["version"]
 
@@ -72,7 +73,6 @@ norecursedirs = ["extra", ]
 
 [tool.ruff]
 extend-exclude = ["docs/source/conf.py"]
-line-length = 79
 target-version = "py39"
 exclude = ["docs", "notebooks", "*.ipynb"]
 
