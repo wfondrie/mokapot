@@ -2,6 +2,8 @@
 This module estimates q-values.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import numba as nb
 from typeguard import typechecked

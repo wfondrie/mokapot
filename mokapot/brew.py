@@ -1,6 +1,7 @@
 """
 Defines a function to run the Percolator algorithm.
 """
+from __future__ import annotations
 
 import copy
 import logging
