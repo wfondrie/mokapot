@@ -90,8 +90,9 @@ def convert_line_pin_to_tsv(
     >>> n_col, idx_protein_col = parse_pin_header_columns(header)
     >>> tsv_line = convert_line_pin_to_tsv(EXAMPLE_LINE_1, n_col=n_col,
     ...                                    idx_protein_col=idx_protein_col)
-    >>> tsv_line.expandtabs(4)  # needed for docstring to work
-    'target_0_16619_2_-1 1   16619   750.4149    K.SEFLVR.E  sp|Q96QR8|PURB_HUMAN:sp|Q00577|PURA_HUMAN' # noqa: E501
+    >>> print(tsv_line.expandtabs(4))  # needed for docstring to work
+    target_0_16619_2_-1 1   16619   750.4149    K.SEFLVR.E  sp|Q96QR8|PURB_HUMAN:\
+sp|Q00577|PURA_HUMAN
     >>> tsv_line = convert_line_pin_to_tsv(EXAMPLE_LINE_2, n_col=n_col,
     ...                                    idx_protein_col=idx_protein_col)
     >>> tsv_line.expandtabs(4)  # needed for docstring to work
