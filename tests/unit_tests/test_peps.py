@@ -165,144 +165,30 @@ def test_fit_nnls_zeros_mult(caplog):
 def test_fit_nnls_peps():
     # This is from a real test case that failed due to a problem in
     # the scipy._nnls implementation
-    n0 = np.array([
-        3,
-        2,
-        0,
-        1,
-        1,
-        1,
-        3,
-        8,
-        14,
-        16,
-        29,
-        23,
-        41,
-        47,
-        53,
-        57,
-        67,
-        76,
-        103,
-        89,
-        97,
-        94,
-        85,
-        95,
-        78,
-        78,
-        78,
-        77,
-        73,
-        50,
-        50,
-        56,
-        68,
-        98,
-        95,
-        112,
-        134,
-        145,
-        158,
-        172,
-        213,
-        234,
-        222,
-        215,
-        216,
-        216,
-        206,
-        183,
-        135,
-        156,
-        110,
-        92,
-        63,
-        60,
-        52,
-        29,
-        20,
-        16,
-        12,
-        5,
-        5,
-        5,
-        1,
-        2,
-        3,
-        0,
-        2,
-    ])
-    k0 = np.array([
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.7205812007860187,
-        0.0,
-        1.4411624015720375,
-        0.7205812007860187,
-        2.882324803144075,
-        5.76464960628815,
-        5.76464960628815,
-        12.249880413362318,
-        15.132205216506394,
-        20.176273622008523,
-        27.382085629868712,
-        48.27894045266326,
-        47.558359251877235,
-        68.45521407467177,
-        97.99904330689854,
-        108.0871801179028,
-        135.46926574777152,
-        140.51333415327366,
-        184.4687874012208,
-        171.49832578707245,
-        205.36564222401535,
-        244.27702706646033,
-        214.01261663344755,
-        228.42424064916793,
-        232.02714665309804,
-        205.36564222401535,
-        172.9394881886445,
-        191.67459940908097,
-        162.1307701768542,
-        153.48379576742198,
-        110.96950492104689,
-        103.04311171240067,
-        86.46974409432225,
-        60.528820866025576,
-        43.234872047161126,
-        23.779179625938617,
-        24.499760826724636,
-        17.29394881886445,
-        11.5292992125763,
-        5.76464960628815,
-        5.044068405502131,
-        3.6029060039300935,
-        0.0,
-        2.882324803144075,
-        0.0,
-        0.0,
-        0.0,
-    ])
+    n0 = np.array(
+        [3, 2, 0, 1, 1, 1, 3, 8, 14, 16, 29, 23, 41, 47, 53, 57, 67, 76, 103]
+        + [89, 97, 94, 85, 95, 78, 78, 78, 77, 73, 50, 50, 56, 68, 98, 95, 112]
+        + [134, 145, 158, 172, 213, 234, 222, 215, 216, 216, 206, 183, 135]
+        + [156, 110, 92, 63, 60, 52, 29, 20, 16, 12, 5, 5, 5, 1, 2, 3, 0, 2]
+    )
+    k0 = np.array(
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        + [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7205812007860187, 0.0]
+        + [1.4411624015720375, 0.7205812007860187, 2.882324803144075]
+        + [5.76464960628815, 5.76464960628815, 12.249880413362318]
+        + [15.132205216506394, 20.176273622008523, 27.382085629868712]
+        + [48.27894045266326, 47.558359251877235, 68.45521407467177]
+        + [97.99904330689854, 108.0871801179028, 135.46926574777152]
+        + [140.51333415327366, 184.4687874012208, 171.49832578707245]
+        + [205.36564222401535, 244.27702706646033, 214.01261663344755]
+        + [228.42424064916793, 232.02714665309804, 205.36564222401535]
+        + [172.9394881886445, 191.67459940908097, 162.1307701768542]
+        + [153.48379576742198, 110.96950492104689, 103.04311171240067]
+        + [86.46974409432225, 60.528820866025576, 43.234872047161126]
+        + [23.779179625938617, 24.499760826724636, 17.29394881886445]
+        + [11.5292992125763, 5.76464960628815, 5.044068405502131]
+        + [3.6029060039300935, 0.0, 2.882324803144075, 0.0, 0.0, 0.0]
+    )
     p = peps.fit_nnls(n0, k0, ascending=True, erase_zeros=True)
     assert np.all(np.diff(p) >= 0)
     assert np.linalg.norm(k0 - n0 * p, np.inf) < 40
@@ -311,20 +197,22 @@ def test_fit_nnls_peps():
     assert np.linalg.norm(k0 - n0 * p, np.inf) < 40
 
 
-def test_peps_qvality():
+@pytest.mark.parametrize("is_tdc", [True, False])
+def test_peps_qvality(is_tdc):
     scores, targets = get_target_decoy_data()
-    peps_values = peps.peps_from_scores_qvality(scores, targets)
+    peps_values = peps.peps_from_scores_qvality(scores, targets, is_tdc)
     assert np.all(peps_values >= 0)
     assert np.all(peps_values <= 1)
     assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
 
 
-def test_peps_kde_nnls():
+@pytest.mark.parametrize("is_tdc", [True, False])
+def test_peps_kde_nnls(is_tdc):
     np.random.seed(
         1253
     )  # this produced an error with failing iterations in nnls
     scores, targets = get_target_decoy_data()
-    peps_values = peps.peps_from_scores_kde_nnls(scores, targets)
+    peps_values = peps.peps_from_scores_kde_nnls(scores, targets, is_tdc)
     assert np.all(peps_values >= 0)
     assert np.all(peps_values <= 1)
     assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
@@ -333,7 +221,7 @@ def test_peps_kde_nnls():
         1245
     )  # this produced an assertion error due to peps over 1.0
     scores, targets = get_target_decoy_data()
-    peps_values = peps.peps_from_scores_kde_nnls(scores, targets)
+    peps_values = peps.peps_from_scores_kde_nnls(scores, targets, is_tdc)
     assert np.all(peps_values >= 0)
     assert np.all(peps_values <= 1)
     assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
@@ -341,57 +229,76 @@ def test_peps_kde_nnls():
 
 @pytest.mark.parametrize(
     "seed",
-    [
-        # Those were collected seeds from random experiments where nnls failed
-        1253,
-        41908,
-        39831,
-        21706,
-        38306,
-        23020,
-        46079,
-        96127,
-        23472,
-        21706,
-        38306,
-        23020,
-        46079,
-        96127,
-        23472,
-        21706,
-        38306,
-        23020,
-        46079,
-        96127,
-        23472,
-        21706,
-        38306,
-        23020,
-        46079,
-        96127,
-        23472,
-        21706,
-        38306,
-        23020,
-        46079,
-        96127,
-        23472,
-        21706,
-        38306,
-        23020,
-        46079,
-        96127,
-        23472,
-        21706,
-    ],
+    # Those were collected seeds from random experiments where nnls failed
+    [1253, 41908, 39831, 21706, 38306, 23020, 46079, 96127, 23472, 21706]
+    + [38306, 23020, 46079, 96127, 23472, 21706, 38306, 23020, 46079, 96127]
+    + [23472, 21706, 38306, 23020, 46079, 96127, 23472, 21706, 38306, 23020]
+    + [46079, 96127, 23472, 21706, 38306, 23020, 46079, 96127, 23472, 21706],
 )
 def test_peps_hist_nnls(seed):
     np.random.seed(seed)
     scores, targets = get_target_decoy_data()
-    try:
-        peps_values = peps.peps_from_scores_hist_nnls(scores, targets)
-        assert np.all(peps_values >= 0)
-        assert np.all(peps_values <= 1)
-        assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
-    except Exception as e:
-        pytest.fail(f"nnls failed on seed {seed}: {str(e)}")
+
+    peps_values = peps.peps_from_scores_hist_nnls(scores, targets, False)
+    assert np.all(peps_values >= 0)
+    assert np.all(peps_values <= 1)
+    assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
+
+
+def test_hist_data_from_iterator():
+    scores = np.random.uniform(-3, 10, 1127)
+    targets = (np.random.uniform(0, 1, len(scores))) > 0.7
+
+    def score_iterator(scores, targets, chunksize=5):
+        for i in range(0, len(scores), chunksize):
+            yield scores[i : i + chunksize], targets[i : i + chunksize]
+
+    bins = np.histogram_bin_edges(scores, bins=31)
+    e0, t0, d0 = peps.hist_data_from_scores(
+        scores, targets, bins=bins
+    ).as_counts()
+    e1, t1, d1 = peps.hist_data_from_iterator(
+        score_iterator(scores, targets), bin_edges=bins
+    ).as_counts()
+    assert e0 == approx(e1)
+    assert t0 == approx(t1)
+    assert d0 == approx(d1)
+
+    bins = np.histogram_bin_edges(scores, bins=17)
+    e0, t0, d0 = peps.hist_data_from_scores(
+        scores, targets, bins=bins
+    ).as_densities()
+    e1, t1, d1 = peps.hist_data_from_iterator(
+        score_iterator(scores, targets, chunksize=7), bin_edges=bins
+    ).as_densities()
+    assert e0 == approx(e1)
+    assert t0 == approx(t1)
+    assert d0 == approx(d1)
+
+
+def test_peps_from_qvality_sorting():
+    # Check that qvality works with differently sorted scores
+    rng = np.random.Generator(np.random.PCG64(42))
+
+    N = 1126
+    targets = (rng.uniform(0, 1, N)) > 0.7
+    scores = targets * rng.normal(1, 1, N) + (1 - targets) * rng.normal(
+        -1, 1, N
+    )
+
+    peps0 = peps.peps_from_scores_qvality(
+        scores, targets, True, use_binary=False
+    )
+
+    index = np.argsort(scores)[::-1]
+    scores_sorted, targets_sorted = scores[index], targets[index]
+
+    peps1 = peps.peps_from_scores_qvality(
+        scores_sorted, targets_sorted, True, use_binary=False
+    )
+
+    # import matplotlib.pyplot as plt
+    # plt.plot(scores, peps0, 'x'); plt.show()
+    # plt.plot(scores_sorted, peps1, 'x'); plt.show()
+
+    assert np.all(peps0[index] == peps1)

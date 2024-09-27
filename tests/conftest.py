@@ -6,14 +6,15 @@ import logging
 import sys
 from pathlib import Path
 
-import pytest
 import numpy as np
 import pandas as pd
-from mokapot import LinearPsmDataset, OnDiskPsmDataset
-from triqler.qvality import getQvaluesFromScores
-from mokapot.qvalues import tdc
-import pyarrow.parquet as pq
 import pyarrow as pa
+import pyarrow.parquet as pq
+import pytest
+from triqler.qvality import getQvaluesFromScores
+
+from mokapot import LinearPsmDataset, OnDiskPsmDataset
+from mokapot.qvalues import tdc
 from mokapot.utils import convert_targets_column
 
 
@@ -44,7 +45,7 @@ def psm_df_100(tmp_path):
     targets = {
         "specid": np.arange(50),
         "target": [True] * 50,
-        "scannr": np.random.randint(0, 100, 50),
+        "scannr": rng.integers(0, 100, 50),
         "calcmass": rng.uniform(500, 2000, size=50),
         "expmass": rng.uniform(500, 2000, size=50),
         "peptide": [_random_peptide(5, rng) for _ in range(50)],
@@ -58,7 +59,7 @@ def psm_df_100(tmp_path):
     decoys = {
         "specid": np.arange(50, 100),
         "target": [False] * 50,
-        "scannr": np.random.randint(0, 100, 50),
+        "scannr": rng.integers(0, 100, 50),
         "calcmass": rng.uniform(500, 2000, size=50),
         "expmass": rng.uniform(500, 2000, size=50),
         "peptide": [_random_peptide(5, rng) for _ in range(50)],
@@ -82,7 +83,7 @@ def psm_df_100_parquet(tmp_path):
     targets = {
         "specid": np.arange(50),
         "target": [True] * 50,
-        "scannr": np.random.randint(0, 100, 50),
+        "scannr": rng.integers(0, 100, 50),
         "calcmass": rng.uniform(500, 2000, size=50),
         "expmass": rng.uniform(500, 2000, size=50),
         "peptide": [_random_peptide(5, rng) for _ in range(50)],
@@ -96,7 +97,7 @@ def psm_df_100_parquet(tmp_path):
     decoys = {
         "specid": np.arange(50, 100),
         "target": [False] * 50,
-        "scannr": np.random.randint(0, 100, 50),
+        "scannr": rng.integers(0, 100, 50),
         "calcmass": rng.uniform(500, 2000, size=50),
         "expmass": rng.uniform(500, 2000, size=50),
         "peptide": [_random_peptide(5, rng) for _ in range(50)],
@@ -120,7 +121,8 @@ def psm_df_1000(tmp_path):
     targets = {
         "specid": np.arange(500),
         "target": [True] * 500,
-        "scannr": np.random.randint(0, 1000, 500),
+        "spectrum": np.arange(500),
+        "scannr": rng.integers(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
@@ -142,13 +144,13 @@ def psm_df_1000(tmp_path):
         "specid": np.arange(500, 1000),
         "target": [False] * 500,
         "spectrum": np.arange(500),
-        "score2": rng.normal(size=500),
-        "scannr": np.random.randint(0, 1000, 500),
+        "scannr": rng.integers(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
         "score": rng.normal(size=500),
+        "score2": rng.normal(size=500),
         "filename": "test.mzML",
         "ret_time": rng.uniform(0, 60 * 120, size=500),
         "charge": rng.choice([2, 3, 4], size=500),
@@ -160,11 +162,13 @@ def psm_df_1000(tmp_path):
     )
 
     fasta = tmp_path / "test_1000.fasta"
-    pin = tmp_path / "test.pin"
     with open(fasta, "w+") as fasta_ref:
         fasta_ref.write(fasta_data)
+
     df = pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)])
-    df.to_csv(pin, sep="\t", index=False)
+
+    pin = tmp_path / "test.pin"
+    df.drop(columns=["score", "score2"]).to_csv(pin, sep="\t", index=False)
     return pin, df, fasta
 
 
@@ -175,7 +179,7 @@ def psm_df_1000_parquet(tmp_path):
     targets = {
         "specid": np.arange(500),
         "target": [True] * 500,
-        "scannr": np.random.randint(0, 1000, 500),
+        "scannr": rng.integers(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
@@ -198,7 +202,7 @@ def psm_df_1000_parquet(tmp_path):
         "target": [False] * 500,
         "spectrum": np.arange(500),
         "score2": rng.normal(size=500),
-        "scannr": np.random.randint(0, 1000, 500),
+        "scannr": rng.integers(0, 1000, 500),
         "calcmass": rng.uniform(500, 2000, size=500),
         "expmass": rng.uniform(500, 2000, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
@@ -215,16 +219,18 @@ def psm_df_1000_parquet(tmp_path):
     )
 
     fasta = tmp_path / "test_1000.fasta"
-    pf = tmp_path / "test.parquet"
     with open(fasta, "w+") as fasta_ref:
         fasta_ref.write(fasta_data)
+
     df = pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)])
-    df.to_parquet(pf, index=False)
+
+    pf = tmp_path / "test.parquet"
+    df.drop(columns=["score", "score2"]).to_parquet(pf, index=False)
     return pf, df, fasta
 
 
 @pytest.fixture
-def psms(psm_df_1000):
+def psms_dataset(psm_df_1000):
     """A small LinearPsmDataset"""
     _, df, _ = psm_df_1000
     psms = LinearPsmDataset(
@@ -254,7 +260,7 @@ def psms_ondisk():
     with open(filename) as perc:
         columns = perc.readline().rstrip().split("\t")
     psms = OnDiskPsmDataset(
-        filename=filename,
+        filename,
         target_column="Label",
         spectrum_columns=["ScanNr", "ExpMass"],
         peptide_column="Peptide",
@@ -309,7 +315,7 @@ def psms_ondisk_from_parquet():
     df_spectra = convert_targets_column(df_spectra, "Label")
     columns = pq.ParquetFile(filename).schema.names
     psms = OnDiskPsmDataset(
-        filename=filename,
+        filename,
         target_column="Label",
         spectrum_columns=["ScanNr", "ExpMass"],
         peptide_column="Peptide",
@@ -552,38 +558,7 @@ def mock_conf():
                 "protein": ["A|B|C\tB|C|A", "A|B|C"],
             })
 
-            self.confidence_estimates = {"peptides": self.peptides}
-            self.decoy_confidence_estimates = {"peptides": self.peptides}
-
     return conf()
-
-
-@pytest.fixture
-def merge_sort_data(tmp_path):
-    filenames_csv = [tmp_path / f"merge_sort_{i}.csv" for i in range(3)]
-    filenames_parquet = [
-        tmp_path / f"merge_sort_{i}.parquet" for i in range(3)
-    ]
-    df = pd.read_csv(
-        "data/10k_psms_test.pin",
-        sep="\t",
-        usecols=[
-            "SpecId",
-            "Label",
-            "ScanNr",
-            "ExpMass",
-            "Peptide",
-            "Proteins",
-        ],
-    )
-    df = df[:15]
-    df["score"] = np.arange(0.16, 0.01, -0.01)
-    for i, (file_csv, file_parquet) in enumerate(
-        zip(filenames_csv, filenames_parquet)
-    ):
-        df[i::3].to_csv(file_csv, sep="\t", index=False)
-        df[i::3].to_parquet(file_parquet, index=False)
-    return filenames_csv, filenames_parquet
 
 
 @pytest.fixture
@@ -692,7 +667,7 @@ def pytest_sessionstart(session):
     # pd.set_option("display.max_colwidth", None) #default 50
 
     # Set max width for output of the whole data frame
-    pd.set_option("display.width", None)  # default 80, None means auto-detect
+    pd.set_option("display.width", 1000)  # default 80, None means auto-detect
 
     # Also set full precision
     # (see https://pandas.pydata.org/docs/user_guide/options.html)

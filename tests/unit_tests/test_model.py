@@ -3,7 +3,6 @@
 import pytest
 import mokapot
 import numpy as np
-import pandas as pd
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -57,58 +56,58 @@ def test_perc_init():
     assert model.override
 
 
-def test_model_fit(psms):
+def test_model_fit(psms_dataset):
     """Test that model fitting works"""
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
-    model.fit(psms)
+    model.fit(psms_dataset)
 
     assert model.is_trained
 
     model = mokapot.Model(LogisticRegressionCV(), train_fdr=0.05, max_iter=1)
-    model.fit(psms)
+    model.fit(psms_dataset)
 
     assert isinstance(model.estimator, LogisticRegression)
     assert model.is_trained
 
-    no_targets = pd.DataFrame({"targets": [False] * 100})
+    psms_dataset._data[psms_dataset._target_column] = False
     with pytest.raises(ValueError):
-        model.fit(no_targets)
+        model.fit(psms_dataset)  # no targets
 
-    no_decoys = pd.DataFrame({"targets": [True] * 100})
+    psms_dataset._data[psms_dataset._target_column] = True
     with pytest.raises(ValueError):
-        model.fit(no_decoys)
+        model.fit(psms_dataset)  # no decoys
 
 
-def test_model_fit_large_subset(psms):
+def test_model_fit_large_subset(psms_dataset):
     model = mokapot.Model(
         LogisticRegression(),
         train_fdr=0.05,
         max_iter=1,
     )
-    model.fit(psms)
+    model.fit(psms_dataset)
 
     assert model.is_trained
 
 
-def test_model_predict(psms):
+def test_model_predict(psms_dataset):
     """Test predictions"""
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
 
     try:
-        model.predict(psms)
+        model.predict(psms_dataset)
     except NotFittedError:
         pass
 
     # The normal case
-    model.fit(psms)
-    scores = model.predict(psms)
-    assert len(scores) == len(psms)
+    model.fit(psms_dataset)
+    scores = model.predict(psms_dataset)
+    assert len(scores) == len(psms_dataset)
 
     # The case where a model is trained on a dataset with different features:
-    psms._data["blah"] = np.random.randn(len(psms))
-    psms._feature_columns = ("score", "blah")
+    psms_dataset._data["blah"] = np.random.randn(len(psms_dataset))
+    psms_dataset._feature_columns = ("score", "blah")
     with pytest.raises(ValueError):
-        model.predict(psms)
+        model.predict(psms_dataset)
 
 
 def test_model_persistance(tmp_path):

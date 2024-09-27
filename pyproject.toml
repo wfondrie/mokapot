@@ -66,11 +66,15 @@ find = {namespaces = false}
 
 [tool.setuptools_scm]
 
+[tool.pytest.ini_options]
+testpaths = ["tests",]
+norecursedirs = ["extra", ]
+
 [tool.ruff]
-exclude = ["*.ipynb"]
 extend-exclude = ["docs/source/conf.py"]
 line-length = 79
 target-version = "py39"
+exclude = ["docs", "notebooks", "*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "T20"]  # T20 is for print() statements.

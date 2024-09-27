@@ -17,151 +17,40 @@ One of more instance of this class are required to use the
 
 """
 
-from __future__ import annotations
-
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
 from pathlib import Path
-
 from zlib import crc32
+
 import numpy as np
 import pandas as pd
 from typeguard import typechecked
-from .tabular_data import TabularDataReader
 
-from . import qvalues
-from . import utils
-from .parsers.fasta import read_fasta
-from .proteins import Proteins
+from mokapot import qvalues
+from mokapot import utils
+from mokapot.parsers.fasta import read_fasta
+from mokapot.proteins import Proteins
+from .tabular_data import TabularDataReader
 
 LOGGER = logging.getLogger(__name__)
 
 
 # Classes ---------------------------------------------------------------------
 class PsmDataset(ABC):
+    """Store a collection of PSMs and their features.
+
+    Note: Currently, the derived classes LinearPsmDataset and OnDiskPsmDataset
+    don't have anything in common, so maybe this class can be removed in the
+    future.
     """
-    Store a collection of PSMs and their features.
-
-    :meta private:
-    """
-
-    @property
-    @abstractmethod
-    def targets(self):
-        """An array indicating whether each PSM is a target."""
-        return
-
-    @abstractmethod
-    def _update_labels(self, scores, eval_fdr, desc):
-        """
-        Return the label for each PSM, given it's score.
-
-        This method is used during model training to define positive
-        examples. These are traditionally the target PSMs that fall
-        within a specified FDR threshold.
-
-        Parameters
-        ----------
-        scores : numpy.ndarray
-            The score used to rank the PSMs.
-        eval_fdr : float
-            The false discovery rate threshold to use.
-        desc : bool
-            Are higher scores better?
-
-        Returns
-        -------
-        numpy.ndarray
-            The label of each PSM, where 1 indicates a positive example,
-            -1 indicates a negative example, and 0 removes the PSM from
-            training. Typically, 0 is reserved for targets, below a
-            specified FDR threshold.
-        """
-        return
 
     def __init__(
         self,
-        psms,
-        spectrum_columns,
-        feature_columns,
-        other_columns,
-        copy_data,
         rng,
     ):
-        """Initialize an object"""
-        self._data = psms.copy(deep=copy_data).reset_index(drop=True)
+        """Initialize a PsmDataset"""
         self._proteins = None
         self.rng = rng
-
-        # Set columns
-        self._spectrum_columns = utils.tuplize(spectrum_columns)
-
-        if other_columns is not None:
-            other_columns = utils.tuplize(other_columns)
-        else:
-            other_columns = ()
-
-        # Check that all of the columns exist:
-        used_columns = sum([other_columns, self._spectrum_columns], tuple())
-
-        missing_columns = [c not in self.data.columns for c in used_columns]
-        if not missing_columns:
-            raise ValueError(
-                "The following specified columns were not found: "
-                f"{missing_columns}"
-            )
-
-        # Get the feature columns
-        if feature_columns is None:
-            self._feature_columns = tuple(
-                c for c in self.data.columns if c not in used_columns
-            )
-        else:
-            self._feature_columns = utils.tuplize(feature_columns)
-
-    @property
-    def data(self):
-        """The full collection of PSMs as a :py:class:`pandas.DataFrame`."""
-        return self._data
-
-    def __len__(self):
-        """Return the number of PSMs"""
-        return len(self._data.index)
-
-    @property
-    def _metadata_columns(self):
-        """A list of the metadata columns"""
-        return tuple(
-            c for c in self.data.columns if c not in self._feature_columns
-        )
-
-    @property
-    def metadata(self):
-        """A :py:class:`pandas.DataFrame` of the metadata."""
-        return self.data.loc[:, self._metadata_columns]
-
-    @property
-    def features(self):
-        """A :py:class:`pandas.DataFrame` of the features."""
-        return self.data.loc[:, self._feature_columns]
-
-    @property
-    def spectra(self):
-        """
-        A :py:class:`pandas.DataFrame` of the columns that uniquely
-        identify a mass spectrum.
-        """
-        return self.data.loc[:, self._spectrum_columns]
-
-    @property
-    def columns(self):
-        """The columns of the dataset."""
-        return self.data.columns.tolist()
-
-    @property
-    def has_proteins(self):
-        """Has a FASTA file been added?"""
-        return self._proteins is not None
 
     @property
     def rng(self):
@@ -195,84 +84,6 @@ class PsmDataset(ABC):
             proteins = read_fasta(proteins, **kwargs)
 
         self._proteins = proteins
-
-    def _targets_count_by_feature(self, desc, eval_fdr):
-        """
-        iterate over features and count the number of positive examples
-
-        :param desc: bool
-            Are high scores better for the best feature?
-        :param eval_fdr: float
-            The false discovery rate threshold to use.
-        :return: pd.Series
-            The number of positive examples for each feature.
-        """
-        return pd.Series(
-            [
-                (
-                    self._update_labels(
-                        self.data.loc[:, col],
-                        eval_fdr=eval_fdr,
-                        desc=desc,
-                    )
-                    == 1
-                ).sum()
-                for col in self._feature_columns
-            ],
-            index=self._feature_columns,
-        )
-
-    def _find_best_feature(self, eval_fdr):
-        """
-        Find the best feature to separate targets from decoys at the
-        specified false-discovery rate threshold.
-
-        Parameters
-        ----------
-        eval_fdr : float
-            The false-discovery rate threshold used to define the
-            best feature.
-
-        Returns
-        -------
-        A tuple of an str, int, and numpy.ndarray
-        best_feature : str
-            The name of the best feature.
-        num_passing : int
-            The number of accepted PSMs using the best feature.
-        labels : numpy.ndarray
-            The new labels defining positive and negative examples when
-            the best feature is used.
-        desc : bool
-            Are high scores better for the best feature?
-        """
-        best_feat = None
-        best_positives = 0
-        new_labels = None
-        for desc in (True, False):
-            num_passing = self._targets_count_by_feature(desc, eval_fdr)
-            feat_idx = num_passing.idxmax()
-            num_passing = num_passing[feat_idx]
-
-            if num_passing > best_positives:
-                best_positives = num_passing
-                best_feat = feat_idx
-                new_labels = self._update_labels(
-                    self.data.loc[:, feat_idx], eval_fdr=eval_fdr, desc=desc
-                )
-                best_desc = desc
-
-        if best_feat is None:
-            raise RuntimeError(
-                f"No PSMs found below the 'eval_fdr' {eval_fdr}."
-            )
-
-        return best_feat, best_positives, new_labels, best_desc
-
-    def _calibrate_scores(self, scores, eval_fdr, desc=True):
-        calibrate_scores(
-            scores=scores, eval_fdr=eval_fdr, desc=desc, targets=self.targets
-        )
 
 
 class LinearPsmDataset(PsmDataset):
@@ -374,7 +185,10 @@ class LinearPsmDataset(PsmDataset):
         rng=None,
         enforce_checks=True,
     ):
-        """Initialize a PsmDataset object."""
+        """Initialize a LinearPsmDataset object."""
+        super().__init__(rng=rng)
+        self._data = psms.copy(deep=copy_data).reset_index(drop=True)
+
         self._target_column = target_column
         self._peptide_column = peptide_column
         self._protein_column = protein_column
@@ -397,14 +211,31 @@ class LinearPsmDataset(PsmDataset):
             if opt_column is not None:
                 other_columns.append(opt_column)
 
-        super().__init__(
-            psms=psms,
-            spectrum_columns=spectrum_columns,
-            feature_columns=feature_columns,
-            other_columns=other_columns,
-            copy_data=copy_data,
-            rng=rng,
-        )
+        # Set columns
+        self._spectrum_columns = utils.tuplize(spectrum_columns)
+
+        if other_columns is not None:
+            other_columns = utils.tuplize(other_columns)
+        else:
+            other_columns = ()
+
+        # Check that all of the columns exist:
+        used_columns = sum([other_columns, self._spectrum_columns], tuple())
+
+        missing_columns = [c not in self.data.columns for c in used_columns]
+        if not missing_columns:
+            raise ValueError(
+                "The following specified columns were not found: "
+                f"{missing_columns}"
+            )
+
+        # Get the feature columns
+        if feature_columns is None:
+            self._feature_columns = tuple(
+                c for c in self.data.columns if c not in used_columns
+            )
+        else:
+            self._feature_columns = utils.tuplize(feature_columns)
 
         self._data[target_column] = self._data[target_column].astype(bool)
         num_targets = (self.targets).sum()
@@ -417,6 +248,15 @@ class LinearPsmDataset(PsmDataset):
                 raise ValueError("No target PSMs were detected.")
             if not num_decoys:
                 raise ValueError("No decoy PSMs were detected.")
+
+    @property
+    def data(self):
+        """The full collection of PSMs as a :py:class:`pandas.DataFrame`."""
+        return self._data
+
+    def __len__(self):
+        """Return the number of PSMs"""
+        return len(self._data.index)
 
     def __repr__(self):
         """How to print the class"""
@@ -444,16 +284,153 @@ class LinearPsmDataset(PsmDataset):
         return self.data.loc[:, self._peptide_column]
 
     def _update_labels(self, scores, eval_fdr=0.01, desc=True):
+        """
+        Return the label for each PSM, given it's score.
+
+        This method is used during model training to define positive
+        examples. These are traditionally the target PSMs that fall
+        within a specified FDR threshold.
+
+        Parameters
+        ----------
+        scores : numpy.ndarray
+            The score used to rank the PSMs.
+        eval_fdr : float
+            The false discovery rate threshold to use.
+        desc : bool
+            Are higher scores better?
+
+        Returns
+        -------
+        numpy.ndarray
+            The label of each PSM, where 1 indicates a positive example,
+            -1 indicates a negative example, and 0 removes the PSM from
+            training. Typically, 0 is reserved for targets, below a
+            specified FDR threshold.
+        """
         return _update_labels(
             scores=scores, targets=self.targets, eval_fdr=eval_fdr, desc=desc
         )
 
+    @property
+    def _metadata_columns(self):
+        """A list of the metadata columns"""
+        return tuple(
+            c for c in self.data.columns if c not in self._feature_columns
+        )
 
-class OnDiskPsmDataset:
+    @property
+    def metadata(self):
+        """A :py:class:`pandas.DataFrame` of the metadata."""
+        return self.data.loc[:, self._metadata_columns]
+
+    @property
+    def features(self):
+        """A :py:class:`pandas.DataFrame` of the features."""
+        return self.data.loc[:, self._feature_columns]
+
+    @property
+    def spectra(self):
+        """
+        A :py:class:`pandas.DataFrame` of the columns that uniquely
+        identify a mass spectrum.
+        """
+        return self.data.loc[:, self._spectrum_columns]
+
+    @property
+    def columns(self):
+        """The columns of the dataset."""
+        return self.data.columns.tolist()
+
+    @property
+    def has_proteins(self):
+        """Has a FASTA file been added?"""
+        return self._proteins is not None
+
+    def _targets_count_by_feature(self, desc, eval_fdr):
+        """
+        iterate over features and count the number of positive examples
+
+        :param desc: bool
+            Are high scores better for the best feature?
+        :param eval_fdr: float
+            The false discovery rate threshold to use.
+        :return: pd.Series
+            The number of positive examples for each feature.
+        """
+        return pd.Series(
+            [
+                (
+                    self._update_labels(
+                        self.data.loc[:, col],
+                        eval_fdr=eval_fdr,
+                        desc=desc,
+                    )
+                    == 1
+                ).sum()
+                for col in self._feature_columns
+            ],
+            index=self._feature_columns,
+        )
+
+    def _find_best_feature(self, eval_fdr):
+        """
+        Find the best feature to separate targets from decoys at the
+        specified false-discovery rate threshold.
+
+        Parameters
+        ----------
+        eval_fdr : float
+            The false-discovery rate threshold used to define the
+            best feature.
+
+        Returns
+        -------
+        A tuple of an str, int, and numpy.ndarray
+        best_feature : str
+            The name of the best feature.
+        num_passing : int
+            The number of accepted PSMs using the best feature.
+        labels : numpy.ndarray
+            The new labels defining positive and negative examples when
+            the best feature is used.
+        desc : bool
+            Are high scores better for the best feature?
+        """
+        best_feat = None
+        best_positives = 0
+        new_labels = None
+        for desc in (True, False):
+            num_passing = self._targets_count_by_feature(desc, eval_fdr)
+            feat_idx = num_passing.idxmax()
+            num_passing = num_passing[feat_idx]
+
+            if num_passing > best_positives:
+                best_positives = num_passing
+                best_feat = feat_idx
+                new_labels = self._update_labels(
+                    self.data.loc[:, feat_idx], eval_fdr=eval_fdr, desc=desc
+                )
+                best_desc = desc
+
+        if best_feat is None:
+            raise RuntimeError(
+                f"No PSMs found below the 'eval_fdr' {eval_fdr}."
+            )
+
+        return best_feat, best_positives, new_labels, best_desc
+
+    def _calibrate_scores(self, scores, eval_fdr, desc=True):
+        calibrate_scores(
+            scores=scores, eval_fdr=eval_fdr, desc=desc, targets=self.targets
+        )
+
+
+class OnDiskPsmDataset(PsmDataset):
     @typechecked
     def __init__(
         self,
-        filename: Path | None,
+        filename_or_reader: Path | TabularDataReader,
         columns,
         target_column,
         spectrum_columns,
@@ -472,8 +449,13 @@ class OnDiskPsmDataset:
         charge_column,
         spectra_dataframe,
     ):
-        """Initialize a PsmDataset object."""
-        self.filename = filename
+        """Initialize an OnDiskPsmDataset object."""
+        super().__init__(rng=None)
+        if isinstance(filename_or_reader, TabularDataReader):
+            self.reader = filename_or_reader
+        else:
+            self.reader = TabularDataReader.from_path(filename_or_reader)
+
         self.columns = columns
         self.target_column = target_column
         self.peptide_column = peptide_column
@@ -492,38 +474,39 @@ class OnDiskPsmDataset:
         self.specId_column = specId_column
         self.spectra_dataframe = spectra_dataframe
 
-        # todo: btw: should not get the filename but a reader object or
-        #   something, in order to parse other filetypes without if's
-        if filename:
-            columns = TabularDataReader.from_path(filename).get_column_names()
+        columns = self.reader.get_column_names()
 
-            def check_column(column):
-                if column and column not in columns:
-                    raise ValueError(
-                        f"Column '{column}' not found in data columns of file"
-                        f" '{filename}' ({columns})"
-                    )
+        # todo: nice to have: here reader.file_name should be something like
+        #   reader.user_repr() which tells the user where to look for the
+        #   error, however, we cannot expect the reader to have a file_name
+        def check_column(column):
+            if column and column not in columns:
+                file_name = getattr(self.reader, "file_name", "<unknown file>")
+                raise ValueError(
+                    f"Column '{column}' not found in data columns of file"
+                    f" '{file_name}' ({columns})"
+                )
 
-            def check_columns(columns):
-                if columns:
-                    for column in columns:
-                        check_column(column)
+        def check_columns(columns):
+            if columns:
+                for column in columns:
+                    check_column(column)
 
-            check_columns(self.columns)
-            check_column(self.target_column)
-            check_column(self.peptide_column)
-            check_column(self.protein_column)
-            check_columns(self.spectrum_columns)
-            check_columns(self.feature_columns)
-            check_columns(self.metadata_columns)
-            check_columns(self.level_columns)
-            check_column(self.filename_column)
-            check_column(self.scan_column)
-            check_column(self.calcmass_column)
-            check_column(self.expmass_column)
-            check_column(self.rt_column)
-            check_column(self.charge_column)
-            check_column(self.specId_column)
+        check_columns(self.columns)
+        check_column(self.target_column)
+        check_column(self.peptide_column)
+        check_column(self.protein_column)
+        check_columns(self.spectrum_columns)
+        check_columns(self.feature_columns)
+        check_columns(self.metadata_columns)
+        check_columns(self.level_columns)
+        check_column(self.filename_column)
+        check_column(self.scan_column)
+        check_column(self.calcmass_column)
+        check_column(self.expmass_column)
+        check_column(self.rt_column)
+        check_column(self.charge_column)
+        check_column(self.specId_column)
 
     def calibrate_scores(self, scores, eval_fdr, desc=True):
         """
@@ -687,13 +670,12 @@ class OnDiskPsmDataset:
         return spectra_idx
 
     def read_data(self, columns=None, chunk_size=None):
-        reader = TabularDataReader.from_path(self.filename)
         if chunk_size:
-            return reader.get_chunked_data_iterator(
+            return self.reader.get_chunked_data_iterator(
                 chunk_size=chunk_size, columns=columns
             )
         else:
-            return reader.read(columns=columns)
+            return self.reader.read(columns=columns)
 
 
 @typechecked
@@ -777,13 +759,12 @@ def calibrate_scores(scores, targets, eval_fdr, desc=True):
 
 @typechecked
 def update_labels(
-    file_name: Path,
+    reader: TabularDataReader,
     scores,
     target_column,
     eval_fdr=0.01,
     desc=True,
 ):
-    reader = TabularDataReader.from_path(file_name)
     df = reader.read(columns=[target_column])
     return _update_labels(
         scores=scores,

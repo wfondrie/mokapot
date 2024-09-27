@@ -1,7 +1,7 @@
 import contextlib
+import io
 import logging
 import os
-import io
 import subprocess
 from contextlib import redirect_stdout, redirect_stderr
 from typing import List, Any, Optional, Dict, Callable
@@ -29,7 +29,10 @@ def catch_type_check():
     except TypeCheckError as e:
         import traceback
 
-        logging.error("\n\nTypeCheckError: ", end="")
+        # This method is used internally, and thus the output should be printed
+        # directly to the console and not logged via the logging framework
+        print("\n\nTypeCheckError: ", end="")  # noqa: T201
+
         # Print the exception with the stack trace excluding the last
         # entries which stem from the typeguard module
         frames = traceback.extract_tb(e.__traceback__)
@@ -38,6 +41,27 @@ def catch_type_check():
         )
         traceback.print_exception(e, limit=entries_to_print)
         raise
+
+
+def flatten(lst):
+    """
+    Parameters
+    ----------
+    lst:
+        The list or tuple to be flattened.
+
+    Returns
+    -------
+    list
+        A flattened list containing all the elements from the input collection.
+    """
+    result = []
+    for i in lst:
+        if isinstance(i, list | tuple):
+            result.extend(flatten(i))
+        else:
+            result.append(i)
+    return result
 
 
 def _run_cli(
@@ -75,6 +99,7 @@ def _run_cli(
     else:
         run_in_subprocess = bool(run_in_subprocess)
 
+    params = flatten(params)
     params = [str(param) for param in params]
     if run_in_subprocess:
         cmd = ["python", "-m", module] + params
@@ -95,6 +120,14 @@ def _run_cli(
                 "stdout": res.stdout.decode(),
                 "stderr": res.stderr.decode(),
             }
+
+        if res.returncode == 250:
+            raise ValueError(f"Mokapot returned error status {res.returncode}")
+        elif res.returncode != 0:
+            raise RuntimeError(
+                f"Mokapot returned error status {res.returncode}"
+            )
+
     elif capture_output:
         stdout_sink = io.StringIO()
         stderr_sink = io.StringIO()
@@ -108,6 +141,7 @@ def _run_cli(
         with redirect_stderr(stderr_sink), redirect_stdout(stdout_sink):
             with catch_type_check():
                 main_func(params)
+
         return {
             "stdout": stdout_sink.getvalue(),
             "stderr": stderr_sink.getvalue(),

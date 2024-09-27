@@ -2,19 +2,13 @@
 Utility functions
 """
 
-from __future__ import annotations
-
-import itertools
 import gzip
+import itertools
 from pathlib import Path
-from typing import Union, List, Iterator, Any, NewType, Dict
+from typing import Union, Iterator, Any, NewType, Dict
 
 import numpy as np
 import pandas as pd
-from mokapot.tabular_data import TabularDataReader
-
-from .constants import MERGE_SORT_CHUNK_SIZE
-import pyarrow.parquet as pq
 from typeguard import typechecked
 
 
@@ -35,7 +29,6 @@ def groupby_max(df, by_cols, max_col, rng):
         .drop_duplicates(list(by_cols), keep="last")
         .index
     )
-
     return idx
 
 
@@ -126,58 +119,6 @@ def get_next_row(
         del row_iterator_dict[max_key]
 
     return max_row
-
-
-@typechecked
-def csv_row_iterator(path: Path) -> Iterator[DataRow]:
-    chunk_iterator = TabularDataReader.from_path(
-        path
-    ).get_chunked_data_iterator(chunk_size=MERGE_SORT_CHUNK_SIZE)
-    for chunk in chunk_iterator:
-        records = chunk.to_dict(orient="records")
-        yield from records
-
-
-@typechecked
-def parquet_row_iterator(path: Path) -> Iterator[DataRow]:
-    batch_iterator = pq.ParquetFile(path).iter_batches(MERGE_SORT_CHUNK_SIZE)
-    for record_batch in batch_iterator:
-        batch = record_batch.to_pylist()
-        yield from batch
-
-
-@typechecked
-def merge_sort(paths: list[Path], score_column: str):
-    if paths[0].suffix == ".parquet":
-        row_iterator_func = parquet_row_iterator
-    else:
-        row_iterator_func = csv_row_iterator
-
-    row_iterator_dict = {
-        i: row_iterator_func(path) for i, path in enumerate(paths)
-    }
-    current_row_dict = {
-        i: next(row_iter) for i, row_iter in row_iterator_dict.items()
-    }
-
-    while row_iterator_dict != {}:
-        row = get_next_row(row_iterator_dict, current_row_dict, score_column)
-        if row is not None:
-            yield row
-
-
-def get_dataframe_from_records(
-    records: List[dict],
-    in_columns: List,
-    column_mapping: dict,
-    target_column: str = None,
-):
-    df = pd.DataFrame.from_records(records, columns=in_columns)
-    if target_column:
-        if df[target_column].dtype == "object":
-            df[target_column] = df[target_column] == "True"
-    df = df.rename(columns=column_mapping)
-    return df
 
 
 @typechecked
