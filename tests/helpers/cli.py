@@ -1,5 +1,3 @@
-from typing import Union
-
 import contextlib
 import io
 import logging
@@ -59,7 +57,7 @@ def flatten(lst):
     """
     result = []
     for i in lst:
-        if isinstance(i, Union[list, tuple]):
+        if isinstance(i, list | tuple):
             result.extend(flatten(i))
         else:
             result.append(i)
