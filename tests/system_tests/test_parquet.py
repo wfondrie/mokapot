@@ -6,6 +6,7 @@ output, just that the expect outputs are created.
 """
 
 from pathlib import Path
+
 import pandas as pd
 
 from ..helpers.cli import run_mokapot_cli
@@ -14,7 +15,7 @@ from ..helpers.utils import file_exist
 
 def test_parquet_output(tmp_path):
     """Test that parquet input/output works."""
-    params = ["data/10k_psms_test.parquet", "--dest_dir", tmp_path]
+    params = [Path("data") / "10k_psms_test.parquet", "--dest_dir", tmp_path]
     run_mokapot_cli(params)
     assert file_exist(tmp_path, "targets.psms.parquet")
     assert file_exist(tmp_path, "targets.peptides.parquet")

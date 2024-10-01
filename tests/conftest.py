@@ -536,7 +536,7 @@ def mock_conf():
             self._has_proteins = False
 
             self.peptides = pd.DataFrame({
-                "filename": "a/b/c.mzML",
+                "filename": Path("a") / "b" / "c.mzML",
                 "calcmass": [1, 2],
                 "ret_time": [60, 120],
                 "charge": [2, 3],
@@ -550,7 +550,7 @@ def mock_conf():
 
 @pytest.fixture
 def confidence_write_data():
-    filename = Path("data/confidence_results_test.tsv")
+    filename = Path("data") / "confidence_results_test.tsv"
     psm_df = pd.read_csv(filename, sep="\t")
     precursor_df = psm_df.drop_duplicates(subset=["Precursor"])
     mod_pep_df = psm_df.drop_duplicates(subset=["ModifiedPeptide"])

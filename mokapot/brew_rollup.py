@@ -72,7 +72,7 @@ def add_main_options(parser: ArgumentGroup) -> None:
         "-s",
         "--src_dir",
         type=Path,
-        default="./",
+        default=Path("."),
         help=("The directory in which to look for the files to rollup."),
     )
 
@@ -82,7 +82,7 @@ def add_output_options(parser: ArgumentGroup) -> None:
         "-d",
         "--dest_dir",
         type=Path,
-        default="./",
+        default=Path("."),
         help=(
             "The directory in which to write the result files. Defaults to "
             "the current working directory"
