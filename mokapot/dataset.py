@@ -421,8 +421,8 @@ class LinearPsmDataset(PsmDataset):
         )
 
 
+@typechecked
 class OnDiskPsmDataset(PsmDataset):
-    @typechecked
     def __init__(
         self,
         filename_or_reader: Path | TabularDataReader,
@@ -604,6 +604,32 @@ class OnDiskPsmDataset(PsmDataset):
             desc=desc,
         )
 
+    @staticmethod
+    def _hash_row(x: np.ndarray) -> int:
+        """
+        Hash array for splitting of test/training sets.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Input array to be hashed.
+
+        Returns
+        -------
+        int
+            Computed hash of the input array.
+        """
+
+        def to_base_val(v):
+            """Return base python value also for numpy types"""
+            try:
+                return v.item()
+            except AttributeError:
+                return v
+
+        tup = tuple(to_base_val(x) for x in x)
+        return crc32(str(tup).encode())
+
     def _split(self, folds, rng):
         """
         Get the indices for random, even splits of the dataset.
@@ -626,13 +652,7 @@ class OnDiskPsmDataset(PsmDataset):
         """
         spectra = self.spectra_dataframe[self.spectrum_columns].values
         del self.spectra_dataframe
-        spectra = np.apply_along_axis(
-            # Need to cast to float, so that numpy 1.x and 2.x return the same
-            # string representation
-            lambda x: crc32(str(tuple(map(float, x))).encode()),
-            1,
-            spectra,
-        )
+        spectra = np.apply_along_axis(OnDiskPsmDataset._hash_row, 1, spectra)
 
         # sort values to get start position of unique hashes
         spectra_idx = np.argsort(spectra)
