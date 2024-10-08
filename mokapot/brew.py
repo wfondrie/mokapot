@@ -164,6 +164,8 @@ def brew(
             chunk_size=CHUNK_SIZE_READ_ALL_DATA,
             max_workers=max_workers,
         )
+        for psms in train_psms:
+            LOGGER.info(psms.describe())
         del train_sets
         fitted = Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(_fit_model)(d, datasets, copy.deepcopy(model), f)
