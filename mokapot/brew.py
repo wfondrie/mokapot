@@ -165,7 +165,7 @@ def brew(
             max_workers=max_workers,
         )
         for psms in train_psms:
-            LOGGER.info(psms.describe())
+            LOGGER.info(psms.NegLog10CombinePValue.describe())
         del train_sets
         fitted = Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(_fit_model)(d, datasets, copy.deepcopy(model), f)
