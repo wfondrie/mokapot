@@ -149,6 +149,7 @@ def brew(
             )
 
     except TypeError:
+        LOGGER.info("No idea how we ended up here, but this seems to be standard training oO?! tf.")
         train_sets = list(
             make_train_sets(
                 test_idx=test_folds_idx,
@@ -539,6 +540,8 @@ def _fit_model(train_set, psms, model, fold):
     try:
         model.fit(train_set)
     except RuntimeError as msg:
+        LOGGER.info("=== Analyzing Fold %i ===", fold + 1)
+        LOGGER.info(msg)
         if str(msg) != "Model performs worse after training.":
             raise
 

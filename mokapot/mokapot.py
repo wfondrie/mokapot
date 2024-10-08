@@ -120,10 +120,6 @@ def main(main_args=None):
         rng=config.seed,
     )
     logging.info("")
-    logging.info("BREW DELETE ME")
-    for s in scores:
-        logging.info(f"{s}")
-        logging.info(f"{(s == 0).all()}")
 
     if config.dest_dir is not None:
         config.dest_dir.mkdir(exist_ok=True)
