@@ -304,9 +304,9 @@ class Model:
         target = start_labels
         num_passed = []
         LOGGER.info("Beginning training loop...")
-        LOGGER.info("start labels == 1", (start_labels == 1).sum())
-        LOGGER.info("start labels.shape", start_labels)
-        LOGGER.info("feat_pass", self.feat_pass)
+        LOGGER.info(f"start labels == 1 {(start_labels == 1).sum()}")
+        LOGGER.info(f"start labels.shape {start_labels}")
+        LOGGER.info(f"feat_pass {self.feat_pass}")
         for i in range(self.max_iter):
             # Fit the model
             samples = norm_feat[target.astype(bool), :]
