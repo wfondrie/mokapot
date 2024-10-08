@@ -228,8 +228,8 @@ def brew(
                     max_workers=max_workers,
                 )
             )
-    # If model training has failed
     else:
+        logging.info("Model training failed. Setting scores to zero.")
         scores = [np.zeros(x) for x in data_size]
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
