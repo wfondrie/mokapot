@@ -102,7 +102,7 @@ def _run_cli(
     params = flatten(params)
     params = [str(param) for param in params]
     if run_in_subprocess:
-        cmd = ["python", "-m", module] + params
+        cmd = ["uv", "run", "python", "-m", module] + params
         try:
             res = subprocess.run(
                 cmd, check=True, capture_output=capture_output
