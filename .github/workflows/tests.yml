@@ -37,7 +37,7 @@ jobs:
 
     - name: Run unit and system tests
       run: |
-        uv run pytest -v --cov=mokapot tests/system_tests/test_cli.py::test_basic_cli
+        uv run pytest -v --cov=mokapot tests/
 
     - name: Upload coverage to codecov
       uses: codecov/codecov-action@v3
