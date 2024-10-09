@@ -1,6 +1,3 @@
-# tests/system_tests/test_cli.py
-
-
 """
 These tests verify that the CLI works as expected.
 

@@ -149,7 +149,6 @@ def brew(
             )
 
     except TypeError:
-        LOGGER.info("No idea how we ended up here, but this seems to be standard training oO?! tf.")
         train_sets = list(
             make_train_sets(
                 test_idx=test_folds_idx,
@@ -164,8 +163,6 @@ def brew(
             chunk_size=CHUNK_SIZE_READ_ALL_DATA,
             max_workers=max_workers,
         )
-        for psms in train_psms:
-            LOGGER.info(psms.NegLog10CombinePValue.describe())
         del train_sets
         fitted = Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(_fit_model)(d, datasets, copy.deepcopy(model), f)
@@ -542,9 +539,8 @@ def _fit_model(train_set, psms, model, fold):
     try:
         model.fit(train_set)
     except RuntimeError as msg:
-        LOGGER.info("=== Analyzing Fold %i ===", fold + 1)
-        LOGGER.info(msg)
         if str(msg) != "Model performs worse after training.":
+            LOGGER.info(f"Fold {fold + 1}: {msg}")
             raise
 
         if model.is_trained:

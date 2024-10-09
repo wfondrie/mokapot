@@ -122,7 +122,6 @@ def main(main_args=None):
         rng=config.seed,
     )
     logging.info("")
-    raise ValueError("We fail here to get logs from Ubuntu. Why does it work there?")
 
     if config.dest_dir is not None:
         config.dest_dir.mkdir(exist_ok=True)
