@@ -30,7 +30,7 @@ def phospho_files():
 
 def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
-    params = [scope_files[0], "--dest_dir", tmp_path]
+    params = [scope_files[0], "--dest_dir", tmp_path, "--verbosity", 3]
     run_mokapot_cli(params)
     assert file_approx_len(tmp_path, "targets.psms.csv", 5487)
     assert file_approx_len(tmp_path, "targets.peptides.csv", 5183)

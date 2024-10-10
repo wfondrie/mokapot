@@ -228,8 +228,8 @@ def brew(
                     max_workers=max_workers,
                 )
             )
-    # If model training has failed
     else:
+        logging.info("Model training failed. Setting scores to zero.")
         scores = [np.zeros(x) for x in data_size]
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
@@ -540,6 +540,7 @@ def _fit_model(train_set, psms, model, fold):
         model.fit(train_set)
     except RuntimeError as msg:
         if str(msg) != "Model performs worse after training.":
+            LOGGER.info(f"Fold {fold + 1}: {msg}")
             raise
 
         if model.is_trained:
