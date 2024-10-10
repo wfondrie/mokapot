@@ -11,6 +11,7 @@ import warnings
 from pathlib import Path
 
 import pandas as pd
+
 import mokapot
 from mokapot.tabular_data import CSVFileReader
 
@@ -21,13 +22,14 @@ def test_compare_to_percolator(tmp_path):
     """Test that mokapot get almost the same answer as Percolator"""
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=pd.errors.ParserWarning)
-        dat = mokapot.read_pin(Path("data", "phospho_rep1.pin"), max_workers=3)
+        datasets = mokapot.read_pin(
+            Path("data", "phospho_rep1.pin"), max_workers=3
+        )
     proteins = mokapot.read_fasta(Path("data", "human_sp_td.fasta"))
-    psms, models, scores, desc = mokapot.brew(dat)
+    models, scores = mokapot.brew(datasets)
     mokapot.assign_confidence(
-        psms=psms,
-        scores=scores,
-        descs=desc,
+        datasets=datasets,
+        scores_list=scores,
         dest_dir=tmp_path,
         proteins=proteins,
         prefixes=[None],
@@ -35,7 +37,7 @@ def test_compare_to_percolator(tmp_path):
     )
 
     perc_path = Path("data", "percolator.{p}.txt")
-    moka_path = tmp_path / "targets.{p}"
+    moka_path = tmp_path / "targets.{p}.csv"
 
     def format_name(path, **kwargs):
         return path.with_name(path.name.format(**kwargs))

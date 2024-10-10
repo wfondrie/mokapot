@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 from lxml import etree
 
-from .. import utils
-from ..dataset import LinearPsmDataset
+from mokapot import utils
+from mokapot.dataset import LinearPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 

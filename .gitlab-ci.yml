@@ -40,6 +40,13 @@ publish:
     - python -m build --sdist --wheel .
     - TWINE_PASSWORD=${CI_JOB_TOKEN} TWINE_USERNAME=gitlab-ci-token python -m twine upload --repository-url https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/packages/pypi dist/*
 
+check_formatting:
+  extends: .with_twine
+  stage: test
+  script:
+    - pip install .[dev]
+    - ruff check . --exclude docs/
+
 unit_test:
   extends: .with_twine
   stage: test
@@ -47,4 +54,3 @@ unit_test:
     - pip install .[dev]
     - pip install pytest
     - pytest tests/
-

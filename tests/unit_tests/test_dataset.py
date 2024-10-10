@@ -4,7 +4,8 @@ These tests verify that the dataset classes are functioning properly.
 
 import numpy as np
 import pandas as pd
-from mokapot import LinearPsmDataset
+
+from mokapot import LinearPsmDataset, OnDiskPsmDataset
 
 
 def test_linear_init(psm_df_6):
@@ -56,3 +57,19 @@ def test_update_labels(psm_df_6):
     real_labs = np.array([1, 1, 0, -1, -1, -1])
     new_labs = dset._update_labels(scores, eval_fdr=0.5)
     assert np.array_equal(real_labs, new_labs)
+
+
+def test_hash_row():
+    x = np.array(["test.mzML", 870, 5902.639978936955, 890.522815122875], dtype=object)
+    assert OnDiskPsmDataset._hash_row(x) == 4196757312
+
+    x = np.array(
+        [
+            "test.mzML",
+            np.int64(870),
+            np.float64(5902.639978936955),
+            np.float64(890.522815122875),
+        ],
+        dtype=object,
+    )
+    assert OnDiskPsmDataset._hash_row(x) == 4196757312

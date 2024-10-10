@@ -1,10 +1,6 @@
-from __future__ import annotations
-
 import pandas as pd
 from mokapot.tabular_data import (
     DataFrameReader,
-)
-from mokapot.streaming import (
     merge_readers,
     MergedTabularDataReader,
     join_readers,

@@ -1,8 +1,8 @@
 """Test the utility functions"""
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 from pandas.testing import assert_series_equal
 
 from mokapot import utils
@@ -88,25 +88,6 @@ def test_tuplize():
     tuple_in = ("blah", 1, "x")
     tuple_out = ("blah", 1, "x")
     assert utils.tuplize(tuple_in) == tuple_out
-
-
-def test_merge_sort(merge_sort_data):
-    files_csv, files_parquet = merge_sort_data
-    iterable_csv = utils.merge_sort(files_csv, "score")
-    iterable_parquet = utils.merge_sort(files_parquet, "score")
-    a = list(iterable_csv)
-    b = list(iterable_parquet)
-
-    a_ids = [x["SpecId"] for x in a]
-    b_ids = [x["SpecId"] for x in b]
-
-    assert a_ids == b_ids, "Merge sort ids vary between parquet and csv"
-
-    # This only tests whether tho empty lists are the same, since the iterator
-    # is consumed when calling list on it.
-    # assert list(iterable_csv) == list(
-    #     iterable_parquet
-    # ), "Merge sort ids vary between parquet and csv"
 
 
 def test_create_chunks():

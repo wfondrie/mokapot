@@ -6,8 +6,8 @@ confidence estimates.
 import logging
 import pandas as pd
 
-from .peptides import match_decoy
-from . import utils
+from mokapot import utils
+from mokapot.peptides import match_decoy
 
 LOGGER = logging.getLogger(__name__)
 
