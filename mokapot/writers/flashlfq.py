@@ -112,7 +112,7 @@ def _format_flashlfq(conf):
     out_df["Base Sequence"] = base_seq
     out_df["Full Sequence"] = seq
     out_df["Peptide Monoisotopic Mass"] = peptides.loc[passing, mass_column]
-    out_df["Scan Retention Time"] = peptides.loc[passing, rt_column] / 60
+    out_df["Scan Retention Time"] = peptides.loc[passing, rt_column]
     out_df["Precursor Charge"] = peptides.loc[passing, charge_column]
 
     if isinstance(proteins, str):
