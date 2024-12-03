@@ -1,14 +1,14 @@
 from pathlib import Path
-from io import StringIO
 from typing import TextIO
-from unittest.mock import Mock
 import argparse
 
 # PIN file specification from
 # https://github.com/percolator/percolator/wiki/Interface#tab-delimited-file-format
 """
-PSMId <tab> Label <tab> ScanNr <tab> feature1name <tab> ... <tab> featureNname <tab> Peptide <tab> Proteins
-DefaultDirection <tab> - <tab> - <tab> feature1weight <tab> ... <tab> featureNweight [optional]
+PSMId <tab> Label <tab> ScanNr <tab> feature1name <tab> ... <tab> featureNname \
+<tab> Peptide <tab> Proteins
+DefaultDirection <tab> - <tab> - <tab> feature1weight <tab> ... <tab> \
+featureNweight [optional]
 """
 
 EXAMPLE_PIN = """SpecId\tLabel\tScanNr\tExpMass\tPeptide\tProteins
@@ -72,7 +72,8 @@ def convert_line_pin_to_tsv(
     idx_protein_col : int
         The index of the first protein column.
     n_col : int
-        The total number of columns in the PIN file (excluding additional protein columns).
+        The total number of columns in the PIN file (excluding additional protein
+        columns).
     sep_column : str, optional
         The separator used between columns (default is "\t").
     sep_protein : str, optional
@@ -87,10 +88,13 @@ def convert_line_pin_to_tsv(
     --------
     >>> header = EXAMPLE_HEADER
     >>> n_col, idx_protein_col = parse_pin_header_columns(header)
-    >>> tsv_line = convert_line_pin_to_tsv(EXAMPLE_LINE_1, n_col=n_col, idx_protein_col=idx_protein_col)
-    >>> tsv_line.expandtabs(4)  # needed for docstring to work
-    'target_0_16619_2_-1 1   16619   750.4149    K.SEFLVR.E  sp|Q96QR8|PURB_HUMAN:sp|Q00577|PURA_HUMAN'
-    >>> tsv_line = convert_line_pin_to_tsv(EXAMPLE_LINE_2, n_col=n_col, idx_protein_col=idx_protein_col)
+    >>> tsv_line = convert_line_pin_to_tsv(EXAMPLE_LINE_1, n_col=n_col,
+    ...                                    idx_protein_col=idx_protein_col)
+    >>> print(tsv_line.expandtabs(4))  # needed for docstring to work
+    target_0_16619_2_-1 1   16619   750.4149    K.SEFLVR.E  sp|Q96QR8|PURB_HUMAN:\
+sp|Q00577|PURA_HUMAN
+    >>> tsv_line = convert_line_pin_to_tsv(EXAMPLE_LINE_2, n_col=n_col,
+    ...                                    idx_protein_col=idx_protein_col)
     >>> tsv_line.expandtabs(4)  # needed for docstring to work
     'target_0_2025_2_-1  1   2025    751.4212    R.HTALGPR.S sp|Q9Y4H4|GPSM3_HUMAN'
     """
@@ -129,6 +133,7 @@ def is_valid_tsv(
 
     Examples
     --------
+    >>> from io import StringIO
     >>> input = StringIO(EXAMPLE_PIN)
     >>> is_valid_tsv(input)
     False
@@ -181,6 +186,8 @@ def pin_to_valid_tsv(
 
     Examples
     --------
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock
     >>> mock_input = StringIO(EXAMPLE_PIN)
     >>> mock_output = Mock()
     >>> mock_output.write = Mock()

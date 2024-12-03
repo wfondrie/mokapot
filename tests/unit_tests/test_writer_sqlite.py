@@ -1,7 +1,7 @@
 import sqlite3
 
 import pandas as pd
-from mokapot.confidence_writer import ConfidenceSqliteWriter
+from mokapot.tabular_data import ConfidenceSqliteWriter
 
 
 def test_sqlite_writer(confidence_write_data):
@@ -12,7 +12,12 @@ def test_sqlite_writer(confidence_write_data):
 
     for level, df in confidence_write_data.items():
         confidence_writer = ConfidenceSqliteWriter(
-            connection, columns=df_psm.columns.to_list(), level=level
+            connection,
+            columns=df_psm.columns.to_list(),
+            column_types=[],
+            level=level,
+            qvalue_column="q_value",
+            pep_column="posterior_error_prob",
         )
         confidence_writer.append_data(df)
 
@@ -48,3 +53,4 @@ def prepare_tables_sqlite_db(connection, candidate_ids):
         connection.execute(
             f"INSERT INTO CANDIDATE (CANDIDATE_ID) VALUES({c_id});"
         )
+    connection.commit()

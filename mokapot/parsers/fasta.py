@@ -7,8 +7,8 @@ from collections import defaultdict
 
 import numpy as np
 
-from ..utils import tuplize
-from ..proteins import Proteins
+from mokapot.utils import tuplize
+from mokapot.proteins import Proteins
 
 LOGGER = logging.getLogger(__name__)
 

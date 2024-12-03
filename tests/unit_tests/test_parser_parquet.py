@@ -1,9 +1,10 @@
 """Test that parsing Percolator input files (parquet) works correctly"""
 
-import pytest
-import mokapot
 import pandas as pd
 import pyarrow.parquet as pq
+import pytest
+
+import mokapot
 
 
 @pytest.fixture
@@ -42,22 +43,22 @@ def std_parquet(tmp_path):
 
 def test_parquet_parsing(std_parquet):
     """Test pin parsing"""
-    dat = mokapot.read_pin(
+    datasets = mokapot.read_pin(
         std_parquet,
         max_workers=4,
     )
     df = pq.read_table(std_parquet).to_pandas()
-    assert len(dat) == 1
-    assert dat[0].filename == std_parquet
+    assert len(datasets) == 1
+
     pd.testing.assert_frame_equal(
-        df.loc[:, ("sCore",)], df.loc[:, dat[0].feature_columns]
+        df.loc[:, ("sCore",)], df.loc[:, datasets[0].feature_columns]
     )
     pd.testing.assert_series_equal(
-        df.loc[:, "sPeCid"], df.loc[:, dat[0].specId_column]
+        df.loc[:, "sPeCid"], df.loc[:, datasets[0].specId_column]
     )
     pd.testing.assert_series_equal(
-        df.loc[:, "pRoteins"], df.loc[:, dat[0].protein_column]
+        df.loc[:, "pRoteins"], df.loc[:, datasets[0].protein_column]
     )
     pd.testing.assert_frame_equal(
-        df.loc[:, ("scanNR",)], df.loc[:, dat[0].spectrum_columns]
+        df.loc[:, ("scanNR",)], df.loc[:, datasets[0].spectrum_columns]
     )

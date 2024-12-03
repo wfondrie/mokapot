@@ -7,16 +7,17 @@ output, just that the expect outputs are created.
 
 from pathlib import Path
 
-from ..helpers.cli import run_mokapot_cli
-
-import pytest
 import pandas as pd
+import pytest
+
+from ..helpers.cli import run_mokapot_cli
+from ..helpers.utils import file_approx_len, file_missing, file_exist
 
 
 @pytest.fixture
 def scope_files():
     """Get the scope-ms files"""
-    return sorted(list(Path("data").glob("scope*")))
+    return sorted(list(Path("data").glob("scope*.pin")))
 
 
 @pytest.fixture
@@ -27,33 +28,15 @@ def phospho_files():
     return pin, fasta
 
 
-def count_lines(path: Path):
-    """Count the number of lines in a file.
-
-    Parameters
-    ----------
-    path : Path
-        The path to the file.
-
-    Returns
-    -------
-    int
-        The number of lines in the file.
-    """
-    with open(path, "r") as file:
-        lines = file.readlines()
-    return len(lines)
-
-
 def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
-    params = [scope_files[0], "--dest_dir", tmp_path]
+    params = [scope_files[0], "--dest_dir", tmp_path, "--verbosity", 3]
     run_mokapot_cli(params)
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
+    assert file_approx_len(tmp_path, "targets.psms.csv", 5487)
+    assert file_approx_len(tmp_path, "targets.peptides.csv", 5183)
 
     targets_psms_df = pd.read_csv(
-        Path(tmp_path, "targets.psms"), sep="\t", index_col=None
+        Path(tmp_path, "targets.psms.csv"), sep="\t", index_col=None
     )
     assert targets_psms_df.columns.values.tolist() == [
         "PSMId",
@@ -69,50 +52,46 @@ def test_basic_cli(tmp_path, scope_files):
     assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
 
 
-
 def test_cli_options(tmp_path, scope_files):
     """Test non-defaults"""
     params = [
         scope_files[0],
         scope_files[1],
-        "--dest_dir",
-        tmp_path,
-        "--file_root",
-        "blah",
-        "--train_fdr",
-        "0.2",
-        "--test_fdr",
-        "0.1",
-        "--seed",
-        "100",
-        "--direction",
-        "RefactoredXCorr",
-        "--folds",
-        "2",
-        "-v",
-        "1",
-        "--max_iter",
-        "1",
+        ("--dest_dir", tmp_path),
+        ("--file_root", "blah"),
+        ("--train_fdr", "0.2"),
+        ("--test_fdr", "0.1"),
+        ("--seed", "100"),
+        ("--direction", "RefactoredXCorr"),
+        ("--folds", "2"),
+        ("-v", "1"),
+        ("--max_iter", "1"),
         "--keep_decoys",
-        "--subset_max_train",
-        "50000",
-        "--max_workers",
-        "3",
+        ("--subset_max_train", "50000"),
+        ("--max_workers", "3"),
     ]
 
     run_mokapot_cli(params)
-    file_bases = [f.name.split(".")[0] for f in scope_files[0:2]]
+    filebase = ["blah." + f.name.split(".")[0] for f in scope_files[0:2]]
 
-    assert Path(tmp_path, f"blah.{file_bases[0]}.targets.psms").exists()
-    assert Path(tmp_path, f"blah.{file_bases[0]}.targets.peptides").exists()
-    assert Path(tmp_path, f"blah.{file_bases[1]}.targets.psms").exists()
-    assert Path(tmp_path, f"blah.{file_bases[1]}.targets.peptides").exists()
+    assert file_approx_len(tmp_path, f"{filebase[0]}.targets.psms.csv", 5490)
+    assert file_approx_len(
+        tmp_path, f"{filebase[0]}.targets.peptides.csv", 5194
+    )
+    assert file_approx_len(tmp_path, f"{filebase[1]}.targets.psms.csv", 4659)
+    assert file_approx_len(
+        tmp_path, f"{filebase[1]}.targets.peptides.csv", 4406
+    )
 
     # Test keep_decoys:
-    assert Path(tmp_path, f"blah.{file_bases[0]}.decoys.psms").exists()
-    assert Path(tmp_path, f"blah.{file_bases[0]}.decoys.peptides").exists()
-    assert Path(tmp_path, f"blah.{file_bases[1]}.decoys.psms").exists()
-    assert Path(tmp_path, f"blah.{file_bases[1]}.decoys.peptides").exists()
+    assert file_approx_len(tmp_path, f"{filebase[0]}.decoys.psms.csv", 2090)
+    assert file_approx_len(
+        tmp_path, f"{filebase[0]}.decoys.peptides.csv", 2037
+    )
+    assert file_approx_len(tmp_path, f"{filebase[1]}.decoys.psms.csv", 1806)
+    assert file_approx_len(
+        tmp_path, f"{filebase[1]}.decoys.peptides.csv", 1755
+    )
 
 
 def test_cli_aggregate(tmp_path, scope_files):
@@ -120,126 +99,196 @@ def test_cli_aggregate(tmp_path, scope_files):
     params = [
         scope_files[0],
         scope_files[1],
-        "--dest_dir",
-        tmp_path,
-        "--file_root",
-        "blah",
+        ("--dest_dir", tmp_path),
+        ("--file_root", "blah"),
         "--aggregate",
-        "--max_iter",
-        "1",
+        ("--max_iter", "1"),
     ]
 
     run_mokapot_cli(params)
-    assert Path(tmp_path, "blah.targets.psms").exists()
-    assert Path(tmp_path, "blah.targets.peptides").exists()
-    assert not Path(tmp_path, "blah.targets.decoy.psms").exists()
-    assert not Path(tmp_path, "blah.targets.decoy.peptides").exists()
 
-    # Line counts were determined by one hopefully correct test run
-    # GT counts: 10256, 9663
-    assert count_lines(Path(tmp_path, "blah.targets.psms")) in range(
-        10256 - 100, 10256 + 100
-    )
-    assert count_lines(Path(tmp_path, "blah.targets.peptides")) in range(
-        9663 - 50, 9663 + 50
-    )
+    # Line counts were determined by one (hopefully correct) test run
+    assert file_approx_len(tmp_path, "blah.targets.psms.csv", 10256)
+    assert file_approx_len(tmp_path, "blah.targets.peptides.csv", 9663)
+    assert file_missing(tmp_path, "blah.decoys.psms.csv")
+    assert file_missing(tmp_path, "blah.decoys.peptides.csv")
 
     # Test that decoys are also in the output when --keep_decoys is used
     params += ["--keep_decoys"]
     run_mokapot_cli(params)
-    assert Path(tmp_path, "blah.decoys.psms").exists()
-    assert Path(tmp_path, "blah.decoys.peptides").exists()
-
-    assert count_lines(Path(tmp_path, "blah.decoys.psms")) in range(
-        3787 - 50, 3787 + 50
-    )
-    assert count_lines(Path(tmp_path, "blah.decoys.peptides")) in range(
-        3694 - 50, 3694 + 50
-    )
+    assert file_approx_len(tmp_path, "blah.targets.psms.csv", 10256)
+    assert file_approx_len(tmp_path, "blah.targets.peptides.csv", 9663)
+    assert file_approx_len(tmp_path, "blah.decoys.psms.csv", 3787)
+    assert file_approx_len(tmp_path, "blah.decoys.peptides.csv", 3694)
 
 
 def test_cli_fasta(tmp_path, phospho_files):
     """Test that proteins happen"""
     params = [
         phospho_files[0],
-        "--dest_dir",
-        tmp_path,
-        "--proteins",
-        phospho_files[1],
-        "--max_iter",
-        "1",
+        ("--dest_dir", tmp_path),
+        ("--proteins", phospho_files[1]),
+        ("--max_iter", "1"),
     ]
 
     run_mokapot_cli(params)
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
-    assert Path(tmp_path, "targets.proteins").exists()
+
+    assert file_approx_len(tmp_path, "targets.psms.csv", 42331)
+    assert file_approx_len(tmp_path, "targets.peptides.csv", 33538)
+    assert file_approx_len(tmp_path, "targets.proteins.csv", 7827)
 
 
 def test_cli_saved_models(tmp_path, phospho_files):
     """Test that saved_models works"""
     params = [
         phospho_files[0],
-        "--dest_dir",
-        tmp_path,
-        "--test_fdr",
-        "0.01",
+        ("--dest_dir", tmp_path),
+        ("--test_fdr", "0.01"),
     ]
 
     run_mokapot_cli(params + ["--save_models"])
 
     params += ["--load_models", *list(Path(tmp_path).glob("*.pkl"))]
     run_mokapot_cli(params)
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
+    assert file_approx_len(tmp_path, "targets.psms.csv", 42331)
+    assert file_approx_len(tmp_path, "targets.peptides.csv", 33538)
 
 
 def test_cli_skip_rollup(tmp_path, phospho_files):
     """Test that peptides file results is skipped when using skip_rollup"""
     params = [
         phospho_files[0],
-        "--dest_dir",
-        tmp_path,
-        "--test_fdr",
-        "0.01",
+        ("--dest_dir", tmp_path),
+        ("--test_fdr", "0.01"),
         "--skip_rollup",
     ]
 
     run_mokapot_cli(params)
 
-    assert Path(tmp_path, "targets.psms").exists()
-    assert not Path(tmp_path, "targets.peptides").exists()
+    assert file_approx_len(tmp_path, "targets.psms.csv", 42331)
+    assert file_missing(tmp_path, "targets.peptides.csv")
 
 
 def test_cli_ensemble(tmp_path, phospho_files):
     """Test ensemble flag"""
     params = [
         phospho_files[0],
-        "--dest_dir",
-        tmp_path,
-        "--test_fdr",
-        "0.01",
+        ("--dest_dir", tmp_path),
+        ("--test_fdr", "0.01"),
         "--ensemble",
     ]
 
     run_mokapot_cli(params)
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
-    # fixme: should also test the *contents* of the files
+    assert file_approx_len(tmp_path, "targets.psms.csv", 42331)
+    assert file_approx_len(tmp_path, "targets.peptides.csv", 33538)
+    # todo: nice to have: we should also test the *contents* of the files
 
 
 def test_cli_bad_input(tmp_path):
-    """Test ensemble flag"""
+    """Test with problematic input files"""
+
+    # The input file contains "integers" of the form `6d05`, which caused
+    # problems with certain readers
+
     params = [
         Path("data") / "percolator-noSplit-extended-201-bad.tab",
-        "--dest_dir",
-        tmp_path,
-        "--train_fdr",
-        "0.05",
+        ("--dest_dir", tmp_path),
+        ("--train_fdr", "0.05"),
         "--ensemble",
     ]
 
     run_mokapot_cli(params)
-    assert Path(tmp_path, "targets.psms").exists()
-    assert Path(tmp_path, "targets.peptides").exists()
-    # fixme: should also test the *contents* of the files
+    assert file_exist(tmp_path, "targets.psms.csv")
+    assert file_exist(tmp_path, "targets.peptides.csv")
+
+
+def test_negative_features(tmp_path, psm_df_1000):
+    """Test that best feature selection works."""
+
+    def make_pin_file(filename, desc, seed=None):
+        import numpy as np
+
+        df = psm_df_1000[1].copy()
+        if seed is not None:
+            np.random.seed(seed)
+        scores = df["score"]
+        targets = df["target"]
+        df.drop(columns=["score", "score2", "target"], inplace=True)
+        df["Label"] = targets * 1
+        df["feat"] = scores * (1 if desc else -1)
+        df["scannr"] = np.random.randint(0, 1000, 1000)
+        file = tmp_path / filename
+        df.to_csv(file, sep="\t", index=False)
+        return file, df
+
+    file1bad, df1b = make_pin_file("test1bad.pin", desc=True, seed=123)
+    file2bad, df2b = make_pin_file("test2bad.pin", desc=False, seed=123)
+    file1, df1 = make_pin_file("test1.pin", desc=True, seed=126)
+    file2, df2 = make_pin_file("test2.pin", desc=False, seed=126)
+
+    def read_result(filename):
+        df = pd.read_csv(tmp_path / filename, sep="\t", index_col=False)
+        return df.sort_values(by="PSMId").reset_index(drop=True)
+
+    def mean_scores(str):
+        def mean_score(file):
+            psms_df = read_result(file)
+            return psms_df.score.values.mean()
+
+        target_mean = mean_score(f"{str}.targets.psms.csv")
+        decoy_mean = mean_score(f"{str}.decoys.psms.csv")
+        return (target_mean, decoy_mean, target_mean > decoy_mean)
+
+    common_params = [
+        ("--dest_dir", tmp_path),
+        ("--train_fdr", 0.05),
+        ("--test_fdr", 0.05),
+        ("--peps_algorithm", "hist_nnls"),
+        "--keep_decoys",
+    ]
+
+    # Test with data where a "good" model can be trained. Once with the normal
+    # feat column, once with the feat column negated.
+    params = [file1, "--file_root", "test1"]
+    run_mokapot_cli(params + common_params)
+
+    params = [file2, "--file_root", "test2"]
+    run_mokapot_cli(params + common_params)
+
+    psms_df1 = read_result("test1.targets.psms.csv")
+    psms_df2 = read_result("test2.targets.psms.csv")
+    pd.testing.assert_frame_equal(psms_df1, psms_df2)
+
+    # In the case below, the trained model performs worse than just using the
+    # feat column, so the score is just the same as the feature.
+
+    params = [file1bad, "--file_root", "test1b"]
+    run_mokapot_cli(params + common_params)
+
+    params = [file2bad, "--file_root", "test2b"]
+    run_mokapot_cli(params + common_params)
+
+    psms_df1b = read_result("test1b.targets.psms.csv")
+    psms_df2b = read_result("test2b.targets.psms.csv")
+    pd.testing.assert_frame_equal(psms_df1b, psms_df2b)
+
+    # Let's check now that the score columns are indeed equal to the
+    # normal/negated feature column
+
+    feature_col1 = df1b[df1b.Label == 1].sort_values(by="specid").feat
+    score_col1 = psms_df1b.sort_values(by="PSMId").score
+    pd.testing.assert_series_equal(
+        score_col1, feature_col1, check_index=False, check_names=False
+    )
+
+    feature_col2 = df2b[df2b.Label == 1].sort_values(by="specid").feat
+    score_col2 = psms_df2b.sort_values(by="PSMId").score
+    pd.testing.assert_series_equal(
+        score_col2, -feature_col2, check_index=False, check_names=False
+    )
+
+    # Lastly, test that the targets have a higher mean score than the decoys
+    assert mean_scores("test1")[2]
+    assert mean_scores("test2")[2]
+    assert mean_scores("test1b")[2]
+    assert mean_scores("test2b")[2]  # This one is the most likely to fail
