@@ -117,9 +117,7 @@ def _format_flashlfq(conf):
 
     if isinstance(proteins, str):
         # TODO: Add delimiter sniffing.
-        prots = peptides.loc[passing, proteins].str.replace(
-            "\t", "; ", regex=False
-        )
+        prots = peptides.loc[passing, proteins].str.replace("\t", "; ", regex=False)
     elif proteins is None:
         prots = ""
     else:
@@ -132,8 +130,7 @@ def _format_flashlfq(conf):
     num_missing = missing.sum()
     if num_missing:
         LOGGER.warning(
-            "- Discarding %i peptides that could not be mapped to protein "
-            "groups",
+            "- Discarding %i peptides that could not be mapped to protein " "groups",
             num_missing,
         )
         out_df = out_df.loc[~missing, :]
