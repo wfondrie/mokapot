@@ -5,25 +5,29 @@ This module contains the parsers for reading in PSMs
 import logging
 import warnings
 from pathlib import Path
+from typing import List, Iterable
 
 import pandas as pd
 from joblib import Parallel, delayed
+from typeguard import typechecked
 
-from .helpers import find_optional_column, find_columns, find_required_column
-from ..utils import (
-    open_file,
+from mokapot.constants import (
+    CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
+    CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
+)
+from mokapot.dataset import OnDiskPsmDataset
+from mokapot.parsers.helpers import (
+    find_optional_column,
+    find_columns,
+    find_required_column,
+)
+from mokapot.tabular_data import TabularDataReader
+from mokapot.utils import (
     tuplize,
     create_chunks,
     convert_targets_column,
     flatten,
 )
-from ..dataset import OnDiskPsmDataset
-from ..constants import (
-    CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
-    CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
-)
-from ..tabular_data import TabularDataReader
-from typing import List
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +41,7 @@ def read_pin(
     expmass_column=None,
     rt_column=None,
     charge_column=None,
-):
+) -> list[OnDiskPsmDataset]:
     """Read Percolator input (PIN) tab-delimited files.
 
     Read PSMs from one or more Percolator input (PIN) tab-delmited files,
@@ -93,9 +97,8 @@ def read_pin(
 
     Returns
     -------
-    LinearPsmDataset
-        A :py:class:`~mokapot.dataset.LinearPsmDataset` object containing the
-        PSMs from all of the PIN files.
+        A list of :py:class:`~mokapot.dataset.OnDiskPsmDataset` objects
+        containing the PSMs from all of the PIN files.
     """
     logging.info("Parsing PSMs...")
     return [
@@ -239,16 +242,16 @@ def read_percolator(
             LOGGER.warning("  - %s", col)
 
         LOGGER.warning("Dropping features with missing values...")
-    _feature_columns = tuple(
-        [feature for feature in features if feature not in features_to_drop]
-    )
+    _feature_columns = tuple([
+        feature for feature in features if feature not in features_to_drop
+    ])
 
     LOGGER.info("Using %i features:", len(_feature_columns))
     for i, feat in enumerate(_feature_columns):
         LOGGER.debug("  (%i)\t%s", i + 1, feat)
 
     return OnDiskPsmDataset(
-        filename=perc_file,
+        perc_file,
         columns=columns,
         target_column=labels,
         spectrum_columns=spectra,
@@ -298,27 +301,14 @@ def drop_missing_values_and_fill_spectra_dataframe(
         return list(na_mask[na_mask].index)
 
 
-def read_file_in_chunks(file, chunk_size, use_cols):
-    """
-    when reading in chunks an open file object is required as input to
-    iterate over the chunks
-    """
-    for df in pd.read_csv(
-        file,
-        sep="\t",
-        chunksize=chunk_size,
-        usecols=use_cols,
-        index_col=False,
-    ):
-        yield df[use_cols]
-
-
-def get_column_names_from_file(file):
-    with open_file(file) as perc:
-        return perc.readline().rstrip().split("\t")
-
-
-def get_rows_from_dataframe(idx, chunk, train_psms, psms, file_idx):
+@typechecked
+def get_rows_from_dataframe(
+    idx: Iterable,
+    chunk: pd.DataFrame,
+    train_psms,
+    dataset: OnDiskPsmDataset,
+    file_idx: int,
+):
     """
     extract rows from a chunk of a dataframe
 
@@ -330,7 +320,7 @@ def get_rows_from_dataframe(idx, chunk, train_psms, psms, file_idx):
         Contains subsets of dataframes that are already extracted.
     chunk : dataframe
         Subset of a dataframe.
-    psms : OnDiskPsmDataset
+    dataset : OnDiskPsmDataset
         A collection of PSMs.
     file_idx : the index of the file being searched
 
@@ -341,7 +331,7 @@ def get_rows_from_dataframe(idx, chunk, train_psms, psms, file_idx):
     """
     chunk = convert_targets_column(
         data=chunk,
-        target_column=psms.target_column,
+        target_column=dataset.target_column,
     )
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
@@ -355,13 +345,19 @@ def concat_and_reindex_chunks(df, orig_idx):
     ]
 
 
-def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
+@typechecked
+def parse_in_chunks(
+    datasets: list[OnDiskPsmDataset],
+    train_idx: list,
+    chunk_size: int,
+    max_workers: int,
+) -> list[pd.DataFrame]:
     """
     Parse a file in chunks
 
     Parameters
     ----------
-    psms : OnDiskPsmDataset
+    datasets : OnDiskPsmDataset
         A collection of PSMs.
     train_idx : list of a list of a list of indexes (first level are training
         splits, second one is the number of input files, third level the
@@ -378,16 +374,18 @@ def parse_in_chunks(psms, train_idx, chunk_size, max_workers):
     """
 
     train_psms = [
-        [[] for _ in range(len(train_idx))] for _ in range(len(psms))
+        [[] for _ in range(len(train_idx))] for _ in range(len(datasets))
     ]
-    for _psms, idx, file_idx in zip(psms, zip(*train_idx), range(len(psms))):
-        reader = TabularDataReader.from_path(_psms.filename)
+    for dataset, idx, file_idx in zip(
+        datasets, zip(*train_idx), range(len(datasets))
+    ):
+        reader = dataset.reader
         file_iterator = reader.get_chunked_data_iterator(
-            chunk_size=chunk_size, columns=_psms.columns
+            chunk_size=chunk_size, columns=dataset.columns
         )
         Parallel(n_jobs=max_workers, require="sharedmem")(
             delayed(get_rows_from_dataframe)(
-                idx, chunk, train_psms, _psms, file_idx
+                idx, chunk, train_psms, dataset, file_idx
             )
             for chunk in file_iterator
         )

@@ -1,4 +1,3 @@
-from __future__ import annotations
 from typeguard import typechecked
 
 
@@ -43,6 +42,7 @@ def find_column(
 
         def str_compare(str1, str2):
             return str1.lower() == str2.lower()
+
     else:
 
         def str_compare(str1, str2):

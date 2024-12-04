@@ -1,18 +1,18 @@
-import numpy as np
-import pytest
 from pathlib import Path
+
+import numpy as np
 import pandas as pd
+import pytest
 from numpy import dtype
-import pyarrow as pa
 
 from mokapot.tabular_data import (
     TabularDataReader,
-    CSVFileReader,
-    ParquetFileReader,
     DataFrameReader,
     ColumnMappedReader,
-    CSVFileWriter,
     auto_finalize,
+    CSVFileReader,
+    ParquetFileReader,
+    CSVFileWriter,
 )
 
 
@@ -83,6 +83,7 @@ def test_csv_file_reader(file_use):
     )
     assert df.columns.tolist() == ["ScanNr", "SpecId", "Proteins"]
     assert len(df) == 55398
+    assert all(df.index == range(len(df)))
 
     chunk_iterator = reader.get_chunked_data_iterator(
         chunk_size=20000, columns=["ScanNr", "SpecId"]
@@ -90,6 +91,8 @@ def test_csv_file_reader(file_use):
     chunks = [chunk for chunk in chunk_iterator]
     sizes = [len(chunk) for chunk in chunks]
     assert sizes == [20000, 20000, 15398]
+    df_from_chunks = pd.concat(chunks)
+    assert all(df_from_chunks.index == range(len(df_from_chunks)))
 
 
 def test_parquet_file_reader():
@@ -100,24 +103,24 @@ def test_parquet_file_reader():
     column_to_types = dict(zip(names, types))
 
     expected_column_to_types = {
-        "SpecId": pa.int64(),
-        "Label": pa.int64(),
-        "ScanNr": pa.int64(),
-        "ExpMass": pa.float64(),
-        "Mass": pa.float64(),
-        "MS8_feature_5": pa.int64(),
-        "missedCleavages": pa.int64(),
-        "MS8_feature_7": pa.float64(),
-        "MS8_feature_13": pa.float64(),
-        "MS8_feature_20": pa.float64(),
-        "MS8_feature_21": pa.float64(),
-        "MS8_feature_22": pa.float64(),
-        "MS8_feature_24": pa.int64(),
-        "MS8_feature_29": pa.float64(),
-        "MS8_feature_30": pa.float64(),
-        "MS8_feature_32": pa.float64(),
-        "Peptide": pa.string(),
-        "Proteins": pa.string(),
+        "SpecId": dtype("int64"),
+        "Label": dtype("int64"),
+        "ScanNr": dtype("int64"),
+        "ExpMass": dtype("float64"),
+        "Mass": dtype("float64"),
+        "MS8_feature_5": dtype("int64"),
+        "missedCleavages": dtype("int64"),
+        "MS8_feature_7": dtype("float64"),
+        "MS8_feature_13": dtype("float64"),
+        "MS8_feature_20": dtype("float64"),
+        "MS8_feature_21": dtype("float64"),
+        "MS8_feature_22": dtype("float64"),
+        "MS8_feature_24": dtype("int64"),
+        "MS8_feature_29": dtype("float64"),
+        "MS8_feature_30": dtype("float64"),
+        "MS8_feature_32": dtype("float64"),
+        "Peptide": dtype("O"),
+        "Proteins": dtype("O"),
     }
 
     for name, type in expected_column_to_types.items():
@@ -126,13 +129,16 @@ def test_parquet_file_reader():
     df = reader.read(["ScanNr", "SpecId"])
     assert df.columns.tolist() == ["ScanNr", "SpecId"]
     assert len(df) == 10000
+    assert all(df.index == range(len(df)))
 
     chunk_iterator = reader.get_chunked_data_iterator(
         chunk_size=3300, columns=["ScanNr", "SpecId"]
     )
-    chunks = [chunk for chunk in chunk_iterator]
+    chunks = list(chunk_iterator)
     sizes = [len(chunk) for chunk in chunks]
     assert sizes == [3300, 3300, 3300, 100]
+    df_from_chunks = pd.concat(chunks)
+    assert all(df_from_chunks.index == range(len(df_from_chunks)))
 
 
 def test_dataframe_reader(psm_df_6):
@@ -187,12 +193,6 @@ def test_dataframe_reader(psm_df_6):
         reader.read(), pd.DataFrame({"test": [1, 2, 3]})
     )
 
-    # Test whether we can create a reader from an array
-    reader = DataFrameReader.from_array([1, 2, 3], name="test")
-    pd.testing.assert_frame_equal(
-        reader.read(), pd.DataFrame({"test": [1, 2, 3]})
-    )
-
     reader = DataFrameReader.from_array(
         np.array([1, 2, 3], dtype=np.int32), name="test"
     )
@@ -225,14 +225,12 @@ def test_column_renaming(psm_df_6):
     assert (reader.read().values == orig_reader.read().values).all()
     assert (
         reader.read(["Pep", "protein", "T", "feature_1"]).values
-        == orig_reader.read(
-            [
-                "peptide",
-                "protein",
-                "target",
-                "feature_1",
-            ]
-        ).values
+        == orig_reader.read([
+            "peptide",
+            "protein",
+            "target",
+            "feature_1",
+        ]).values
     ).all()
 
     renamed_chunk = next(
@@ -248,13 +246,21 @@ def test_column_renaming(psm_df_6):
     assert (renamed_chunk.values == orig_chunk.values).all()
 
 
-# todo: tests for writers are still missing
+# todo: nice to have: tests for writers (CSV, Parquet, buffering) are still
+#  missing
+
+
 def test_tabular_writer_context_manager(tmp_path):
     # Create a mock class that checks whether it will be correctly initialized
     # and finalized
     class MockWriter(CSVFileWriter):
         initialized = False
         finalized = False
+
+        def __init__(self):
+            super().__init__(
+                tmp_path / "test.csv", columns=["a", "b"], column_types=[]
+            )
 
         def initialize(self):
             super().initialize()
@@ -265,14 +271,14 @@ def test_tabular_writer_context_manager(tmp_path):
             self.finalized = True
 
     # Check that context manager works for one file
-    with MockWriter(tmp_path / "test.csv", columns=["a", "b"]) as writer:
+    with MockWriter() as writer:
         assert writer.initialized
         assert not writer.finalized
     assert writer.finalized
 
     # Check that it works when an exception is thrown
     try:
-        with MockWriter(tmp_path / "test.csv", columns=["a", "b"]) as writer:
+        with MockWriter() as writer:
             assert writer.initialized
             assert not writer.finalized
             raise RuntimeError("Just testing")
@@ -284,8 +290,8 @@ def test_tabular_writer_context_manager(tmp_path):
     # Check that context manager convenience method (auto_finalize) works for
     # multiple files
     writers = [
-        MockWriter(tmp_path / "test1.csv", columns=["a", "b"]),
-        MockWriter(tmp_path / "test2.csv", columns=["a", "b"]),
+        MockWriter(),
+        MockWriter(),
     ]
 
     assert not writers[0].initialized
@@ -300,8 +306,8 @@ def test_tabular_writer_context_manager(tmp_path):
 
     # Now with an exception
     writers = [
-        MockWriter(tmp_path / "test1.csv", columns=["a", "b"]),
-        MockWriter(tmp_path / "test2.csv", columns=["a", "b"]),
+        MockWriter(),
+        MockWriter(),
     ]
 
     try:

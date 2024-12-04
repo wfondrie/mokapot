@@ -76,7 +76,6 @@ def _parser():
         "-d",
         "--dest_dir",
         type=Path,
-        default=Path("."),
         help=(
             "The directory in which to write the result files. Defaults to "
             "the current working directory"
@@ -319,14 +318,14 @@ def _parser():
         "--ensemble",
         default=False,
         action="store_true",
-        help=("activate ensemble prediction. "),
+        help="Activate ensemble prediction.",
     )
 
     parser.add_argument(
         "--peps_error",
         default=False,
         action="store_true",
-        help=("raise error when all PEPs values are equal to 1."),
+        help="Raise error when all PEPs values are equal to 1.",
     )
 
     parser.add_argument(
@@ -344,7 +343,7 @@ def _parser():
         default="tdc",
         choices=["tdc", "from_peps", "from_counts"],
         help=(
-            "Specify the algorithm for qvalue computation. `tdc is` "
+            "Specify the algorithm for qvalue computation. `tdc` is "
             "the default mokapot algorithm."
         ),
     )
@@ -394,6 +393,13 @@ def _parser():
         help="Optionally, sets a path to an MSAID sqlite result database "
         "for writing outputs to. If not set (None), results are "
         "written in the standard TSV format.",
+    )
+
+    parser.add_argument(
+        "--stream_confidence",
+        default=False,
+        action="store_true",
+        help=("Specify whether confidence assignment shall be streamed."),
     )
 
     return parser

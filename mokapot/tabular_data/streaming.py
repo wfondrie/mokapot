@@ -4,14 +4,18 @@ Helper classes and methods used for streaming of tabular data.
 
 from __future__ import annotations
 
+import warnings
 from typing import Generator, Callable, Iterator
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from typeguard import typechecked
-import pyarrow as pa
 
-from mokapot.tabular_data import TabularDataReader, TableType
+from mokapot.tabular_data import (
+    BufferType,
+    TabularDataReader,
+    TabularDataWriter,
+)
 
 
 @typechecked
@@ -108,7 +112,7 @@ class ComputedTabularDataReader(TabularDataReader):
         self,
         reader: TabularDataReader,
         column: str,
-        dtype: np.dtype | pa.DataType,
+        dtype: np.dtype,
         func: Callable,
     ):
         self.reader = reader
@@ -122,12 +126,18 @@ class ComputedTabularDataReader(TabularDataReader):
     def get_column_types(self) -> list:
         return self.reader.get_column_types() + [self.dtype]
 
-    def _reader_columns(self, columns: list[str]):
-        return [column for column in columns if column != self.column]
+    def _reader_columns(self, columns: list[str] | None):
+        # todo: performance: Currently, we need to read all columns, since we
+        #  don't know what's needed in the computation. This could be made more
+        #  efficient by letting the class know which columns those are.
+        return None
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         df = self.reader.read(self._reader_columns(columns))
-        if columns is not None or self.column in columns:
+        # We need to compute the result column only in two cases:
+        #   a) all columns are requested (columns = None)
+        #   b) the computed column is requested explicitly
+        if columns is None or self.column in columns:
             df[self.column] = self.func(df)
         return df if columns is None else df[columns]
 
@@ -143,7 +153,8 @@ class ComputedTabularDataReader(TabularDataReader):
                 df = next(iterator)
             except StopIteration:
                 break
-            if columns is not None or self.column in columns:
+            # See comments in `read` for explanation
+            if columns is None or self.column in columns:
                 df[self.column] = self.func(df)
             yield df if columns is None else df[columns]
 
@@ -186,22 +197,21 @@ class MergedTabularDataReader(TabularDataReader):
         self.descending = descending
         self.reader_chunk_size = reader_chunk_size
 
-        assert len(readers) > 0, "At least one data reader is required"
+        if len(readers) == 0:
+            raise ValueError("At least one data reader is required")
+
         self.column_names = readers[0].get_column_names()
         self.column_types = readers[0].get_column_types()
 
-        # todo: all those asserts should raise an exception,
-        #   could happen in production too
         for reader in readers:
-            assert (
-                reader.get_column_names() == self.column_names
-            ), "Column names do not match"
-            assert (
-                reader.get_column_types() == self.column_types
-            ), "Column types do not match"
-        assert (
-            priority_column in self.column_names
-        ), "Priority column not found"
+            if not reader.get_column_names() == self.column_names:
+                raise ValueError("Column names do not match")
+
+            if not reader.get_column_types() == self.column_types:
+                raise ValueError("Column types do not match")
+
+            if priority_column not in self.column_names:
+                raise ValueError("Priority column not found")
 
     def get_column_names(self) -> list[str]:
         return self.column_names
@@ -212,7 +222,7 @@ class MergedTabularDataReader(TabularDataReader):
     def get_row_iterator(
         self,
         columns: list[str] | None = None,
-        row_type: TableType = TableType.DataFrame,
+        row_type: BufferType = BufferType.DataFrame,
     ) -> Iterator[pd.DataFrame | dict | np.record]:
         def iterate_over_df(df: pd.DataFrame) -> Iterator:
             for i in range(len(df)):
@@ -234,13 +244,13 @@ class MergedTabularDataReader(TabularDataReader):
             records = df.to_records(index=False)
             return iter(records)
 
-        if row_type == TableType.DataFrame:
+        if row_type == BufferType.DataFrame:
             iterate_over_chunk = iterate_over_df
             get_value = get_value_df
-        elif row_type == TableType.Dicts:
+        elif row_type == BufferType.Dicts:
             iterate_over_chunk = iterate_over_dicts
             get_value = get_value_dict
-        elif row_type == TableType.Records:
+        elif row_type == BufferType.Records:
             iterate_over_chunk = iterate_over_records
             get_value = get_value_dict
         else:
@@ -344,3 +354,138 @@ def merge_readers(
     )
     iterator = reader.get_chunked_data_iterator(chunk_size=1)
     return iterator
+
+
+@typechecked
+class BufferedWriter(TabularDataWriter):
+    """
+    This class represents a buffered writer for tabular data. It allows
+    writing data to a tabular data writer in batches, reducing the
+    number of write operations.
+
+    Attributes:
+    -----------
+    writer : TabularDataWriter
+        The tabular data writer to which the data will be written.
+    buffer_size : int
+        The number of records to buffer before writing to the writer.
+    buffer_type : TableType
+        The type of buffer being used. Can be one of TableType.DataFrame,
+        TableType.Dicts, or TableType.Records.
+    buffer : pd.DataFrame or list of dictionaries or np.recarray or None
+        The buffer containing the tabular data to be written.
+        The buffer type depends on the buffer_type attribute.
+    """
+
+    writer: TabularDataWriter
+    buffer_size: int
+    buffer_type: BufferType
+    buffer: pd.DataFrame | list[dict] | np.recarray | None
+
+    def __init__(
+        self,
+        writer: TabularDataWriter,
+        buffer_size=1000,
+        buffer_type=BufferType.DataFrame,
+    ):
+        super().__init__(writer.columns, writer.column_types)
+        self.writer = writer
+        self.buffer_size = buffer_size
+        self.buffer_type = buffer_type
+        self.buffer = None
+        # For BufferedWriters it is extremely important that they are
+        # correctly initialized and finalized, so we make sure
+        self.finalized = False
+        self.initialized = False
+
+    def __del__(self):
+        if self.initialized and not self.finalized:
+            warnings.warn(
+                f"BufferedWriter not finalized (buffering: {self.writer})"
+            )
+
+    def _buffer_slice(
+        self,
+        start: int = 0,
+        end: int | None = None,
+        as_dataframe: bool = False,
+    ):
+        if self.buffer_type == BufferType.DataFrame:
+            slice = self.buffer.iloc[start:end]
+        else:
+            slice = self.buffer[start:end]
+        if as_dataframe and not isinstance(slice, pd.DataFrame):
+            return pd.DataFrame(slice)
+        else:
+            return slice
+
+    def _write_buffer(self, force=False):
+        if self.buffer is None:
+            return
+        while len(self.buffer) >= self.buffer_size:
+            self.writer.append_data(
+                self._buffer_slice(end=self.buffer_size, as_dataframe=True)
+            )
+            self.buffer = self._buffer_slice(
+                start=self.buffer_size,
+            )
+        if force and len(self.buffer) > 0:
+            slice = self._buffer_slice(as_dataframe=True)
+            self.writer.append_data(slice)
+            self.buffer = None
+
+    def append_data(self, data: pd.DataFrame | dict | list[dict] | np.record):
+        assert self.initialized and not self.finalized
+
+        if self.buffer_type == BufferType.DataFrame:
+            if not isinstance(data, pd.DataFrame):
+                raise TypeError(
+                    "Parameter `data` must be of type DataFrame,"
+                    f" not {type(data)}"
+                )
+
+            if self.buffer is None:
+                self.buffer = data.copy(deep=True)
+            else:
+                self.buffer = pd.concat(
+                    [self.buffer, data], axis=0, ignore_index=True
+                )
+        elif self.buffer_type == BufferType.Dicts:
+            if isinstance(data, dict):
+                data = [data]
+            if not (isinstance(data, list) and isinstance(data[0], dict)):
+                raise TypeError(
+                    "Parameter `data` must be of type dict or list[dict],"
+                    f" not {type(data)}"
+                )
+            if self.buffer is None:
+                self.buffer = []
+            self.buffer += data
+        elif self.buffer_type == BufferType.Records:
+            if self.buffer is None:
+                self.buffer = np.recarray(shape=(0,), dtype=data.dtype)
+            self.buffer = np.append(self.buffer, data)
+        else:
+            raise ValueError(f"Unknown buffer type {self.buffer_type}")
+
+        self._write_buffer()
+
+    def check_valid_data(self, data: pd.DataFrame):
+        return self.writer.check_valid_data(data)
+
+    def write(self, data: pd.DataFrame):
+        self.writer.write(data)
+
+    def initialize(self):
+        assert not self.initialized
+        self.initialized = True
+        self.writer.initialize()
+
+    def finalize(self):
+        assert self.initialized
+        self.finalized = True  # Only for checking whether this got called
+        self._write_buffer(force=True)
+        self.writer.finalize()
+
+    def get_associated_reader(self):
+        return self.writer.get_associated_reader()

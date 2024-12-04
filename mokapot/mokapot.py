@@ -12,12 +12,12 @@ from pathlib import Path
 import numpy as np
 
 from . import __version__
-from .config import Config
-from .parsers.pin import read_pin
-from .parsers.fasta import read_fasta
 from .brew import brew
-from .model import PercolatorModel, load_model
 from .confidence import assign_confidence
+from .config import Config
+from .model import PercolatorModel, load_model
+from .parsers.fasta import read_fasta
+from .parsers.pin import read_pin
 
 
 def main(main_args=None):
@@ -42,20 +42,31 @@ def main(main_args=None):
         level=verbosity_dict[config.verbosity],
     )
     logging.captureWarnings(True)
+    numba_logger = logging.getLogger('numba')
+    numba_logger.setLevel(logging.WARNING)
 
     # Suppress warning if asked for
     if config.suppress_warnings:
         warnings.filterwarnings("ignore")
 
+    # Write header
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
     logging.info(
         "Department of Genome Sciences at the University of Washington."
     )
+
+    # Check config parameter validity
+    if config.stream_confidence and config.peps_algorithm != "hist_nnls":
+        raise ValueError(
+            f"Streaming and PEPs algorithm `{config.peps_algorithm}` not "
+            "compatible. Use `--peps_algorithm=hist_nnls` instead.`"
+        )
+
+    # Start analysis
     logging.info("Command issued:")
     logging.info("%s", " ".join(sys.argv))
     logging.info("")
-
     logging.info("Starting Analysis")
     logging.info("=================")
 
@@ -100,7 +111,7 @@ def main(main_args=None):
         )
 
     # Fit the models:
-    psms, models, scores, desc = brew(
+    models, scores = brew(
         datasets,
         model=model,
         test_fdr=config.test_fdr,
@@ -121,21 +132,22 @@ def main(main_args=None):
         file_root = ""
 
     assign_confidence(
-        psms=psms,
+        datasets=datasets,
         max_workers=config.max_workers,
-        scores=scores,
-        descs=desc,
+        scores_list=scores,
         eval_fdr=config.test_fdr,
         dest_dir=config.dest_dir,
         file_root=file_root,
         prefixes=prefixes,
-        decoys=config.keep_decoys,
+        write_decoys=config.keep_decoys,
+        deduplication=not config.skip_deduplication,
         do_rollup=not config.skip_rollup,
         proteins=proteins,
         peps_error=config.peps_error,
         peps_algorithm=config.peps_algorithm,
         qvalue_algorithm=config.qvalue_algorithm,
         sqlite_path=config.sqlite_db_path,
+        stream_confidence=config.stream_confidence,
     )
 
     if config.save_models:
