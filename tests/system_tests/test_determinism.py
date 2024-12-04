@@ -2,12 +2,11 @@
 These tests verify that the aggregatePsmsToPeptides executable works as expected.
 """  # noqa: E501
 
-from pathlib import Path
-
-from ..helpers.cli import run_mokapot_cli
-
 import pandas as pd
 import pytest
+
+from ..helpers.cli import run_mokapot_cli
+from ..helpers.utils import file_exist
 
 # Warnings are errors for these tests
 pytestmark = pytest.mark.filterwarnings("error")
@@ -17,52 +16,43 @@ def test_determinism_same_file(tmp_path, psm_files_4000):
     """Test that two identical mokapot runs produce same results."""
 
     params = [
-        "--dest_dir",
-        tmp_path,
-        "--subset_max_train",
-        "2500",
+        ("--dest_dir", tmp_path),
+        ("--subset_max_train", "2500"),
+        ("--max_workers", "8"),
+        ("--max_iter", "2"),
         "--keep_decoys",
-        "--max_workers",
-        "8",
         "--ensemble",
-        "--max_iter",
-        "2",
     ]
     run_mokapot_cli(params + [psm_files_4000[0], "--file_root", "run1"])
     run_mokapot_cli(params + [psm_files_4000[0], "--file_root", "run2"])
 
-    assert Path(tmp_path, "run1.targets.peptides").exists()
-    assert Path(tmp_path, "run1.decoys.peptides").exists()
-    assert Path(tmp_path, "run1.targets.psms").exists()
-    assert Path(tmp_path, "run1.decoys.psms").exists()
+    assert file_exist(tmp_path, "run1.targets.peptides.csv")
+    assert file_exist(tmp_path, "run1.decoys.peptides.csv")
+    assert file_exist(tmp_path, "run1.targets.psms.csv")
+    assert file_exist(tmp_path, "run1.decoys.psms.csv")
 
-    assert Path(tmp_path, "run2.targets.peptides").exists()
-    assert Path(tmp_path, "run2.decoys.peptides").exists()
-    assert Path(tmp_path, "run2.targets.psms").exists()
-    assert Path(tmp_path, "run2.decoys.psms").exists()
+    assert file_exist(tmp_path, "run2.targets.peptides.csv")
+    assert file_exist(tmp_path, "run2.decoys.peptides.csv")
+    assert file_exist(tmp_path, "run2.targets.psms.csv")
+    assert file_exist(tmp_path, "run2.decoys.psms.csv")
 
-    df_run1_t_psms = pd.read_csv(tmp_path / "run1.targets.psms", sep="\t")
-    df_run2_t_psms = pd.read_csv(tmp_path / "run2.targets.psms", sep="\t")
+    def read_tsv(filename):
+        return pd.read_csv(tmp_path / filename, sep="\t")
+
+    df_run1_t_psms = read_tsv("run1.targets.psms.csv")
+    df_run2_t_psms = read_tsv("run2.targets.psms.csv")
     pd.testing.assert_frame_equal(df_run1_t_psms, df_run2_t_psms)
 
-    df_run1_t_peptides = pd.read_csv(
-        tmp_path / "run1.targets.peptides", sep="\t"
-    )
-    df_run2_t_peptides = pd.read_csv(
-        tmp_path / "run2.targets.peptides", sep="\t"
-    )
+    df_run1_t_peptides = read_tsv("run1.targets.peptides.csv")
+    df_run2_t_peptides = read_tsv("run2.targets.peptides.csv")
     pd.testing.assert_frame_equal(df_run1_t_peptides, df_run2_t_peptides)
 
-    df_run1_d_psms = pd.read_csv(tmp_path / "run1.decoys.psms", sep="\t")
-    df_run2_d_psms = pd.read_csv(tmp_path / "run2.decoys.psms", sep="\t")
+    df_run1_d_psms = read_tsv("run1.decoys.psms.csv")
+    df_run2_d_psms = read_tsv("run2.decoys.psms.csv")
     pd.testing.assert_frame_equal(df_run1_d_psms, df_run2_d_psms)
 
-    df_run1_d_peptides = pd.read_csv(
-        tmp_path / "run1.decoys.peptides", sep="\t"
-    )
-    df_run2_d_peptides = pd.read_csv(
-        tmp_path / "run2.decoys.peptides", sep="\t"
-    )
+    df_run1_d_peptides = read_tsv("run1.decoys.peptides.csv")
+    df_run2_d_peptides = read_tsv("run2.decoys.peptides.csv")
     pd.testing.assert_frame_equal(df_run1_d_peptides, df_run2_d_peptides)
 
 
@@ -73,59 +63,43 @@ def test_determinism_different_psmid(tmp_path, psm_files_4000):
     """
 
     cmd = [
-        "--dest_dir",
-        tmp_path,
-        "--subset_max_train",
-        "2500",
+        ("--dest_dir", tmp_path),
+        ("--subset_max_train", "2500"),
+        ("--max_workers", "8"),
+        ("--max_iter", "2"),
         "--keep_decoys",
-        "--max_workers",
-        "8",
         "--ensemble",
-        "--max_iter",
-        "2",
     ]
 
     run_mokapot_cli(cmd + [psm_files_4000[0], "--file_root", "run1"])
     run_mokapot_cli(cmd + [psm_files_4000[1], "--file_root", "run2"])
 
-    assert Path(tmp_path, "run1.targets.peptides").exists()
-    assert Path(tmp_path, "run1.decoys.peptides").exists()
-    assert Path(tmp_path, "run1.targets.psms").exists()
-    assert Path(tmp_path, "run1.decoys.psms").exists()
+    assert file_exist(tmp_path, "run1.targets.peptides.csv")
+    assert file_exist(tmp_path, "run1.decoys.peptides.csv")
+    assert file_exist(tmp_path, "run1.targets.psms.csv")
+    assert file_exist(tmp_path, "run1.decoys.psms.csv")
 
-    assert Path(tmp_path, "run2.targets.peptides").exists()
-    assert Path(tmp_path, "run2.decoys.peptides").exists()
-    assert Path(tmp_path, "run2.targets.psms").exists()
-    assert Path(tmp_path, "run2.decoys.psms").exists()
+    assert file_exist(tmp_path, "run2.targets.peptides.csv")
+    assert file_exist(tmp_path, "run2.decoys.peptides.csv")
+    assert file_exist(tmp_path, "run2.targets.psms.csv")
+    assert file_exist(tmp_path, "run2.decoys.psms.csv")
 
-    df_run1_t_psms = pd.read_csv(
-        tmp_path / "run1.targets.psms", sep="\t"
-    ).drop("PSMId", axis=1)
-    df_run2_t_psms = pd.read_csv(
-        tmp_path / "run2.targets.psms", sep="\t"
-    ).drop("PSMId", axis=1)
+    def read_tsv(filename):
+        df = pd.read_csv(tmp_path / filename, sep="\t")
+        return df.drop("PSMId", axis=1)
+
+    df_run1_t_psms = read_tsv("run1.targets.psms.csv")
+    df_run2_t_psms = read_tsv("run2.targets.psms.csv")
     pd.testing.assert_frame_equal(df_run1_t_psms, df_run2_t_psms)
 
-    df_run1_t_peptides = pd.read_csv(
-        tmp_path / "run1.targets.peptides", sep="\t"
-    ).drop("PSMId", axis=1)
-    df_run2_t_peptides = pd.read_csv(
-        tmp_path / "run2.targets.peptides", sep="\t"
-    ).drop("PSMId", axis=1)
+    df_run1_t_peptides = read_tsv("run1.targets.peptides.csv")
+    df_run2_t_peptides = read_tsv("run2.targets.peptides.csv")
     pd.testing.assert_frame_equal(df_run1_t_peptides, df_run2_t_peptides)
 
-    df_run1_d_psms = pd.read_csv(tmp_path / "run1.decoys.psms", sep="\t").drop(
-        "PSMId", axis=1
-    )
-    df_run2_d_psms = pd.read_csv(tmp_path / "run2.decoys.psms", sep="\t").drop(
-        "PSMId", axis=1
-    )
+    df_run1_d_psms = read_tsv("run1.decoys.psms.csv")
+    df_run2_d_psms = read_tsv("run2.decoys.psms.csv")
     pd.testing.assert_frame_equal(df_run1_d_psms, df_run2_d_psms)
 
-    df_run1_d_peptides = pd.read_csv(
-        tmp_path / "run1.decoys.peptides", sep="\t"
-    ).drop("PSMId", axis=1)
-    df_run2_d_peptides = pd.read_csv(
-        tmp_path / "run2.decoys.peptides", sep="\t"
-    ).drop("PSMId", axis=1)
+    df_run1_d_peptides = read_tsv("run1.decoys.peptides.csv")
+    df_run2_d_peptides = read_tsv("run2.decoys.peptides.csv")
     pd.testing.assert_frame_equal(df_run1_d_peptides, df_run2_d_peptides)

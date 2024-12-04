@@ -21,12 +21,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
-from sklearn.svm import LinearSVC
+from sklearn.exceptions import NotFittedError
 from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.exceptions import NotFittedError
+from sklearn.svm import LinearSVC
 from typeguard import typechecked
+
+from mokapot import LinearPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ PERC_GRID = {
 
 
 # Classes ---------------------------------------------------------------------
+@typechecked
 class Model:
     """
     A machine learning model to re-score PSMs.
@@ -207,13 +210,13 @@ class Model:
 
         return out_file
 
-    def decision_function(self, psms):
+    def decision_function(self, dataset: LinearPsmDataset):
         """
         Score a collection of PSMs
 
         Parameters
         ----------
-        psms : PsmDataset object
+        dataset : PsmDataset object
             :doc:`A collection of PSMs <dataset>` to score.
 
         Returns
@@ -224,7 +227,7 @@ class Model:
         if not self.is_trained:
             raise NotFittedError("This model is untrained. Run fit() first.")
 
-        feat_names = psms.features.columns.tolist()
+        feat_names = dataset.features.columns.tolist()
         if set(feat_names) != set(self.features):
             raise ValueError(
                 "Features of the input data do not match the "
@@ -232,16 +235,16 @@ class Model:
             )
 
         feat = self.scaler.transform(
-            psms.features.loc[:, self.features].values
+            dataset.features.loc[:, self.features].values
         )
 
         return _get_scores(self.estimator, feat)
 
-    def predict(self, psms):
+    def predict(self, dataset: LinearPsmDataset):
         """Alias for :py:meth:`decision_function`."""
-        return self.decision_function(psms)
+        return self.decision_function(dataset)
 
-    def fit(self, psms):
+    def fit(self, dataset: LinearPsmDataset):
         """
         Fit the model using the Percolator algorithm.
 
@@ -254,7 +257,7 @@ class Model:
 
         Parameters
         ----------
-        psms : PsmDataset object
+        dataset : PsmDataset object
             :doc:`A collection of PSMs <dataset>` from which to train
             the model.
 
@@ -262,17 +265,17 @@ class Model:
         -------
         self
         """
-        if not (psms.targets).sum():
+        if not (dataset.targets).sum():
             raise ValueError("No target PSMs were available for training.")
 
-        if not (~psms.targets).sum():
+        if not (~dataset.targets).sum():
             raise ValueError("No decoy PSMs were available for training.")
 
-        if len(psms.data) <= 200:
+        if len(dataset.data) <= 200:
             LOGGER.warning(
                 "Few PSMs are available for model training (%i). "
                 "The learned models may be unstable.",
-                len(psms.data),
+                len(dataset.data),
             )
 
         # Choose the initial direction
@@ -281,11 +284,11 @@ class Model:
             self.feat_pass,
             self.best_feat,
             self.desc,
-        ) = _get_starting_labels(psms, self)
+        ) = _get_starting_labels(dataset, self)
 
         # Normalize Features
-        self.features = psms.features.columns.tolist()
-        norm_feat = self.scaler.fit_transform(psms.features.values)
+        self.features = dataset.features.columns.tolist()
+        norm_feat = self.scaler.fit_transform(dataset.features.values)
 
         # Shuffle order
         shuffled_idx = self.rng.permutation(np.arange(len(start_labels)))
@@ -312,7 +315,7 @@ class Model:
             scores = scores[original_idx]
 
             # Update target
-            target = psms._update_labels(scores, eval_fdr=self.train_fdr)
+            target = dataset._update_labels(scores, eval_fdr=self.train_fdr)
             target = target[shuffled_idx]
             num_passed.append((target == 1).sum())
 
@@ -322,6 +325,7 @@ class Model:
 
             if num_passed[i] == 0:
                 raise RuntimeError("Model performs worse after training.")
+
 
         # If the model performs worse than what was initialized:
         if (
@@ -537,13 +541,13 @@ def load_model(model_file: Path):
 
 
 # Private Functions -----------------------------------------------------------
-def _get_starting_labels(psms, model):
+def _get_starting_labels(dataset: LinearPsmDataset, model):
     """
     Get labels using the initial direction.
 
     Parameters
     ----------
-    psms : a collection of PSMs
+    dataset : a collection of PSMs
         The PsmDataset object
     model : mokapot.Model
         A model object (this is likely `self`)
@@ -557,7 +561,7 @@ def _get_starting_labels(psms, model):
     """
     LOGGER.debug("Finding initial direction...")
     if model.direction is None and not model.is_trained:
-        feat_res = psms._find_best_feature(model.train_fdr)
+        feat_res = dataset._find_best_feature(model.train_fdr)
         best_feat, feat_pass, start_labels, desc = feat_res
         LOGGER.info(
             "\t- Selected feature %s with %i PSMs at q<=%g.",
@@ -568,11 +572,11 @@ def _get_starting_labels(psms, model):
 
     elif model.is_trained:
         try:
-            scores = model.estimator.decision_function(psms.features.values)
+            scores = model.estimator.decision_function(dataset.features.values)
         except AttributeError:
-            scores = model.estimator.predict_proba(psms.features).flatten()
+            scores = model.estimator.predict_proba(dataset.features).flatten()
 
-        start_labels = psms._update_labels(scores, eval_fdr=model.train_fdr)
+        start_labels = dataset._update_labels(scores, eval_fdr=model.train_fdr)
         feat_pass = (start_labels == 1).sum()
         best_feat = model.best_feat
         desc = model.desc
@@ -583,9 +587,9 @@ def _get_starting_labels(psms, model):
         )
 
     else:
-        feat = psms.features[model.direction].values
-        desc_labels = psms._update_labels(feat, model.train_fdr, desc=True)
-        asc_labels = psms._update_labels(feat, model.train_fdr, desc=False)
+        feat = dataset.features[model.direction].values
+        desc_labels = dataset._update_labels(feat, model.train_fdr, desc=True)
+        asc_labels = dataset._update_labels(feat, model.train_fdr, desc=False)
         best_feat = feat
 
         desc_pass = (desc_labels == 1).sum()
