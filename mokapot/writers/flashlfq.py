@@ -117,7 +117,9 @@ def _format_flashlfq(conf):
 
     if isinstance(proteins, str):
         # TODO: Add delimiter sniffing.
-        prots = peptides.loc[passing, proteins].str.replace("\t", "; ", regex=False)
+        prots = peptides.loc[passing, proteins].str.replace(
+            "\t", "; ", regex=False
+        )
     elif proteins is None:
         prots = ""
     else:

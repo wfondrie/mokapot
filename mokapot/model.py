@@ -326,7 +326,6 @@ class Model:
             if num_passed[i] == 0:
                 raise RuntimeError("Model performs worse after training.")
 
-
         # If the model performs worse than what was initialized:
         if (
             num_passed[-1] < (start_labels == 1).sum()

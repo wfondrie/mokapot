@@ -254,7 +254,11 @@ def psms_dataset(psm_df_1000):
 def psms_ondisk():
     """A small OnDiskPsmDataset"""
     filename = Path("data", "scope2_FP97AA.pin")
-    df_spectra = pd.read_csv(filename, sep="\t", usecols=["ScanNr", "ExpMass", "Label"])
+    df_spectra = pd.read_csv(
+        filename,
+        sep="\t",
+        usecols=["ScanNr", "ExpMass", "Label"],
+    )
     with open(filename) as perc:
         columns = perc.readline().rstrip().split("\t")
     psms = OnDiskPsmDataset(
@@ -449,7 +453,9 @@ def targets_decoys_psms_scored(tmp_path):
     scores = scores[idx]
     label = label[idx]
     qval = tdc(scores, label)
-    pep = getQvaluesFromScores(target_scores, decoy_scores, includeDecoys=True)[1]
+    pep = getQvaluesFromScores(
+        target_scores, decoy_scores, includeDecoys=True
+    )[1]
     peptides = np.hstack([np.arange(1, n + 1), np.arange(1, n + 1)])
     peptides.sort()
     df = pd.DataFrame(
@@ -464,13 +470,19 @@ def targets_decoys_psms_scored(tmp_path):
         ],
     )
     df["proteinIds"] = "dummy"
-    df[df["Label"] == 1].drop("Label", axis=1).to_csv(psms_t, sep="\t", index=False)
-    df[df["Label"] == -1].drop("Label", axis=1).to_csv(psms_d, sep="\t", index=False)
+    df[df["Label"] == 1].drop("Label", axis=1).to_csv(
+        psms_t, sep="\t", index=False
+    )
+    df[df["Label"] == -1].drop("Label", axis=1).to_csv(
+        psms_d, sep="\t", index=False
+    )
 
     return [psms_t, psms_d]
 
 
-def _make_fasta(num_proteins, peptides, peptides_per_protein, random_state, prefix=""):
+def _make_fasta(
+    num_proteins, peptides, peptides_per_protein, random_state, prefix=""
+):
     """Create a FASTA string from a set of peptides
 
     Parameters
@@ -494,7 +506,9 @@ def _make_fasta(num_proteins, peptides, peptides_per_protein, random_state, pref
     lines = []
     for protein in range(num_proteins):
         lines.append(f">{prefix}sp|test|test_{protein}")
-        lines.append("".join(list(random_state.choice(peptides, peptides_per_protein))))
+        lines.append(
+            "".join(list(random_state.choice(peptides, peptides_per_protein)))
+        )
 
     return lines
 
@@ -502,7 +516,8 @@ def _make_fasta(num_proteins, peptides, peptides_per_protein, random_state, pref
 def _random_peptide(length, random_state):
     """Generate a random peptide"""
     return "".join(
-        list(random_state.choice(list("ACDEFGHILMNPQSTVWY"), length - 1)) + ["K"]
+        list(random_state.choice(list("ACDEFGHILMNPQSTVWY"), length - 1))
+        + ["K"]
     )
 
 
