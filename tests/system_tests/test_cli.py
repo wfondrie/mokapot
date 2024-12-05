@@ -54,11 +54,12 @@ def test_basic_cli(tmp_path, scope_files):
 
 def test_cli_options(tmp_path, scope_files):
     """Test non-defaults"""
+    files_use = scope_files[0:2]
+    file_root = "blah"
     params = [
-        scope_files[0],
-        scope_files[1],
+        [str(f) for f in files_use],
         ("--dest_dir", tmp_path),
-        ("--file_root", "blah"),
+        ("--file_root", file_root),
         ("--train_fdr", "0.2"),
         ("--test_fdr", "0.1"),
         ("--seed", "100"),
@@ -69,10 +70,11 @@ def test_cli_options(tmp_path, scope_files):
         "--keep_decoys",
         ("--subset_max_train", "50000"),
         ("--max_workers", "3"),
+        ("--verbosity", "3"),
     ]
 
     run_mokapot_cli(params)
-    filebase = ["blah." + f.name.split(".")[0] for f in scope_files[0:2]]
+    filebase = [f"{file_root}." + f.name.split(".")[0] for f in files_use]
 
     assert file_approx_len(tmp_path, f"{filebase[0]}.targets.psms.csv", 5490)
     assert file_approx_len(

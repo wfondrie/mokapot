@@ -244,7 +244,7 @@ def assign_confidence(
     qvalue_algorithm="tdc",
     sqlite_path=None,
     stream_confidence=False,
-):
+) -> list[Confidence]:
     """Assign confidence to PSMs peptides, and optionally, proteins.
 
     Parameters
@@ -283,8 +283,11 @@ def assign_confidence(
 
     Returns
     -------
-    None
+    list[Confidence]
     """
+
+    # Note: I am really not a big fan of how large this function is ...
+    # JSPP 2024-12-05
     is_sqlite = sqlite_path is not None
 
     if dest_dir is None:
@@ -367,6 +370,8 @@ def assign_confidence(
 
     if prefixes is None:
         prefixes = [None] * len(datasets)
+
+    out = []
 
     for dataset, score, prefix in zip(datasets, scores_list, prefixes):
         # todo: nice to have: move this column renaming stuff into the
@@ -507,7 +512,7 @@ def assign_confidence(
                 else:
                     LOGGER.info(f"\t- Found {count} unique {level}.")
 
-        out = Confidence(
+        con = Confidence(
             dataset=dataset,
             levels=levels_or_proteins,
             level_paths=level_data_path,
@@ -523,10 +528,11 @@ def assign_confidence(
             stream_confidence=stream_confidence,
             score_stats=score_stats,
         )
+        out.append(con)
         if not prefix:
             append_to_output_file = True
 
-        return out
+    return out
 
 
 @contextmanager
