@@ -60,7 +60,9 @@ def test_update_labels(psm_df_6):
 
 
 def test_hash_row():
-    x = np.array(["test.mzML", 870, 5902.639978936955, 890.522815122875], dtype=object)
+    x = np.array(
+        ["test.mzML", 870, 5902.639978936955, 890.522815122875], dtype=object
+    )
     assert OnDiskPsmDataset._hash_row(x) == 4196757312
 
     x = np.array(

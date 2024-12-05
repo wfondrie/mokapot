@@ -148,8 +148,8 @@ def read_fasta(
     if not has_decoys:
         LOGGER.info("No decoy sequences were found in the FASTA file.")
         LOGGER.info(
-            "  - Creating decoy protein groups that mirror the target "
-            "proteins."
+            "  - Creating decoy protein groups that"
+            " mirror the target proteins."
         )
 
     # unique peptides:

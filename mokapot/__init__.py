@@ -23,3 +23,4 @@ from .parsers.pin import read_pin, read_percolator
 from .parsers.pepxml import read_pepxml
 from .parsers.fasta import read_fasta, make_decoys, digest
 from .confidence import Confidence, assign_confidence
+from .writers import to_flashlfq, to_txt

@@ -225,7 +225,8 @@ class LinearPsmDataset(PsmDataset):
         missing_columns = [c not in self.data.columns for c in used_columns]
         if not missing_columns:
             raise ValueError(
-                "The following specified columns were not found: " f"{missing_columns}"
+                "The following specified columns were not found: "
+                f"{missing_columns}"
             )
 
         # Get the feature columns
@@ -314,7 +315,9 @@ class LinearPsmDataset(PsmDataset):
     @property
     def _metadata_columns(self):
         """A list of the metadata columns"""
-        return tuple(c for c in self.data.columns if c not in self._feature_columns)
+        return tuple(
+            c for c in self.data.columns if c not in self._feature_columns
+        )
 
     @property
     def metadata(self):
@@ -411,7 +414,9 @@ class LinearPsmDataset(PsmDataset):
                 best_desc = desc
 
         if best_feat is None:
-            raise RuntimeError(f"No PSMs found below the 'eval_fdr' {eval_fdr}.")
+            raise RuntimeError(
+                f"No PSMs found below the 'eval_fdr' {eval_fdr}."
+            )
 
         return best_feat, best_positives, new_labels, best_desc
 
@@ -531,7 +536,9 @@ class OnDiskPsmDataset(PsmDataset):
         labels = _update_labels(scores, targets, eval_fdr, desc)
         pos = labels == 1
         if not pos.sum():
-            raise RuntimeError("No target PSMs were below the 'eval_fdr' threshold.")
+            raise RuntimeError(
+                "No target PSMs were below the 'eval_fdr' threshold."
+            )
 
         target_score = np.min(scores[pos])
         decoy_score = np.median(scores[labels == -1])
@@ -589,7 +596,9 @@ class OnDiskPsmDataset(PsmDataset):
                 best_desc = desc
 
         if best_feat is None:
-            raise RuntimeError(f"No PSMs found below the 'eval_fdr' {eval_fdr}.")
+            raise RuntimeError(
+                f"No PSMs found below the 'eval_fdr' {eval_fdr}."
+            )
 
         return best_feat, best_positives, new_labels, best_desc
 
@@ -758,7 +767,9 @@ def calibrate_scores(scores, targets, eval_fdr, desc=True):
     labels = _update_labels(scores, targets, eval_fdr, desc)
     pos = labels == 1
     if not pos.sum():
-        raise RuntimeError("No target PSMs were below the 'eval_fdr' threshold.")
+        raise RuntimeError(
+            "No target PSMs were below the 'eval_fdr' threshold."
+        )
 
     target_score = np.min(scores[pos])
     decoy_score = np.median(scores[labels == -1])

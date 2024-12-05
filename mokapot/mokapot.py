@@ -42,7 +42,7 @@ def main(main_args=None):
         level=verbosity_dict[config.verbosity],
     )
     logging.captureWarnings(True)
-    numba_logger = logging.getLogger('numba')
+    numba_logger = logging.getLogger("numba")
     numba_logger.setLevel(logging.WARNING)
 
     # Suppress warning if asked for

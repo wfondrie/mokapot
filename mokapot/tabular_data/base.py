@@ -71,6 +71,7 @@ class TabularDataReader(ABC):
         only_columns: list[str] | None = None,
         **kwargs,
     ) -> TabularDataReader:
+        # This import has to be here to avoid a circular import ...
         from .format_chooser import reader_from_path
 
         return reader_from_path(file_name, column_map, only_columns, **kwargs)

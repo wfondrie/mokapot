@@ -127,18 +127,14 @@ def psm_df_1000(tmp_path):
         "expmass": rng.uniform(500, 2000, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
-        "score": np.concatenate(
-            [
-                rng.normal(3, size=200),
-                rng.normal(size=300),
-            ]
-        ),
-        "score2": np.concatenate(
-            [
-                rng.normal(3, size=200),
-                rng.normal(size=300),
-            ]
-        ),
+        "score": np.concatenate([
+            rng.normal(3, size=200),
+            rng.normal(size=300),
+        ]),
+        "score2": np.concatenate([
+            rng.normal(3, size=200),
+            rng.normal(size=300),
+        ]),
         "filename": "test.mzML",
         "ret_time": rng.uniform(0, 60 * 120, size=500),
         "charge": rng.choice([2, 3, 4], size=500),
@@ -188,18 +184,14 @@ def psm_df_1000_parquet(tmp_path):
         "expmass": rng.uniform(500, 2000, size=500),
         "peptide": [_random_peptide(5, rng) for _ in range(500)],
         "proteins": ["_dummy" for _ in range(500)],
-        "score": np.concatenate(
-            [
-                rng.normal(3, size=200),
-                rng.normal(size=300),
-            ]
-        ),
-        "score2": np.concatenate(
-            [
-                rng.normal(3, size=200),
-                rng.normal(size=300),
-            ]
-        ),
+        "score": np.concatenate([
+            rng.normal(3, size=200),
+            rng.normal(size=300),
+        ]),
+        "score2": np.concatenate([
+            rng.normal(3, size=200),
+            rng.normal(size=300),
+        ]),
         "filename": "test.mzML",
         "ret_time": rng.uniform(0, 60 * 120, size=500),
         "charge": rng.choice([2, 3, 4], size=500),
@@ -262,7 +254,9 @@ def psms_dataset(psm_df_1000):
 def psms_ondisk():
     """A small OnDiskPsmDataset"""
     filename = Path("data", "scope2_FP97AA.pin")
-    df_spectra = pd.read_csv(filename, sep="\t", usecols=["ScanNr", "ExpMass", "Label"])
+    df_spectra = pd.read_csv(
+        filename, sep="\t", usecols=["ScanNr", "ExpMass", "Label"]
+    )
     with open(filename) as perc:
         columns = perc.readline().rstrip().split("\t")
     psms = OnDiskPsmDataset(
@@ -381,44 +375,36 @@ def psm_files_4000(tmp_path):
     decoy_scores2 = np.random.normal(size=n, loc=4, scale=3)
     decoy_scores3 = np.random.normal(size=n, loc=12, scale=4)
     targets = pd.DataFrame(
-        np.array(
-            [
-                np.ones(n),
-                target_scores1,
-                target_scores2,
-                target_scores3,
-            ]
-        ).transpose(),
+        np.array([
+            np.ones(n),
+            target_scores1,
+            target_scores2,
+            target_scores3,
+        ]).transpose(),
         columns=["Label", "feature1", "feature2", "feature3"],
     )
     decoys = pd.DataFrame(
-        np.array(
-            [
-                -np.ones(n),
-                decoy_scores1,
-                decoy_scores2,
-                decoy_scores3,
-            ]
-        ).transpose(),
+        np.array([
+            -np.ones(n),
+            decoy_scores1,
+            decoy_scores2,
+            decoy_scores3,
+        ]).transpose(),
         columns=["Label", "feature1", "feature2", "feature3"],
     )
     psms_df = pd.concat([targets, decoys]).reset_index(drop=True)
     NC = len(psms_df)
     psms_df["ScanNr"] = np.random.randint(1, NC // 2 + 1, NC)
-    expmass = np.hstack(
-        [
-            np.random.uniform(50, 500, NC // 2),
-            np.random.uniform(50, 500, NC // 2),
-        ]
-    )
+    expmass = np.hstack([
+        np.random.uniform(50, 500, NC // 2),
+        np.random.uniform(50, 500, NC // 2),
+    ])
     expmass.sort()
     psms_df["ExpMass"] = expmass
-    peptides = np.hstack(
-        [
-            np.arange(1, NC // 2 + 1),
-            np.arange(1, NC // 2 + 1),
-        ]
-    )
+    peptides = np.hstack([
+        np.arange(1, NC // 2 + 1),
+        np.arange(1, NC // 2 + 1),
+    ])
     peptides.sort()
     psms_df["Peptide"] = peptides
     psms_df["Proteins"] = "dummy"
@@ -465,7 +451,9 @@ def targets_decoys_psms_scored(tmp_path):
     scores = scores[idx]
     label = label[idx]
     qval = tdc(scores, label)
-    pep = getQvaluesFromScores(target_scores, decoy_scores, includeDecoys=True)[1]
+    pep = getQvaluesFromScores(
+        target_scores, decoy_scores, includeDecoys=True
+    )[1]
     peptides = np.hstack([np.arange(1, n + 1), np.arange(1, n + 1)])
     peptides.sort()
     df = pd.DataFrame(
@@ -480,13 +468,19 @@ def targets_decoys_psms_scored(tmp_path):
         ],
     )
     df["proteinIds"] = "dummy"
-    df[df["Label"] == 1].drop("Label", axis=1).to_csv(psms_t, sep="\t", index=False)
-    df[df["Label"] == -1].drop("Label", axis=1).to_csv(psms_d, sep="\t", index=False)
+    df[df["Label"] == 1].drop("Label", axis=1).to_csv(
+        psms_t, sep="\t", index=False
+    )
+    df[df["Label"] == -1].drop("Label", axis=1).to_csv(
+        psms_d, sep="\t", index=False
+    )
 
     return [psms_t, psms_d]
 
 
-def _make_fasta(num_proteins, peptides, peptides_per_protein, random_state, prefix=""):
+def _make_fasta(
+    num_proteins, peptides, peptides_per_protein, random_state, prefix=""
+):
     """Create a FASTA string from a set of peptides
 
     Parameters
@@ -510,7 +504,9 @@ def _make_fasta(num_proteins, peptides, peptides_per_protein, random_state, pref
     lines = []
     for protein in range(num_proteins):
         lines.append(f">{prefix}sp|test|test_{protein}")
-        lines.append("".join(list(random_state.choice(peptides, peptides_per_protein))))
+        lines.append(
+            "".join(list(random_state.choice(peptides, peptides_per_protein)))
+        )
 
     return lines
 
@@ -518,7 +514,8 @@ def _make_fasta(num_proteins, peptides, peptides_per_protein, random_state, pref
 def _random_peptide(length, random_state):
     """Generate a random peptide"""
     return "".join(
-        list(random_state.choice(list("ACDEFGHILMNPQSTVWY"), length - 1)) + ["K"]
+        list(random_state.choice(list("ACDEFGHILMNPQSTVWY"), length - 1))
+        + ["K"]
     )
 
 

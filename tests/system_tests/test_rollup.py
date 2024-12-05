@@ -79,7 +79,9 @@ def test_extra_cols(tmp_path):
     """Test that two identical mokapot runs produce same results."""
 
     extended_file = Path("data", "percolator-noSplit-extended-10000.tab")
-    non_extended_file = Path("data", "percolator-noSplit-non-extended-10000.tab")
+    non_extended_file = Path(
+        "data", "percolator-noSplit-non-extended-10000.tab"
+    )
 
     params = [
         ("--dest_dir", tmp_path),
@@ -108,8 +110,12 @@ def test_extra_cols(tmp_path):
         df_run1_t_psms[df_run2_t_psms.columns], df_run2_t_psms
     )
 
-    df_run1_t_peptides = pd.read_csv(tmp_path / "run1.targets.peptides.csv", sep="\t")
-    df_run2_t_peptides = pd.read_csv(tmp_path / "run2.targets.peptides.csv", sep="\t")
+    df_run1_t_peptides = pd.read_csv(
+        tmp_path / "run1.targets.peptides.csv", sep="\t"
+    )
+    df_run2_t_peptides = pd.read_csv(
+        tmp_path / "run2.targets.peptides.csv", sep="\t"
+    )
     pd.testing.assert_frame_equal(
         df_run1_t_peptides[df_run2_t_peptides.columns], df_run2_t_peptides
     )

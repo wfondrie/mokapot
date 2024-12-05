@@ -1,6 +1,7 @@
 """
 Defines a function to run the Percolator algorithm.
 """
+
 import copy
 import logging
 from operator import itemgetter
@@ -381,7 +382,10 @@ def get_index_values(df, col_name, val, orig_idx):
 
 @typechecked
 def predict_fold(
-    model: Model, fold: int, dataset: LinearPsmDataset, scores: list
+    model: Model,
+    fold: int,
+    dataset: LinearPsmDataset,
+    scores: list,
 ):
     scores[fold].append(model.predict(dataset))
 
@@ -435,7 +439,9 @@ def _predict(
             ]
             dataset_slices = [
                 _create_linear_dataset(
-                    dataset, psm_slice, enforce_checks=False
+                    dataset,
+                    psm_slice,
+                    enforce_checks=False,
                 )
                 for psm_slice in psms_slices
             ]
