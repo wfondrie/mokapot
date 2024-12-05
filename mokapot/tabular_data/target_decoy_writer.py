@@ -1,5 +1,7 @@
 from typing import Sequence
+import warnings
 
+import numpy as np
 import pandas as pd
 from typeguard import typechecked
 
@@ -24,9 +26,9 @@ class TargetDecoyWriter(TabularDataWriter):
         self.decoy_column = decoy_column
         self.output_columns = writers[0].get_column_names()
 
-        assert (target_column is None) != (decoy_column is None), (
-            "Exactly one of `target_column` and `decoy_column` must be given"
-        )
+        assert (target_column is None) != (
+            decoy_column is None
+        ), "Exactly one of `target_column` and `decoy_column` must be given"
 
     def initialize(self):
         for writer in self.writers:
@@ -41,7 +43,18 @@ class TargetDecoyWriter(TabularDataWriter):
         pass
 
     def append_data(self, data: pd.DataFrame):
-        out_columns = self.output_columns
+        out_columns = self.output_columns.copy()
+        for x in out_columns:
+            if x in data.columns:
+                continue
+            else:
+                warnings.warn(
+                    f"Column {x} not found in data,"
+                    f" found columns: {data.columns}"
+                    "Will try to assign missing values to it."
+                )
+                data[x] = np.nan
+
         writers = self.writers
         write_combined = (len(writers) == 1) and self.write_decoys
 

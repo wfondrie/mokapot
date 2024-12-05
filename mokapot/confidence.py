@@ -377,6 +377,7 @@ def assign_confidence(
         # todo: nice to have: move this column renaming stuff into the
         #   column defs module, and further, have standardized columns
         #   directly from the pin reader (applying the renaming itself)
+
         level_column_names = [
             "PSMId",
             dataset.target_column,
@@ -399,6 +400,7 @@ def assign_confidence(
             for in_col, out_col in zip(
                 level_input_column_names, level_column_names
             )
+            if in_col is not None
         }
 
         file_prefix = file_root
@@ -452,13 +454,14 @@ def assign_confidence(
             )
             type_map = sorted_file_reader.get_schema(as_dict=True)
             level_column_types = [
-                type_map[name] for name in level_column_names
+                type_map[name]
+                for name in level_input_output_column_mapping.values()
             ]
 
             level_writers = {
                 level: TabularDataWriter.from_suffix(
                     level_data_path[level],
-                    columns=level_column_names,
+                    columns=list(level_input_output_column_mapping.values()),
                     column_types=level_column_types,
                     buffer_size=CONFIDENCE_CHUNK_SIZE,
                     buffer_type=BufferType.Dicts,
@@ -490,7 +493,8 @@ def assign_confidence(
                             continue
                         seen_level_entities[level].add(psm_hash)
                     out_row = {
-                        col: data_row[col] for col in level_column_names
+                        col: data_row[col]
+                        for col in level_input_output_column_mapping.values()
                     }
                     level_writers[level].append_data(out_row)
                     score_stats.update_single(data_row["score"])

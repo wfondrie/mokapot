@@ -69,6 +69,8 @@ def _format_flashlfq(conf):
     """
     # Do some error checking for the required columns:
     required = ["filename", "calcmass", "rt", "charge"]
+
+    ## RN the confiedence object does not track the optional columns.
     missing = [c for c in required if conf._optional_columns[c] is None]
     if missing:
         missing = ", ".join([c + "_column" for c in missing])

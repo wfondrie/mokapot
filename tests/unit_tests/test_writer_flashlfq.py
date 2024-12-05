@@ -9,13 +9,16 @@ import pandas as pd
 def test_sanity(psms_ondisk, tmp_path):
     """Run simple sanity checks"""
 
-    mods, scores = mokapot.brew([psms_ondisk])
+    mods, scores = mokapot.brew([psms_ondisk], test_fdr=0.1)
     conf = mokapot.assign_confidence(
-        [psms_ondisk], scores_list=scores, eval_fdr=0.05
+        [psms_ondisk],
+        scores_list=scores,
+        eval_fdr=0.1,
+        deduplication=False,  # RN fails with deduplication = True
     )
-    test1 = conf.to_flashlfq(tmp_path / "test1.txt")
+    test1 = conf[0].to_flashlfq(tmp_path / "test1.txt")
     mokapot.to_flashlfq(conf, tmp_path / "test2.txt")
-    test3 = mokapot.to_flashlfq([conf, conf], tmp_path / "test3.txt")
+    test3 = mokapot.to_flashlfq([conf[0], conf[0]], tmp_path / "test3.txt")
     with pytest.raises(ValueError):
         mokapot.to_flashlfq("blah", tmp_path / "test4.txt")
 

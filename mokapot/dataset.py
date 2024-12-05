@@ -525,6 +525,7 @@ class OnDiskPsmDataset(PsmDataset):
         rep += f"Rt column: {self.rt_column}\n"
         rep += f"Charge column: {self.charge_column}\n"
         rep += f"SpecId column: {self.specId_column}\n"
+        rep += f"Spectra DF: \n{self.spectra_dataframe}\n"
         return rep
 
     def calibrate_scores(self, scores, eval_fdr, desc=True):
