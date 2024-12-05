@@ -26,9 +26,9 @@ class TargetDecoyWriter(TabularDataWriter):
         self.decoy_column = decoy_column
         self.output_columns = writers[0].get_column_names()
 
-        assert (target_column is None) != (
-            decoy_column is None
-        ), "Exactly one of `target_column` and `decoy_column` must be given"
+        assert (target_column is None) != (decoy_column is None), (
+            "Exactly one of `target_column` and `decoy_column` must be given"
+        )
 
     def initialize(self):
         for writer in self.writers:
