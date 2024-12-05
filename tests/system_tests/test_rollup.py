@@ -79,9 +79,7 @@ def test_extra_cols(tmp_path):
     """Test that two identical mokapot runs produce same results."""
 
     extended_file = Path("data", "percolator-noSplit-extended-10000.tab")
-    non_extended_file = Path(
-        "data", "percolator-noSplit-non-extended-10000.tab"
-    )
+    non_extended_file = Path("data", "percolator-noSplit-non-extended-10000.tab")
 
     params = [
         ("--dest_dir", tmp_path),

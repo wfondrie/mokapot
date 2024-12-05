@@ -1,7 +1,6 @@
 """
 Utility functions
 """
-
 import gzip
 import itertools
 from pathlib import Path

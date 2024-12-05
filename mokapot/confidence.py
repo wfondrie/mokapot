@@ -15,7 +15,6 @@ We recommend using the :py:func:`~mokapot.brew()` function or the
 :py:meth:`~mokapot.PsmDataset.assign_confidence()` method to obtain these
 confidence estimates, rather than initializing the classes below directly.
 """
-
 import logging
 from contextlib import contextmanager
 from pathlib import Path
