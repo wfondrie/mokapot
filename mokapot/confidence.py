@@ -11,8 +11,7 @@ estimates for the various relevant levels (i.e. PSMs, peptides, and proteins).
 The :py:func:`Confidence` class is appropriate for most data-dependent
 acquisition proteomics datasets.
 
-We recommend using the :py:func:`~mokapot.brew()` function or the
-:py:meth:`~mokapot.PsmDataset.assign_confidence()` method to obtain these
+We recommend using the :py:func:`~mokapot.brew()` function to obtain these
 confidence estimates, rather than initializing the classes below directly.
 """
 
@@ -51,6 +50,7 @@ from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 from mokapot.utils import (
     convert_targets_column,
 )
+from mokapot.writers.flashlfq import to_flashlfq
 
 LOGGER = logging.getLogger(__name__)
 
@@ -218,6 +218,10 @@ class Confidence(object):
         protein_writer.write(proteins)
         LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
 
+    def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
+        """Save confidenct peptides for quantification with FlashLFQ."""
+        return to_flashlfq(self, out_file)
+
 
 # Functions -------------------------------------------------------------------
 @typechecked
@@ -249,7 +253,8 @@ def assign_confidence(
     datasets : list[OnDiskPsmDataset]
         A collection of PSMs.
     scores_list : list[numpy.ndarray]
-        The scores by which to rank the PSMs.
+        The scores by which to rank the PSMs. Usually derived from
+        `mokapot.brew`
     rng : int or np.random.Generator, optional
         A seed or generator used for cross-validation split creation and to
         break ties, or ``None`` to use the default random number generator
@@ -359,6 +364,9 @@ def assign_confidence(
         if initialize:
             writer.initialize()
         return writer
+
+    if prefixes is None:
+        prefixes = [None] * len(datasets)
 
     for dataset, score, prefix in zip(datasets, scores_list, prefixes):
         # todo: nice to have: move this column renaming stuff into the
@@ -499,7 +507,7 @@ def assign_confidence(
                 else:
                     LOGGER.info(f"\t- Found {count} unique {level}.")
 
-        Confidence(
+        out = Confidence(
             dataset=dataset,
             levels=levels_or_proteins,
             level_paths=level_data_path,
@@ -517,6 +525,8 @@ def assign_confidence(
         )
         if not prefix:
             append_to_output_file = True
+
+        return out
 
 
 @contextmanager
@@ -602,7 +612,14 @@ def _save_sorted_metadata_chunks(
     if deduplication_columns is not None:
         # This is not strictly necessary, as we deduplicate also afterwards,
         # but speeds up the process
-        chunk_metadata.drop_duplicates(deduplication_columns, inplace=True)
+        try:
+            chunk_metadata.drop_duplicates(deduplication_columns, inplace=True)
+        except KeyError as e:
+            msg = "Duplication error in the following columns: "
+            msg += str(deduplication_columns)
+            msg += f". Found: {chunk_metadata.columns} "
+            msg += ". Please check the input data."
+            raise KeyError(msg) from e
 
     chunk_writer = TabularDataWriter.from_suffix(
         chunk_write_path,

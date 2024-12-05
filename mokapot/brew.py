@@ -33,14 +33,14 @@ LOGGER = logging.getLogger(__name__)
 @typechecked
 def brew(
     datasets: list[OnDiskPsmDataset],
-    model=None,
+    model: None | Model | list[Model] = None,
     test_fdr: float = 0.01,
     folds: int = 3,
     max_workers: int = 1,
     rng=None,
     subset_max_train: int | None = None,
     ensemble: bool = False,
-):
+) -> tuple[list[Model], list[np.ndarray[np.float64]]]:
     """
     Re-score one or more collection of PSMs.
 
@@ -289,7 +289,9 @@ def brew(
             scores[idx] = -scores[idx]
             descs[idx] = not descs[idx]
 
-    return models, scores
+    # Coherces the tuple to a list
+    models = list(models)
+    return list(models), scores
 
 
 # Utility Functions -----------------------------------------------------------

@@ -1,9 +1,13 @@
 
+# TODO: Make these over-rideable
 DOCKER_IMAGE_NAME=wfondrie/mokapot
 DOCKER_IMAGE_TAG=latest
 
 test:
 	uv run --all-extras pytest --durations=0
+
+unit-test:
+	uv run --all-extras pytest --durations=0 ./tests/unit_tests
 
 check: ruff-lint format pre-commit
 	@echo "All checks passed"
@@ -24,8 +28,11 @@ pre-commit:
 ruff-lint:
 	uv run ruff check .
 
-ruff-lint-ci:
-	uv run ruff check . --output-format=github
+lint-ci:
+	uv run --no-project --with ruff ruff check . --output-format=github
 
 format:
 	uv run ruff format .
+
+format-ci:
+	uv run --no-project --with ruff ruff format --check .

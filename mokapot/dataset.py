@@ -508,6 +508,25 @@ class OnDiskPsmDataset(PsmDataset):
         check_column(self.charge_column)
         check_column(self.specId_column)
 
+    def __repr__(self) -> str:
+        rep = "OnDiskPsmDataset object\n"
+        rep += f"Reader: {self.reader}\n"
+        rep += f"Spectrum columns: {self.spectrum_columns}\n"
+        rep += f"Peptide column: {self.peptide_column}\n"
+        rep += f"Protein column: {self.protein_column}\n"
+        rep += f"Feature columns: {self.feature_columns}\n"
+        rep += f"Metadata columns: {self.metadata_columns}\n"
+        rep += f"Metadata columns types: {self.metadata_column_types}\n"
+        rep += f"Level columns: {self.level_columns}\n"
+        rep += f"Filename column: {self.filename_column}\n"
+        rep += f"Scan column: {self.scan_column}\n"
+        rep += f"Calcmass column: {self.calcmass_column}\n"
+        rep += f"Expmass column: {self.expmass_column}\n"
+        rep += f"Rt column: {self.rt_column}\n"
+        rep += f"Charge column: {self.charge_column}\n"
+        rep += f"SpecId column: {self.specId_column}\n"
+        return rep
+
     def calibrate_scores(self, scores, eval_fdr, desc=True):
         """
         Calibrate scores as described in Granholm et al. [1]_
