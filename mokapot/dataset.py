@@ -659,11 +659,15 @@ class OnDiskPsmDataset(PsmDataset):
 
     @property
     def feature_columns(self) -> list[str]:
-        return self._feature_columns
+        return list(self._feature_columns)
 
     @property
     def spectra_dataframe(self) -> pd.DataFrame:
         return self._spectra_dataframe
+
+    @spectra_dataframe.deleter
+    def spectra_dataframe(self):
+        del self._spectra_dataframe
 
     def get_column_names(self) -> list[str]:
         columns = self.reader.get_column_names()

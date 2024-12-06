@@ -5,7 +5,7 @@ Defines a function to run the Percolator algorithm.
 import copy
 import logging
 from operator import itemgetter
-from typing import Iterable
+from typing import Iterable, Generator
 
 import numpy as np
 import pandas as pd
@@ -304,7 +304,9 @@ def brew(
 
 
 # Utility Functions -----------------------------------------------------------
-def make_train_sets(test_idx, subset_max_train, data_size, rng):
+def make_train_sets(
+    test_idx, subset_max_train, data_size, rng
+) -> Generator[list[list[int]], None, None]:
     """
     Parameters
     ----------
@@ -317,8 +319,8 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
 
     Yields
     ------
-    PsmDataset
-        The training set.
+    list of list of int
+        The training set. Each element is a list of ints.
     """
     subset_max_train_per_file = []
     if subset_max_train is not None:
@@ -356,7 +358,7 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
                 if current_subset_max_train < train_idx_size:
                     train_idx[i] = rng.choice(
                         train_idx[i], current_subset_max_train, replace=False
-                    )
+                    ).tolist()
         yield train_idx
 
 
