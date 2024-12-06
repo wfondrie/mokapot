@@ -60,6 +60,9 @@ def test_update_labels(psm_df_6):
 
 
 def test_hash_row():
+    # Q: what is this meant to test? Onlyb that hashing is constant?
+    # It would be good to have the this test (or another) chech that its
+    # consistent from the parsing time.
     x = np.array(
         ["test.mzML", 870, 5902.639978936955, 890.522815122875], dtype=object
     )

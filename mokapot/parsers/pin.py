@@ -15,7 +15,7 @@ from mokapot.constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
-from mokapot.dataset import OnDiskPsmDataset
+from mokapot.dataset import OnDiskPsmDataset, PsmDataset
 from mokapot.parsers.helpers import (
     find_optional_column,
     find_columns,
@@ -326,8 +326,8 @@ def get_rows_from_dataframe(
 
     Returns
     -------
-    List
-        list of list of dataframes
+    None
+        The function modifies the `train_psms` list in place.
     """
     chunk = convert_targets_column(
         data=chunk,
@@ -347,8 +347,8 @@ def concat_and_reindex_chunks(df, orig_idx):
 
 @typechecked
 def parse_in_chunks(
-    datasets: list[OnDiskPsmDataset],
-    train_idx: list,
+    datasets: list[PsmDataset],
+    train_idx: list[list[list[int]]],
     chunk_size: int,
     max_workers: int,
 ) -> list[pd.DataFrame]:
@@ -359,9 +359,12 @@ def parse_in_chunks(
     ----------
     datasets : OnDiskPsmDataset
         A collection of PSMs.
-    train_idx : list of a list of a list of indexes (first level are training
-        splits, second one is the number of input files, third level the
-        actual idexes The indexes to select from data.
+    train_idx : list of a list of a list of indexes
+        - first level are training splits,
+        - second one is the number of input files
+        - third level the actual idexes The indexes to select from data.
+        Thus if you have 3 splits, 2 files and 10 PSMs per file, the
+        "shape" of the list is [3,2,10]
     chunk_size : int
         The chunk size in bytes.
     max_workers: int
@@ -379,16 +382,27 @@ def parse_in_chunks(
     for dataset, idx, file_idx in zip(
         datasets, zip(*train_idx), range(len(datasets))
     ):
-        reader = dataset.reader
-        file_iterator = reader.get_chunked_data_iterator(
-            chunk_size=chunk_size, columns=dataset.columns
-        )
-        Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(get_rows_from_dataframe)(
-                idx, chunk, train_psms, dataset, file_idx
+        # Note: Here idx is a tuple of len == number of folds
+        #       each element is a list of ints, so each list is
+        #       the indices for each split of the dataset.
+
+        # Note2: Technically the file_idx is not a file but a dataset
+        #        index.
+        if hasattr(dataset, "reader"):
+            reader = dataset.reader
+            file_iterator = reader.get_chunked_data_iterator(
+                chunk_size=chunk_size, columns=dataset.columns
             )
-            for chunk in file_iterator
-        )
+            # Q: Is it really a good idea to modify a list in place
+            #    in a parallel loop?
+            Parallel(n_jobs=max_workers, require="sharedmem")(
+                delayed(get_rows_from_dataframe)(
+                    idx, chunk, train_psms, dataset, file_idx
+                )
+                for chunk in file_iterator
+            )
+        else:
+            raise NotImplementedError
     train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(concat_and_reindex_chunks)(df=df, orig_idx=orig_idx)
         for df, orig_idx in zip(train_psms, zip(*train_idx))

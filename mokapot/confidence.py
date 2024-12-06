@@ -27,7 +27,7 @@ from typeguard import typechecked
 
 from mokapot.column_defs import get_standard_column_name
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
-from mokapot.dataset import OnDiskPsmDataset
+from mokapot.dataset import PsmDataset, OptionalColumns
 from mokapot.peps import (
     peps_from_scores,
     TDHistData,
@@ -62,7 +62,7 @@ class Confidence(object):
 
     def __init__(
         self,
-        dataset: OnDiskPsmDataset,
+        dataset: PsmDataset,
         levels: list[str],
         level_paths: dict[str, Path],
         out_writers: dict[str, Sequence[TabularDataWriter]],
@@ -105,6 +105,7 @@ class Confidence(object):
             Save decoys confidence estimates as well?
         """
 
+        self.dataset = dataset
         self._score_column = "score"
         self._target_column = dataset.target_column
         self._protein_column = "proteinIds"
@@ -115,7 +116,7 @@ class Confidence(object):
         self.do_rollup = do_rollup
 
         if proteins:
-            self.write_protein_level_data(level_paths, proteins, rng)
+            self._write_protein_level_data(level_paths, proteins, rng)
 
         self._assign_confidence(
             levels=levels,
@@ -197,7 +198,7 @@ class Confidence(object):
 
             level_path.unlink(missing_ok=True)
 
-    def write_protein_level_data(self, level_paths, proteins, rng):
+    def _write_protein_level_data(self, level_paths, proteins, rng):
         psms = TabularDataReader.from_path(level_paths["psms"]).read()
         proteins = picked_protein(
             psms,
@@ -218,6 +219,9 @@ class Confidence(object):
         protein_writer.write(proteins)
         LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
 
+    def get_optional_columns(self) -> OptionalColumns:
+        return self.dataset.get_optional_columns()
+
     def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
         """Save confidenct peptides for quantification with FlashLFQ."""
         return to_flashlfq(self, out_file)
@@ -226,7 +230,7 @@ class Confidence(object):
 # Functions -------------------------------------------------------------------
 @typechecked
 def assign_confidence(
-    datasets: list[OnDiskPsmDataset],
+    datasets: list[PsmDataset],
     scores_list: list[np.ndarray[float]],
     max_workers: int = 1,
     eval_fdr=0.01,
@@ -542,7 +546,7 @@ def assign_confidence(
 @contextmanager
 @typechecked
 def create_sorted_file_reader(
-    dataset: OnDiskPsmDataset,
+    dataset: PsmDataset,
     score_reader: TabularDataReader,
     dest_dir: Path,
     file_prefix: str,

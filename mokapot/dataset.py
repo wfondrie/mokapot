@@ -18,9 +18,10 @@ One of more instance of this class are required to use the
 """
 
 import logging
-from abc import ABC
+from abc import ABC, abstractmethod
 from pathlib import Path
 from zlib import crc32
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -36,6 +37,35 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Classes ---------------------------------------------------------------------
+
+
+@dataclass
+class OptionalColumns:
+    """Helper class meant to store the optional columns from a dataset.
+
+    It is used internally to pass the columns to places like the flashlfq
+    formatter, which needs columns that are not inherently associated with
+    the scoring process.
+    """
+
+    filename: str | None
+    scan: str | None
+    calcmass: str | None
+    expmass: str | None
+    rt: str | None
+    charge: str | None
+
+    def as_dict(self):
+        return {
+            "filename": self.filename,
+            "scan": self.scan,
+            "calcmass": self.calcmass,
+            "expmass": self.expmass,
+            "rt": self.rt,
+            "charge": self.charge,
+        }
+
+
 class PsmDataset(ABC):
     """Store a collection of PSMs and their features.
 
@@ -84,6 +114,62 @@ class PsmDataset(ABC):
             proteins = read_fasta(proteins, **kwargs)
 
         self._proteins = proteins
+
+    @abstractmethod
+    def get_optional_columns(self) -> OptionalColumns:
+        """Return a dictionary of optional columns and their names.
+
+        These should be
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_column_names(self) -> list[str]:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def feature_columns(self) -> list[str]:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def spectra_dataframe(self) -> pd.DataFrame:
+        """Return the spectra dataframe.
+
+        The spectra dataframe is meant to contain all information on
+        the spectra but not the scores.
+        """
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def target_column(self) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _split(self, folds, rng):
+        """
+        Get the indices for random, even splits of the dataset.
+
+        Each tuple of integers contains the indices for a random subset of
+        PSMs. PSMs are grouped by spectrum, such that all PSMs from the same
+        spectrum only appear in one split. The typical use for this method
+        is to split the PSMs into cross-validation folds.
+
+        Parameters
+        ----------
+        folds: int
+            The number of splits to generate.
+
+        Returns
+        -------
+        A tuple of tuples of ints
+            Each of the returned tuples contains the indices  of PSMs in a
+            split.
+        """
+
+        raise NotImplementedError
 
 
 class LinearPsmDataset(PsmDataset):
@@ -193,21 +279,21 @@ class LinearPsmDataset(PsmDataset):
         self._peptide_column = peptide_column
         self._protein_column = protein_column
 
-        self._optional_columns = {
-            "filename": filename_column,
-            "scan": scan_column,
-            "calcmass": calcmass_column,
-            "expmass": expmass_column,
-            "rt": rt_column,
-            "charge": charge_column,
-        }
+        self.optional_columns = OptionalColumns(
+            filename=filename_column,
+            scan=scan_column,
+            calcmass=calcmass_column,
+            expmass=expmass_column,
+            rt=rt_column,
+            charge=charge_column,
+        )
 
         # Finish initialization
         other_columns = [target_column, peptide_column]
         if protein_column is not None:
             other_columns.append(protein_column)
 
-        for _, opt_column in self._optional_columns.items():
+        for _, opt_column in self.optional_columns.as_dict().items():
             if opt_column is not None:
                 other_columns.append(opt_column)
 
@@ -221,9 +307,11 @@ class LinearPsmDataset(PsmDataset):
 
         # Check that all of the columns exist:
         used_columns = sum([other_columns, self._spectrum_columns], tuple())
+        missing_columns = [
+            c for c in set(used_columns) if c not in self.data.columns
+        ]
 
-        missing_columns = [c not in self.data.columns for c in used_columns]
-        if not missing_columns:
+        if missing_columns:
             raise ValueError(
                 "The following specified columns were not found: "
                 f"{missing_columns}"
@@ -237,7 +325,7 @@ class LinearPsmDataset(PsmDataset):
         else:
             self._feature_columns = utils.tuplize(feature_columns)
 
-        self._data[target_column] = self._data[target_column].astype(bool)
+        self.make_bool_trarget()
         num_targets = (self.targets).sum()
         num_decoys = (~self.targets).sum()
 
@@ -248,6 +336,53 @@ class LinearPsmDataset(PsmDataset):
                 raise ValueError("No target PSMs were detected.")
             if not num_decoys:
                 raise ValueError("No decoy PSMs were detected.")
+
+    @property
+    def feature_columns(self) -> list[str]:
+        return self._feature_columns
+
+    @property
+    def target_column(self) -> str:
+        return self._target_column
+
+    def get_column_names(self):
+        return list(self.data.columns)
+
+    def get_optional_columns(self) -> OptionalColumns:
+        return self.optional_columns
+
+    def _split(self, folds, rng):
+        inds = self.spectra_dataframe.index.to_numpy()
+        splits = rng.integers(0, high=folds, size=len(inds))
+        out = tuple([inds[splits == i] for i in range(folds)])
+        return out
+
+    def make_bool_trarget(self):
+        """Convert target column to boolean if possible.
+
+        1. If its a 0-1 col convert to bool
+        2. If its a -1,1 values > 0 becomes True, rest False
+        """
+        curr_col = self._data[self._target_column]
+        if curr_col.dtype == bool:
+            return
+
+        if curr_col.dtype == int or curr_col.dtype == float:
+            # Check if all values are 0 or 1
+            uniq_vals = curr_col.unique().tolist()
+            if uniq_vals == [0, 1]:
+                # If so, we can just cast to bool
+                self._data[self._target_column] = curr_col.astype(bool)
+                return
+            elif uniq_vals == [-1, 1]:
+                self._data[self._target_column] = curr_col > 0
+
+        # If not raise an error ... most likely the cast will be
+        # Something the user does not want.
+        raise ValueError(
+            f"Target column {self._target_column} "
+            "has values that are not boolean or 0-1, please check and fix."
+        )
 
     @property
     def data(self):
@@ -268,7 +403,8 @@ class LinearPsmDataset(PsmDataset):
             f"\t- Decoy PSMs: {(~self.targets).sum()}\n"
             f"\t- Unique spectra: {len(self.spectra.drop_duplicates())}\n"
             f"\t- Unique peptides: {len(self.peptides.drop_duplicates())}\n"
-            f"\t- Features: {self._feature_columns}"
+            f"\t- Features: {self.feature_columns}"
+            f"\t- Optional Cols: {self.optional_columns}"
         )
 
     @property
@@ -330,12 +466,12 @@ class LinearPsmDataset(PsmDataset):
         return self.data.loc[:, self._feature_columns]
 
     @property
-    def spectra(self):
+    def spectra_dataframe(self):
         """
         A :py:class:`pandas.DataFrame` of the columns that uniquely
         identify a mass spectrum.
         """
-        return self.data.loc[:, self._spectrum_columns]
+        return self.data.drop(columns=list(self.feature_columns))
 
     @property
     def columns(self):
@@ -457,11 +593,11 @@ class OnDiskPsmDataset(PsmDataset):
             self.reader = TabularDataReader.from_path(filename_or_reader)
 
         self.columns = columns
-        self.target_column = target_column
+        self._target_column = target_column
         self.peptide_column = peptide_column
         self.protein_column = protein_column
         self.spectrum_columns = spectrum_columns
-        self.feature_columns = feature_columns
+        self._feature_columns = feature_columns
         self.metadata_columns = metadata_columns
         self.metadata_column_types = metadata_column_types
         self.level_columns = level_columns
@@ -472,9 +608,18 @@ class OnDiskPsmDataset(PsmDataset):
         self.rt_column = rt_column
         self.charge_column = charge_column
         self.specId_column = specId_column
-        self.spectra_dataframe = spectra_dataframe
+        self._spectra_dataframe = spectra_dataframe
 
         columns = self.reader.get_column_names()
+        opt_cols = OptionalColumns(
+            filename=filename_column,
+            scan=scan_column,
+            calcmass=calcmass_column,
+            expmass=expmass_column,
+            rt=rt_column,
+            charge=charge_column,
+        )
+        self.optional_columns = opt_cols
 
         # todo: nice to have: here reader.file_name should be something like
         #   reader.user_repr() which tells the user where to look for the
@@ -507,6 +652,25 @@ class OnDiskPsmDataset(PsmDataset):
         check_column(self.rt_column)
         check_column(self.charge_column)
         check_column(self.specId_column)
+
+    @property
+    def target_column(self) -> str:
+        return self._target_column
+
+    @property
+    def feature_columns(self) -> list[str]:
+        return self._feature_columns
+
+    @property
+    def spectra_dataframe(self) -> pd.DataFrame:
+        return self._spectra_dataframe
+
+    def get_column_names(self) -> list[str]:
+        columns = self.reader.get_column_names()
+        return columns
+
+    def get_optional_columns(self) -> OptionalColumns:
+        return self.optional_columns
 
     def __repr__(self) -> str:
         rep = "OnDiskPsmDataset object\n"
@@ -680,6 +844,7 @@ class OnDiskPsmDataset(PsmDataset):
             split.
         """
         spectra = self.spectra_dataframe[self.spectrum_columns].values
+        # Q: Why is this deleted here?
         del self.spectra_dataframe
         spectra = np.apply_along_axis(OnDiskPsmDataset._hash_row, 1, spectra)
 

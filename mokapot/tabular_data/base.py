@@ -137,7 +137,8 @@ class ColumnSelectReader(TabularDataReader):
     ) -> Generator[pd.DataFrame, None, None]:
         self._check_columns(columns)
         return self.reader.get_chunked_data_iterator(
-            columns=self.selected_columns or columns
+            chunk_size=chunk_size,
+            columns=self.selected_columns or columns,
         )
 
 

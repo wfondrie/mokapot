@@ -21,7 +21,7 @@ from mokapot.dataset import (
     LinearPsmDataset,
     calibrate_scores,
     update_labels,
-    OnDiskPsmDataset,
+    PsmDataset,
 )
 from mokapot.model import PercolatorModel, Model
 from mokapot.parsers.pin import parse_in_chunks
@@ -32,7 +32,7 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 @typechecked
 def brew(
-    datasets: list[OnDiskPsmDataset],
+    datasets: list[PsmDataset],
     model: None | Model | list[Model] = None,
     test_fdr: float = 0.01,
     folds: int = 3,
@@ -135,7 +135,16 @@ def brew(
     test_folds_idx = [dataset._split(folds, rng) for dataset in datasets]
 
     # If trained models are provided, use them as-is.
-    try:
+    # If the model is not iterable, it means that a single model is pased, thus
+    # It is more of a template for training. (or was generated within this
+    # code, thus "None" was passed)
+    is_mod_iterable = hasattr(model, "__iter__")
+    if is_mod_iterable:
+        # Q: Is this branch ever used?
+        # JSPP 2024-12-06 I think it makes sense to split this function
+        # To remve the trained case ... which adds a lot of clutter.
+        # Furthermore, that function can fall back to this one if its
+        # Not actually trained.
         fitted = [[m, False] for m in model if m.is_trained]
 
         if len(model) != folds:
@@ -149,7 +158,7 @@ def brew(
                 "One or more of the provided models was not previously trained"
             )
 
-    except TypeError:
+    else:
         train_sets = list(
             make_train_sets(
                 test_idx=test_folds_idx,
@@ -353,7 +362,7 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
 
 @typechecked
 def _create_linear_dataset(
-    dataset: OnDiskPsmDataset, psms: pd.DataFrame, enforce_checks: bool = True
+    dataset: PsmDataset, psms: pd.DataFrame, enforce_checks: bool = True
 ):
     utils.convert_targets_column(
         data=psms, target_column=dataset.target_column
@@ -395,7 +404,7 @@ def predict_fold(
 @typechecked
 def _predict(
     models_idx: list,
-    datasets: Iterable[OnDiskPsmDataset],
+    datasets: Iterable[PsmDataset],
     models: Iterable[Model],
     test_fdr: float,
     max_workers: int,
@@ -488,7 +497,7 @@ def _predict(
 
 @typechecked
 def _predict_with_ensemble(
-    dataset: OnDiskPsmDataset, models: Iterable[Model], max_workers
+    dataset: PsmDataset, models: Iterable[Model], max_workers
 ):
     """
     Return the new scores for the dataset using ensemble of all trained models

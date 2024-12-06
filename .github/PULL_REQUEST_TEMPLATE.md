@@ -11,7 +11,8 @@ Check these if you believe they are true
 - [ ] Was it tested locally? (`make test`)
 - [ ] Has the changelog been updated?
 - [ ] Have the docs been updated?
-- [ ] The level of testing this PR includes is appropriate
+- [ ] The level of testing this PR includes is appropriate.
+- [ ] No features have been dropped (or note which ones and why).
 
 ### Reviewers
 

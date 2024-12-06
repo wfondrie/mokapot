@@ -70,8 +70,8 @@ def _format_flashlfq(conf):
     # Do some error checking for the required columns:
     required = ["filename", "calcmass", "rt", "charge"]
 
-    ## RN the confiedence object does not track the optional columns.
-    missing = [c for c in required if conf._optional_columns[c] is None]
+    opt_cols = conf.get_optional_columns().as_dict()
+    missing = [c for c in required if opt_cols[c] is None]
     if missing:
         missing = ", ".join([c + "_column" for c in missing])
         raise ValueError(
@@ -88,12 +88,14 @@ def _format_flashlfq(conf):
         proteins = None
 
     # Get parameters
+    # TODO: make these abstract methods ... I am not a fan of
+    #       pulling directly private properties.
     peptides = conf.peptides
-    filename_column = conf._optional_columns["filename"]
+    filename_column = opt_cols["filename"]
     peptide_column = conf._peptide_column
-    mass_column = conf._optional_columns["calcmass"]
-    rt_column = conf._optional_columns["rt"]
-    charge_column = conf._optional_columns["charge"]
+    mass_column = opt_cols["calcmass"]
+    rt_column = opt_cols["rt"]
+    charge_column = opt_cols["charge"]
     eval_fdr = conf._eval_fdr
 
     # Create FlashLFQ dataframe

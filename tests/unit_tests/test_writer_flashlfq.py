@@ -4,14 +4,49 @@ import pytest
 import mokapot
 import numpy as np
 import pandas as pd
+from mokapot.writers.flashlfq import _format_flashlfq
+from mokapot import LinearPsmDataset
 
 
-def test_sanity(psms_ondisk, tmp_path):
+@pytest.fixture
+def flashlfq_psms_ds(psm_df_1000):
+    """A small OnDiskPsmDataset"""
+    pin, df, fasta = psm_df_1000
+
+    psms = LinearPsmDataset(
+        psms=df,
+        target_column="target",
+        spectrum_columns="specid",
+        peptide_column="peptide",
+        feature_columns=["score"],
+        filename_column="filename",
+        scan_column="specid",
+        calcmass_column="calcmass",
+        expmass_column="expmass",
+        rt_column="ret_time",
+        charge_column="charge",
+        copy_data=True,
+    )
+    return psms
+
+
+def test_internal_flashlfq(flashlfq_psms_ds):
+    mods, scores = mokapot.brew([flashlfq_psms_ds], test_fdr=0.1)
+    conf = mokapot.assign_confidence(
+        [flashlfq_psms_ds],
+        scores_list=scores,
+        eval_fdr=0.1,
+        deduplication=False,  # RN fails with deduplication = True
+    )
+    _tmp = _format_flashlfq(conf[0])
+
+
+def test_sanity(flashlfq_psms_ds, tmp_path):
     """Run simple sanity checks"""
 
-    mods, scores = mokapot.brew([psms_ondisk], test_fdr=0.1)
+    mods, scores = mokapot.brew([flashlfq_psms_ds], test_fdr=0.1)
     conf = mokapot.assign_confidence(
-        [psms_ondisk],
+        [flashlfq_psms_ds],
         scores_list=scores,
         eval_fdr=0.1,
         deduplication=False,  # RN fails with deduplication = True
@@ -28,7 +63,6 @@ def test_sanity(psms_ondisk, tmp_path):
     assert len(df1.columns) == 7
 
     # TODO needs to be adapted to OnDisk confidence assignment
-    pass
 
 
 def test_basic(mock_conf, tmp_path):
