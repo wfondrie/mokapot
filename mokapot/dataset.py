@@ -157,7 +157,8 @@ class PsmDataset(ABC):
         and peptide groups are levels.
         """
         # In the undocumented reference it is defined like so:
-        # level_columns = [peptides] + modifiedpeptides + precursors + peptidegroups
+        # level_columns = [peptides] + modifiedpeptides + precursors +
+        #     peptidegroups
         raise NotImplementedError
 
     @property
@@ -538,7 +539,8 @@ class LinearPsmDataset(PsmDataset):
             f"\t- Protein confidence estimates enabled: {self.has_proteins}\n"
             f"\t- Target PSMs: {self.targets.sum()}\n"
             f"\t- Decoy PSMs: {(~self.targets).sum()}\n"
-            f"\t- Unique spectra: {len(self.spectra_dataframe.drop_duplicates())}\n"
+            "\t- Unique spectra: "
+            f"{len(self.spectra_dataframe.drop_duplicates())}\n"
             f"\t- Unique peptides: {len(self.peptides.drop_duplicates())}\n"
             f"\t- Features: {self.feature_columns}"
             f"\t- Optional Cols: {self.optional_columns}"

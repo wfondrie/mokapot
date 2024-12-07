@@ -2,7 +2,6 @@
 
 import pytest
 import mokapot
-import numpy as np
 import pandas as pd
 from mokapot.writers.flashlfq import _format_flashlfq
 from mokapot import LinearPsmDataset
