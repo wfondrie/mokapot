@@ -253,9 +253,8 @@ def brew(
 
     preds = [
         update_labels(
-            dataset.reader,
+            dataset,
             score,
-            dataset.target_column,
             test_fdr,
         )
         for dataset, score in zip(datasets, scores)

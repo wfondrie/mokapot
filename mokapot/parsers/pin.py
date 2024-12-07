@@ -35,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 def read_pin(
     pin_files,
-    max_workers,
+    max_workers: int,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
@@ -146,7 +146,7 @@ def read_percolator(
     expmass_column=None,
     rt_column=None,
     charge_column=None,
-):
+) -> OnDiskPsmDataset:
     """
     Read a Percolator tab-delimited file.
 
@@ -161,8 +161,7 @@ def read_percolator(
 
     Returns
     -------
-    pandas.DataFrame
-        A DataFrame of the parsed data.
+    OnDiskPsmDataset
     """
 
     LOGGER.info("Reading %s...", perc_file)
@@ -193,6 +192,7 @@ def read_percolator(
     expmass = find_optional_column(expmass_column, columns, "expmass")
     ret_time = find_optional_column(rt_column, columns, "ret_time")
     charge = find_optional_column(charge_column, columns, "charge_column")
+    # Q: Why isnt `specid` used here?
     spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
 
     # Only add charge to features if there aren't other charge columns:
@@ -306,7 +306,7 @@ def get_rows_from_dataframe(
     idx: Iterable,
     chunk: pd.DataFrame,
     train_psms,
-    dataset: OnDiskPsmDataset,
+    target_column: str,
     file_idx: int,
 ):
     """
@@ -320,8 +320,8 @@ def get_rows_from_dataframe(
         Contains subsets of dataframes that are already extracted.
     chunk : dataframe
         Subset of a dataframe.
-    dataset : OnDiskPsmDataset
-        A collection of PSMs.
+    target_column : str
+        The target column name, expected to be in the dataframe.
     file_idx : the index of the file being searched
 
     Returns
@@ -331,7 +331,7 @@ def get_rows_from_dataframe(
     """
     chunk = convert_targets_column(
         data=chunk,
-        target_column=dataset.target_column,
+        target_column=target_column,
     )
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
@@ -389,6 +389,7 @@ def parse_in_chunks(
         # Note2: Technically the file_idx is not a file but a dataset
         #        index.
         if hasattr(dataset, "reader"):
+            # Handle OnDiskPsmDataset
             reader = dataset.reader
             file_iterator = reader.get_chunked_data_iterator(
                 chunk_size=chunk_size, columns=dataset.columns
@@ -397,12 +398,20 @@ def parse_in_chunks(
             #    in a parallel loop?
             Parallel(n_jobs=max_workers, require="sharedmem")(
                 delayed(get_rows_from_dataframe)(
-                    idx, chunk, train_psms, dataset, file_idx
+                    idx, chunk, train_psms, dataset.target_column, file_idx
                 )
                 for chunk in file_iterator
             )
         else:
-            raise NotImplementedError
+            # Handle LinearPsmDataset
+            chunk = dataset.data
+            get_rows_from_dataframe(
+                idx,
+                chunk,
+                train_psms=train_psms,
+                target_column=dataset.target_column,
+                file_idx=file_idx,
+            )
     train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(concat_and_reindex_chunks)(df=df, orig_idx=orig_idx)
         for df, orig_idx in zip(train_psms, zip(*train_idx))

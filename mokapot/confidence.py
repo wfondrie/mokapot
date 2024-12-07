@@ -49,6 +49,7 @@ from mokapot.tabular_data import TabularDataReader, TabularDataWriter
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 from mokapot.utils import (
     convert_targets_column,
+    strictzip,
 )
 from mokapot.writers.flashlfq import to_flashlfq
 
@@ -112,8 +113,16 @@ class Confidence(object):
         self._metadata_column = dataset.metadata_columns
         self._peptide_column = "peptide"
 
-        self._eval_fdr = eval_fdr
+        self.eval_fdr = eval_fdr
+        self.level_paths = level_paths
+        self.out_writers = out_writers
+        self.write_decoys = write_decoys
+        self.levels = levels
         self.do_rollup = do_rollup
+        self.proteins = proteins
+        self.peps_error = peps_error
+        self.rng = rng
+        self.score_stats = score_stats
 
         if proteins:
             self._write_protein_level_data(level_paths, proteins, rng)
@@ -130,6 +139,25 @@ class Confidence(object):
             score_stats=score_stats,
             eval_fdr=eval_fdr,
         )
+
+    def __repr__(self) -> str:
+        ds_sec = self.dataset.__repr__()
+        ds_sec = "".join([
+            "\t" + x.strip("\n") + "\n" for x in ds_sec.split("\n")
+        ])
+        rep = "Confidence object\n"
+        rep += f"Dataset: \n{ds_sec}"
+        rep += f"Levels: {self.levels}\n"
+        rep += f"Level paths: {self.level_paths}\n"
+        rep += f"Out writers: {self.out_writers}\n"
+        rep += f"Eval FDR: {self.eval_fdr}\n"
+        rep += f"Write decoys: {self.write_decoys}\n"
+        rep += f"Do rollup: {self.do_rollup}\n"
+        rep += f"Proteins: {self.proteins}\n"
+        rep += f"Peps error: {self.peps_error}\n"
+        rep += f"Rng: {self.rng}\n"
+        rep += f"Score stats: {self.score_stats}\n"
+        return rep
 
     def _assign_confidence(
         self,
@@ -222,6 +250,10 @@ class Confidence(object):
     def get_optional_columns(self) -> OptionalColumns:
         return self.dataset.get_optional_columns()
 
+    @property
+    def peptides(self) -> pd.Series:
+        return self.dataset.peptides
+
     def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
         """Save confidenct peptides for quantification with FlashLFQ."""
         return to_flashlfq(self, out_file)
@@ -299,7 +331,7 @@ def assign_confidence(
 
     # just take the first one for info (and make sure the other are the same)
     curr_dataset = datasets[0]
-    file_ext = curr_dataset.reader.get_default_extension()
+    file_ext = curr_dataset.get_default_extension()
     for dataset in datasets[1:]:
         assert dataset.columns == curr_dataset.columns
 
@@ -377,7 +409,7 @@ def assign_confidence(
 
     out = []
 
-    for dataset, score, prefix in zip(datasets, scores_list, prefixes):
+    for dataset, score, prefix in strictzip(datasets, scores_list, prefixes):
         # todo: nice to have: move this column renaming stuff into the
         #   column defs module, and further, have standardized columns
         #   directly from the pin reader (applying the renaming itself)
@@ -401,8 +433,9 @@ def assign_confidence(
 
         level_input_output_column_mapping = {
             in_col: out_col
-            for in_col, out_col in zip(
-                level_input_column_names, level_column_names
+            for in_col, out_col in strictzip(
+                level_input_column_names,
+                level_column_names,
             )
             if in_col is not None
         }
@@ -562,7 +595,7 @@ def create_sorted_file_reader(
         ColumnMappedReader(dataset.reader, input_output_column_mapping),
         score_reader,
     ])
-    input_columns = dataset.metadata_columns + ["score"]
+    input_columns = list(dataset.metadata_columns) + ["score"]
     output_columns = [
         input_output_column_mapping.get(name, name) for name in input_columns
     ]
@@ -573,7 +606,9 @@ def create_sorted_file_reader(
     #  Write those chunks in parallel, where the columns are given
     #  by dataset.metadata plus the "scores" column
 
-    outfile_ext = dataset.reader.file_name.suffix
+    # Q: why does it have to save the temp chunks in the same format?
+    # OLD: outfile_ext = dataset.reader.file_name.suffix
+    outfile_ext = dataset.get_default_extension()
     scores_metadata_paths = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(_save_sorted_metadata_chunks)(
             chunk_metadata,

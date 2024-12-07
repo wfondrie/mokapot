@@ -51,7 +51,9 @@ def find_column(
     found_columns = [c for c in columns if str_compare(c, col)]
 
     if required and len(found_columns) == 0:
-        raise ValueError(f"The column '{col}' was not found.")
+        raise ValueError(
+            f"The column '{col}' was not found. (Options: {columns})"
+        )
 
     if unique:
         if len(found_columns) > 1:

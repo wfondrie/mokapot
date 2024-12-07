@@ -70,7 +70,11 @@ def _format_flashlfq(conf):
     # Do some error checking for the required columns:
     required = ["filename", "calcmass", "rt", "charge"]
 
-    opt_cols = conf.get_optional_columns().as_dict()
+    opt_cols = {
+        k: v
+        for k, v in conf.get_optional_columns().as_dict().items()
+        if v is not None
+    }
     missing = [c for c in required if opt_cols[c] is None]
     if missing:
         missing = ", ".join([c + "_column" for c in missing])
@@ -80,33 +84,51 @@ def _format_flashlfq(conf):
             f"{missing}"
         )
 
-    if conf._has_proteins:
-        proteins = conf._proteins
-    elif conf._protein_column is not None:
-        proteins = conf._protein_column
-    else:
-        proteins = None
+    # TODO: make this work again ...
+    # if conf._has_proteins:
+    #     proteins = conf._proteins
+    # elif conf._protein_column is not None:
+    #     proteins = conf._protein_column
+    # else:
+    #     proteins = None
+    proteins = None
 
     # Get parameters
-    # TODO: make these abstract methods ... I am not a fan of
-    #       pulling directly private properties.
-    peptides = conf.peptides
-    filename_column = opt_cols["filename"]
-    peptide_column = conf._peptide_column
-    mass_column = opt_cols["calcmass"]
-    rt_column = opt_cols["rt"]
-    charge_column = opt_cols["charge"]
-    eval_fdr = conf._eval_fdr
-
+    #### Start
+    # TODO make this streaming for the future.
     # Create FlashLFQ dataframe
-    passing = peptides["mokapot q-value"] <= eval_fdr
 
-    out_df = pd.DataFrame()
-    out_df["File Name"] = peptides.loc[passing, filename_column].apply(
-        lambda x: Path(x).name
+    # OLD: passing = peptides["mokapot q-value"] <= eval_fdr
+    eval_fdr = conf.eval_fdr
+    passing = pd.read_csv(conf.out_writers["peptides"][0].file_name, sep="\t")
+    passing = passing[passing["q-value"] < eval_fdr]
+
+    cols_pull = opt_cols
+    cols_pull["PSMId"] = conf.dataset.specId_column
+    bar = conf.dataset.read_data(columns=list(cols_pull.values()))
+
+    # Rename the columns rn it should have:
+    # ['filename', 'scan', 'calcmass', 'expmass', 'rt', 'charge', 'PSMId']
+    bar = bar.rename(columns={v: k for k, v in cols_pull.items()})
+
+    # Join on the PSMId + col
+    passing = passing.merge(
+        bar,
+        on="PSMId",
+        how="inner",
+        validate="one_to_one",
+        suffixes=("", "_right"),
     )
 
-    seq = peptides.loc[passing, peptide_column]
+    ## Build the output file
+    out_df = pd.DataFrame()
+    out_df["File Name"] = passing["filename"].apply(lambda x: Path(x).name)
+
+    try:
+        seq = passing["peptide"]
+    except KeyError:
+        breakpoint()
+
     base_seq = (
         seq.str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
         .str.replace(r"^.*?\.", "", regex=True)
@@ -115,15 +137,13 @@ def _format_flashlfq(conf):
 
     out_df["Base Sequence"] = base_seq
     out_df["Full Sequence"] = seq
-    out_df["Peptide Monoisotopic Mass"] = peptides.loc[passing, mass_column]
-    out_df["Scan Retention Time"] = peptides.loc[passing, rt_column]
-    out_df["Precursor Charge"] = peptides.loc[passing, charge_column]
+    out_df["Peptide Monoisotopic Mass"] = passing["calcmass"]
+    out_df["Scan Retention Time"] = passing["rt"]
+    out_df["Precursor Charge"] = passing["charge"]
 
     if isinstance(proteins, str):
         # TODO: Add delimiter sniffing.
-        prots = peptides.loc[passing, proteins].str.replace(
-            "\t", "; ", regex=False
-        )
+        prots = passing["proteinIds"].str.replace("\t", "; ", regex=False)
     elif proteins is None:
         prots = ""
     else:
@@ -135,6 +155,11 @@ def _format_flashlfq(conf):
     missing = pd.isna(out_df["Protein Accession"])
     num_missing = missing.sum()
     if num_missing:
+        # TODO: revisit this warning ... it makes little sense to say
+        # they wete not mapped if we are not really mapping them here ...
+        # We could build an inverted index with a fasta file to do a
+        # real mapping. OR just mention that they did not have an associated
+        # ID for proteins.
         LOGGER.warning(
             "- Discarding %i peptides that could not be"
             " mapped to protein groups",

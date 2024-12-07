@@ -212,3 +212,35 @@ def map_columns_to_indices(
             for s in search
         )
     return result
+
+
+def strictzip(*iterables):
+    """Strict zip.
+
+    Backport of zip(strict=True) for pre-3.10 python.
+
+    Derived from: https://peps.python.org/pep-0618/
+    """
+    if not iterables:
+        return
+    iterators = tuple(iter(iterable) for iterable in iterables)
+    try:
+        while True:
+            items = []
+            for iterator in iterators:
+                items.append(next(iterator))
+            yield tuple(items)
+    except StopIteration:
+        pass
+
+    if items:
+        i = len(items)
+        plural = " " if i == 1 else "s 1-"
+        msg = f"zip() argument {i + 1} is shorter than argument{plural}{i}"
+        raise ValueError(msg)
+    sentinel = object()
+    for i, iterator in enumerate(iterators[1:], 1):
+        if next(iterator, sentinel) is not sentinel:
+            plural = " " if i == 1 else "s 1-"
+            msg = f"zip() argument {i + 1} is longer than argument{plural}{i}"
+            raise ValueError(msg)

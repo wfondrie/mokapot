@@ -208,14 +208,15 @@ def test_negative_features(tmp_path, psm_df_1000):
     """Test that best feature selection works."""
 
     def make_pin_file(filename, desc, seed=None):
+        # TODO use the builder function to make this one.
         import numpy as np
 
-        df = psm_df_1000[1].copy()
+        pin, df, fasta, score_cols = psm_df_1000[1].copy()
         if seed is not None:
             np.random.seed(seed)
         scores = df["score"]
         targets = df["target"]
-        df.drop(columns=["score", "score2", "target"], inplace=True)
+        df.drop(columns=score_cols + ["target"], inplace=True)
         df["Label"] = targets * 1
         df["feat"] = scores * (1 if desc else -1)
         df["scannr"] = np.random.randint(0, 1000, 1000)
