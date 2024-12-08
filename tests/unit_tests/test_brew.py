@@ -4,7 +4,7 @@ import copy
 
 import numpy as np
 import pytest
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 import mokapot
 from mokapot import PercolatorModel, Model
@@ -34,10 +34,12 @@ def test_brew_simple_parquet(psms_ondisk_from_parquet, svm):
     assert isinstance(models[0], PercolatorModel)
 
 
-def test_brew_random_forest(psms_ondisk):
+def test_brew_decision_tree(psms_ondisk):
     """Verify there are no dependencies on the SVM."""
     rfm = Model(
-        RandomForestClassifier(),
+        # Changed from RF bc it is faster to run. 2024-12-06
+        # RandomForestClassifier(),
+        DecisionTreeClassifier(min_samples_leaf=10, min_samples_split=20),
         train_fdr=0.1,
     )
     models, scores = mokapot.brew([psms_ondisk], model=rfm, test_fdr=0.1)
