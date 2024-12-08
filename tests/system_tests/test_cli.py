@@ -8,6 +8,7 @@ output, just that the expect outputs are created.
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 import pytest
 
 from ..helpers.cli import run_mokapot_cli
@@ -221,7 +222,9 @@ def test_negative_features(tmp_path, psm_df_1000):
         df.drop(columns=score_cols + ["target"], inplace=True)
         df["Label"] = targets * 1  # Q: what does the *1 do ?
         df["feat"] = scores * (1 if desc else -1)
-        df["scannr"] = np.random.randint(0, 1000, 1000)
+
+        # Why is this re-shuffled?
+        # df["scannr"] = np.random.randint(0, 1000, 1000)
         file = tmp_path / filename
         df.to_csv(file, sep="\t", index=False)
         return file, df
@@ -280,8 +283,17 @@ def test_negative_features(tmp_path, psm_df_1000):
     # Let's check now that the score columns are indeed equal to the
     # normal/negated feature column
 
-    feature_col1 = df1b[df1b.Label == 1].sort_values(by="specid").feat
-    score_col1 = psms_df1b.sort_values(by="PSMId").score
+    # Q: isnt the right behavior to have the scaled version of the data
+    # instead of just the negated feature??
+    sorted_df1b = df1b[df1b.Label == 1].sort_values(by="specid")
+    feature_col1 = sorted_df1b.feat
+    sorted_psms_df1b= psms_df1b.sort_values(by="PSMId")
+    score_col1 = sorted_psms_df1b.score
+    np.testing.assert_equal(
+        # Note, stable was introduced in v2.0.0
+        np.argsort(feature_col1.to_numpy()), # , stable=True),
+        np.argsort(score_col1.to_numpy()) # , stable=True)
+    )
     pd.testing.assert_series_equal(
         score_col1, feature_col1, check_index=False, check_names=False
     )

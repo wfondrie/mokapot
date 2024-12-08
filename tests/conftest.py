@@ -179,7 +179,7 @@ def psm_df_1000_parquet(tmp_path):
 @pytest.fixture
 def psms_dataset(psm_df_1000) -> LinearPsmDataset:
     """A small LinearPsmDataset"""
-    data = _psm_df_rand(500, 500)
+    data = _psm_df_rand(500, 500, share_ids=True)
 
     psms = LinearPsmDataset(
         psms=data.df,
