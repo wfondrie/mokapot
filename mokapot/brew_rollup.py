@@ -25,7 +25,8 @@ def parse_arguments(main_args):
     # todo: we should update this copyright notice asap
     desc = (
         f"mokapot version {__version__}.\n"
-        "Originally written by William E. Fondrie (wfondrie@talus.bio) while in the \n"
+        "Originally written by William E. Fondrie (wfondrie@talus.bio) "
+        "while in the \n"
         "Department of Genome Sciences at the University of Washington.\n\n"
         "Extended by Samia Ben Fredj, Elmar Zander, Vishal Sukumar and \n"
         "Siegfried Gessulat while at MSAID. \n\n"
