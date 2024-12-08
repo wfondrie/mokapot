@@ -597,7 +597,7 @@ class LinearPsmDataset(PsmDataset):
     @property
     def metadata(self):
         """A :py:class:`pandas.DataFrame` of the metadata."""
-        return self.data.loc[:, self._metadata_columns]
+        return self.data.loc[:, self.metadata_columns]
 
     @property
     def features(self):

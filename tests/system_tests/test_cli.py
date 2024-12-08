@@ -211,13 +211,15 @@ def test_negative_features(tmp_path, psm_df_1000):
         # TODO use the builder function to make this one.
         import numpy as np
 
-        pin, df, fasta, score_cols = psm_df_1000[1].copy()
+        pin, df, fasta, score_cols = psm_df_1000
+        df = df.copy()
+
         if seed is not None:
             np.random.seed(seed)
-        scores = df["score"]
+        scores = df[score_cols[0]]
         targets = df["target"]
         df.drop(columns=score_cols + ["target"], inplace=True)
-        df["Label"] = targets * 1
+        df["Label"] = targets * 1  # Q: what does the *1 do ?
         df["feat"] = scores * (1 if desc else -1)
         df["scannr"] = np.random.randint(0, 1000, 1000)
         file = tmp_path / filename

@@ -26,7 +26,7 @@ def set_logging(caplog):
 
 
 @pytest.fixture(scope="session")
-def psm_df_6():
+def psm_df_6() -> pd.DataFrame:
     """A DataFrame containing 6 PSMs"""
     data = {
         "target": [True, True, True, False, False, False],
@@ -52,7 +52,8 @@ def _psm_df_rand(
     ndecoys: int,
     pct_real: float = 0.4,
     score_diffs: list[float] = [3.0],
-) -> tuple[pd.DataFrame, np.random.Generator, list[str]]:
+    share_ids: bool = False,
+) -> MockPsmDataframe:
     """A DataFrame with 100 PSMs."""
     rng = np.random.Generator(np.random.PCG64(42))
     score_cols = ["score" + str(i) for i in range(len(score_diffs))]
@@ -94,6 +95,13 @@ def _psm_df_rand(
     for n, d in zip(score_cols, score_diffs):
         decoys[n] = rng.normal(size=len(decoys))
 
+    if share_ids:
+        assert len(targets) == len(decoys), "Sharing ids requires equal number"
+        # targets["specid"] = decoys["specid"] Spec ID has to be different now.
+        targets["spectrum"] = np.arange(ntargets)
+        decoys["spectrum"] = np.arange(ndecoys)
+        decoys["scannr"] = targets["scannr"]
+
     df = pd.concat([targets, decoys])
     target_peptides = targets["peptide"].to_list()
     decoy_peptides = decoys["peptide"].to_list()
@@ -134,9 +142,9 @@ def psm_df_100_parquet(tmp_path) -> Path:
 
 
 @pytest.fixture()
-def psm_df_1000(tmp_path) -> tuple[Path, pd.DataFrame, Path]:
+def psm_df_1000(tmp_path) -> tuple[Path, pd.DataFrame, Path, list[str]]:
     """A DataFrame with 1000 PSMs from 500 spectra and a FASTA file."""
-    data = _psm_df_rand(500, 500, score_diffs=[3.0])
+    data = _psm_df_rand(500, 500, score_diffs=[3.0, 3.0], share_ids=True)
     df, _rng, score_cols, fasta_data = (
         data.df,
         data.rng,
@@ -158,27 +166,27 @@ def psm_df_1000_parquet(tmp_path):
     """A DataFrame with 1000 PSMs from 500 spectra and a FASTA file."""
     # Q: is this docstring accurate? It seems to me that it is 1k psms
     #    from 1k spectra
-    data = _psm_df_rand(500, 500)
+    data = _psm_df_rand(500, 500, score_diffs=[3.0, 3.0], share_ids=True)
     fasta = tmp_path / "test_1000.fasta"
     with open(fasta, "w+") as fasta_ref:
         fasta_ref.write(data.fasta_string)
 
     pf = tmp_path / "test.parquet"
-    data.df.drop(columns=["score", "score2"]).to_parquet(pf, index=False)
+    data.df.drop(columns=data.score_cols).to_parquet(pf, index=False)
     return pf, data.df, fasta
 
 
 @pytest.fixture
-def psms_dataset(psm_df_1000):
+def psms_dataset(psm_df_1000) -> LinearPsmDataset:
     """A small LinearPsmDataset"""
-    df, rng, score_cols = _psm_df_rand(500, 500)
+    data = _psm_df_rand(500, 500)
 
     psms = LinearPsmDataset(
-        psms=df,
+        psms=data.df,
         target_column="target",
         spectrum_columns="spectrum",
         peptide_column="peptide",
-        feature_columns=score_cols,
+        feature_columns=data.score_cols,
         filename_column="filename",
         scan_column="spectrum",
         calcmass_column="calcmass",
@@ -191,7 +199,7 @@ def psms_dataset(psm_df_1000):
 
 
 @pytest.fixture
-def psms_ondisk():
+def psms_ondisk() -> OnDiskPsmDataset:
     """A small OnDiskPsmDataset"""
     filename = Path("data", "scope2_FP97AA.pin")
     df_spectra = pd.read_csv(
@@ -199,6 +207,7 @@ def psms_ondisk():
         sep="\t",
         usecols=["ScanNr", "ExpMass", "Label"],
     )
+    # Q: why is the exp mass in the spectra dataframe?
     with open(filename) as perc:
         columns = perc.readline().rstrip().split("\t")
     psms = OnDiskPsmDataset(
@@ -248,7 +257,7 @@ def psms_ondisk():
 
 
 @pytest.fixture
-def psms_ondisk_from_parquet():
+def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
     """A small OnDiskPsmDataset"""
     filename = Path("data") / "10k_psms_test.parquet"
     df_spectra = pq.read_table(
