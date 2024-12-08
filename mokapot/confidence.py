@@ -11,10 +11,10 @@ estimates for the various relevant levels (i.e. PSMs, peptides, and proteins).
 The :py:func:`Confidence` class is appropriate for most data-dependent
 acquisition proteomics datasets.
 
-We recommend using the :py:func:`~mokapot.brew()` function or the
-:py:meth:`~mokapot.PsmDataset.assign_confidence()` method to obtain these
+We recommend using the :py:func:`~mokapot.brew()` function to obtain these
 confidence estimates, rather than initializing the classes below directly.
 """
+
 import logging
 from contextlib import contextmanager
 from pathlib import Path
@@ -27,7 +27,7 @@ from typeguard import typechecked
 
 from mokapot.column_defs import get_standard_column_name
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
-from mokapot.dataset import OnDiskPsmDataset
+from mokapot.dataset import PsmDataset, OptionalColumns
 from mokapot.peps import (
     peps_from_scores,
     TDHistData,
@@ -49,7 +49,9 @@ from mokapot.tabular_data import TabularDataReader, TabularDataWriter
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 from mokapot.utils import (
     convert_targets_column,
+    strictzip,
 )
+from mokapot.writers.flashlfq import to_flashlfq
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +63,7 @@ class Confidence(object):
 
     def __init__(
         self,
-        dataset: OnDiskPsmDataset,
+        dataset: PsmDataset,
         levels: list[str],
         level_paths: dict[str, Path],
         out_writers: dict[str, Sequence[TabularDataWriter]],
@@ -104,17 +106,26 @@ class Confidence(object):
             Save decoys confidence estimates as well?
         """
 
+        self.dataset = dataset
         self._score_column = "score"
         self._target_column = dataset.target_column
         self._protein_column = "proteinIds"
         self._metadata_column = dataset.metadata_columns
         self._peptide_column = "peptide"
 
-        self._eval_fdr = eval_fdr
+        self.eval_fdr = eval_fdr
+        self.level_paths = level_paths
+        self.out_writers = out_writers
+        self.write_decoys = write_decoys
+        self.levels = levels
         self.do_rollup = do_rollup
+        self.proteins = proteins
+        self.peps_error = peps_error
+        self.rng = rng
+        self.score_stats = score_stats
 
         if proteins:
-            self.write_protein_level_data(level_paths, proteins, rng)
+            self._write_protein_level_data(level_paths, proteins, rng)
 
         self._assign_confidence(
             levels=levels,
@@ -128,6 +139,25 @@ class Confidence(object):
             score_stats=score_stats,
             eval_fdr=eval_fdr,
         )
+
+    def __repr__(self) -> str:
+        ds_sec = self.dataset.__repr__()
+        ds_sec = "".join([
+            "\t" + x.strip("\n") + "\n" for x in ds_sec.split("\n")
+        ])
+        rep = "Confidence object\n"
+        rep += f"Dataset: \n{ds_sec}"
+        rep += f"Levels: {self.levels}\n"
+        rep += f"Level paths: {self.level_paths}\n"
+        rep += f"Out writers: {self.out_writers}\n"
+        rep += f"Eval FDR: {self.eval_fdr}\n"
+        rep += f"Write decoys: {self.write_decoys}\n"
+        rep += f"Do rollup: {self.do_rollup}\n"
+        rep += f"Proteins: {self.proteins}\n"
+        rep += f"Peps error: {self.peps_error}\n"
+        rep += f"Rng: {self.rng}\n"
+        rep += f"Score stats: {self.score_stats}\n"
+        return rep
 
     def _assign_confidence(
         self,
@@ -196,7 +226,7 @@ class Confidence(object):
 
             level_path.unlink(missing_ok=True)
 
-    def write_protein_level_data(self, level_paths, proteins, rng):
+    def _write_protein_level_data(self, level_paths, proteins, rng):
         psms = TabularDataReader.from_path(level_paths["psms"]).read()
         proteins = picked_protein(
             psms,
@@ -217,11 +247,22 @@ class Confidence(object):
         protein_writer.write(proteins)
         LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
 
+    def get_optional_columns(self) -> OptionalColumns:
+        return self.dataset.get_optional_columns()
+
+    @property
+    def peptides(self) -> pd.Series:
+        return self.dataset.peptides
+
+    def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
+        """Save confidenct peptides for quantification with FlashLFQ."""
+        return to_flashlfq(self, out_file)
+
 
 # Functions -------------------------------------------------------------------
 @typechecked
 def assign_confidence(
-    datasets: list[OnDiskPsmDataset],
+    datasets: list[PsmDataset],
     scores_list: list[np.ndarray[float]],
     max_workers: int = 1,
     eval_fdr=0.01,
@@ -239,7 +280,7 @@ def assign_confidence(
     qvalue_algorithm="tdc",
     sqlite_path=None,
     stream_confidence=False,
-):
+) -> list[Confidence]:
     """Assign confidence to PSMs peptides, and optionally, proteins.
 
     Parameters
@@ -248,7 +289,8 @@ def assign_confidence(
     datasets : list[OnDiskPsmDataset]
         A collection of PSMs.
     scores_list : list[numpy.ndarray]
-        The scores by which to rank the PSMs.
+        The scores by which to rank the PSMs. Usually derived from
+        `mokapot.brew`
     rng : int or np.random.Generator, optional
         A seed or generator used for cross-validation split creation and to
         break ties, or ``None`` to use the default random number generator
@@ -277,8 +319,11 @@ def assign_confidence(
 
     Returns
     -------
-    None
+    list[Confidence]
     """
+
+    # Note: I am really not a big fan of how large this function is ...
+    # JSPP 2024-12-05
     is_sqlite = sqlite_path is not None
 
     if dest_dir is None:
@@ -286,7 +331,7 @@ def assign_confidence(
 
     # just take the first one for info (and make sure the other are the same)
     curr_dataset = datasets[0]
-    file_ext = curr_dataset.reader.get_default_extension()
+    file_ext = curr_dataset.get_default_extension()
     for dataset in datasets[1:]:
         assert dataset.columns == curr_dataset.columns
 
@@ -359,10 +404,16 @@ def assign_confidence(
             writer.initialize()
         return writer
 
-    for dataset, score, prefix in zip(datasets, scores_list, prefixes):
+    if prefixes is None:
+        prefixes = [None] * len(datasets)
+
+    out = []
+
+    for dataset, score, prefix in strictzip(datasets, scores_list, prefixes):
         # todo: nice to have: move this column renaming stuff into the
         #   column defs module, and further, have standardized columns
         #   directly from the pin reader (applying the renaming itself)
+
         level_column_names = [
             "PSMId",
             dataset.target_column,
@@ -382,9 +433,11 @@ def assign_confidence(
 
         level_input_output_column_mapping = {
             in_col: out_col
-            for in_col, out_col in zip(
-                level_input_column_names, level_column_names
+            for in_col, out_col in strictzip(
+                level_input_column_names,
+                level_column_names,
             )
+            if in_col is not None
         }
 
         file_prefix = file_root
@@ -438,13 +491,14 @@ def assign_confidence(
             )
             type_map = sorted_file_reader.get_schema(as_dict=True)
             level_column_types = [
-                type_map[name] for name in level_column_names
+                type_map[name]
+                for name in level_input_output_column_mapping.values()
             ]
 
             level_writers = {
                 level: TabularDataWriter.from_suffix(
                     level_data_path[level],
-                    columns=level_column_names,
+                    columns=list(level_input_output_column_mapping.values()),
                     column_types=level_column_types,
                     buffer_size=CONFIDENCE_CHUNK_SIZE,
                     buffer_type=BufferType.Dicts,
@@ -476,7 +530,8 @@ def assign_confidence(
                             continue
                         seen_level_entities[level].add(psm_hash)
                     out_row = {
-                        col: data_row[col] for col in level_column_names
+                        col: data_row[col]
+                        for col in level_input_output_column_mapping.values()
                     }
                     level_writers[level].append_data(out_row)
                     score_stats.update_single(data_row["score"])
@@ -498,7 +553,7 @@ def assign_confidence(
                 else:
                     LOGGER.info(f"\t- Found {count} unique {level}.")
 
-        Confidence(
+        con = Confidence(
             dataset=dataset,
             levels=levels_or_proteins,
             level_paths=level_data_path,
@@ -514,14 +569,17 @@ def assign_confidence(
             stream_confidence=stream_confidence,
             score_stats=score_stats,
         )
+        out.append(con)
         if not prefix:
             append_to_output_file = True
+
+    return out
 
 
 @contextmanager
 @typechecked
 def create_sorted_file_reader(
-    dataset: OnDiskPsmDataset,
+    dataset: PsmDataset,
     score_reader: TabularDataReader,
     dest_dir: Path,
     file_prefix: str,
@@ -537,7 +595,7 @@ def create_sorted_file_reader(
         ColumnMappedReader(dataset.reader, input_output_column_mapping),
         score_reader,
     ])
-    input_columns = dataset.metadata_columns + ["score"]
+    input_columns = list(dataset.metadata_columns) + ["score"]
     output_columns = [
         input_output_column_mapping.get(name, name) for name in input_columns
     ]
@@ -548,7 +606,9 @@ def create_sorted_file_reader(
     #  Write those chunks in parallel, where the columns are given
     #  by dataset.metadata plus the "scores" column
 
-    outfile_ext = dataset.reader.file_name.suffix
+    # Q: why does it have to save the temp chunks in the same format?
+    # OLD: outfile_ext = dataset.reader.file_name.suffix
+    outfile_ext = dataset.get_default_extension()
     scores_metadata_paths = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(_save_sorted_metadata_chunks)(
             chunk_metadata,
@@ -601,7 +661,14 @@ def _save_sorted_metadata_chunks(
     if deduplication_columns is not None:
         # This is not strictly necessary, as we deduplicate also afterwards,
         # but speeds up the process
-        chunk_metadata.drop_duplicates(deduplication_columns, inplace=True)
+        try:
+            chunk_metadata.drop_duplicates(deduplication_columns, inplace=True)
+        except KeyError as e:
+            msg = "Duplication error in the following columns: "
+            msg += str(deduplication_columns)
+            msg += f". Found: {chunk_metadata.columns} "
+            msg += ". Please check the input data."
+            raise KeyError(msg) from e
 
     chunk_writer = TabularDataWriter.from_suffix(
         chunk_write_path,

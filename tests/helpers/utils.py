@@ -74,14 +74,21 @@ class FileCheck:
             success message string.
         """
         path = Path(dir_path, ext_path)
+        dir_contents = [str(x.name) for x in path.parent.rglob("*")]
         if min is not None and min <= 0:
             if path.is_file():
-                return False, f"File `{ext_path}` does not exist (but it did)"
+                msg = f"File `{ext_path}` does not exist (but it did)"
+                msg += " Found files: " + "\n ".join(dir_contents)
+                return False, msg
             else:
-                return True, f"File `{ext_path}` does not exist as it should"
+                msg = f"File `{ext_path}` does not exist as it should"
+                msg += " Found files: " + "\n ".join(dir_contents)
+                return True, msg
 
         if not path.is_file():
-            return False, f"File `{ext_path}` exists (but it didn't)"
+            msg = f"File `{ext_path}` does not exist"
+            msg += " Found files: " + "\n ".join(dir_contents)
+            return False, msg
 
         if min is not None:
             line_count = count_lines(path)

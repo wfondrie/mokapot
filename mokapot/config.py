@@ -67,8 +67,8 @@ def _parser():
         type=Path,
         nargs="+",
         help=(
-            "A collection of PSMs in the Percolator tab-delimited or PepXML "
-            "format."
+            "A collection of PSMs in the Percolator tab-delimited "
+            "or PepXML format."
         ),
     )
 
@@ -152,8 +152,7 @@ def _parser():
         default=False,
         action="store_true",
         help=(
-            "Remove methionine residues that occur"
-            " at the protein N-terminus.",
+            "Remove methionine residues that occur at the protein N-terminus."
         ),
     )
 
@@ -208,14 +207,14 @@ def _parser():
         "--max_iter",
         default=10,
         type=int,
-        help=("The number of iterations to use for training."),
+        help="The number of iterations to use for training.",
     )
 
     parser.add_argument(
         "--seed",
         type=int,
         default=1,
-        help=("An integer to use as the random seed."),
+        help="An integer to use as the random seed.",
     )
 
     parser.add_argument(
@@ -260,8 +259,8 @@ def _parser():
         default=False,
         action="store_true",
         help=(
-            "Use the learned model even if it performs worse "
-            "than the best feature."
+            "Use the learned model even if it performs worse"
+            " than the best feature."
         ),
     )
 
@@ -269,7 +268,7 @@ def _parser():
         "--save_models",
         default=False,
         action="store_true",
-        help=("Save the models learned by mokapot as pickled Python objects."),
+        help="Save the models learned by mokapot as pickled Python objects.",
     )
 
     parser.add_argument(
@@ -286,21 +285,21 @@ def _parser():
         "--keep_decoys",
         default=False,
         action="store_true",
-        help=("Keep the decoys in the output .txt files"),
+        help="Keep the decoys in the output .txt files",
     )
 
     parser.add_argument(
         "--skip_deduplication",
         default=False,
         action="store_true",
-        help=("Keep deduplication of psms wrt scan number and expMass."),
+        help="Keep deduplication of psms wrt scan number and expMass.",
     )
 
     parser.add_argument(
         "--skip_rollup",
         default=False,
         action="store_true",
-        help=("Don't do the rollup to peptide (or other) levels."),
+        help="Don't do the rollup to peptide (or other) levels.",
     )
 
     parser.add_argument(
@@ -399,13 +398,13 @@ def _parser():
         "--stream_confidence",
         default=False,
         action="store_true",
-        help=("Specify whether confidence assignment shall be streamed."),
+        help="Specify whether confidence assignment shall be streamed.",
     )
 
     return parser
 
 
-def _process_line(line, width, indent):
+def _process_line(line: str, width: int, indent: str) -> str:
     line = textwrap.fill(
         line,
         width,

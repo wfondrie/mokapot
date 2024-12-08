@@ -54,11 +54,12 @@ def test_basic_cli(tmp_path, scope_files):
 
 def test_cli_options(tmp_path, scope_files):
     """Test non-defaults"""
+    files_use = scope_files[0:2]
+    file_root = "blah"
     params = [
-        scope_files[0],
-        scope_files[1],
+        [str(f) for f in files_use],
         ("--dest_dir", tmp_path),
-        ("--file_root", "blah"),
+        ("--file_root", file_root),
         ("--train_fdr", "0.2"),
         ("--test_fdr", "0.1"),
         ("--seed", "100"),
@@ -69,10 +70,11 @@ def test_cli_options(tmp_path, scope_files):
         "--keep_decoys",
         ("--subset_max_train", "50000"),
         ("--max_workers", "3"),
+        ("--verbosity", "3"),
     ]
 
     run_mokapot_cli(params)
-    filebase = ["blah." + f.name.split(".")[0] for f in scope_files[0:2]]
+    filebase = [f"{file_root}." + f.name.split(".")[0] for f in files_use]
 
     assert file_approx_len(tmp_path, f"{filebase[0]}.targets.psms.csv", 5490)
     assert file_approx_len(
@@ -206,15 +208,18 @@ def test_negative_features(tmp_path, psm_df_1000):
     """Test that best feature selection works."""
 
     def make_pin_file(filename, desc, seed=None):
+        # TODO use the builder function to make this one.
         import numpy as np
 
-        df = psm_df_1000[1].copy()
+        pin, df, fasta, score_cols = psm_df_1000
+        df = df.copy()
+
         if seed is not None:
             np.random.seed(seed)
-        scores = df["score"]
+        scores = df[score_cols[0]]
         targets = df["target"]
-        df.drop(columns=["score", "score2", "target"], inplace=True)
-        df["Label"] = targets * 1
+        df.drop(columns=score_cols + ["target"], inplace=True)
+        df["Label"] = targets * 1  # Q: what does the *1 do ?
         df["feat"] = scores * (1 if desc else -1)
         df["scannr"] = np.random.randint(0, 1000, 1000)
         file = tmp_path / filename

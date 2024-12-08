@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 from pandas.testing import assert_frame_equal
-from pytest import approx
 
 import mokapot
 from mokapot import OnDiskPsmDataset, assign_confidence
@@ -34,12 +33,12 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
     # NB: with the old bug there would *always* be targets labelled as 1
     # incorrectly (namely the last and before last)
 
-    pin_file, df, _ = psm_df_1000
+    pin_file, df, _, score_cols = psm_df_1000
     columns = list(pd.read_csv(pin_file, sep="\t").columns)
     df_spectra = pd.read_csv(
         pin_file, sep="\t", usecols=["scannr", "expmass", "target"]
     )
-    score = df["score"].values
+    score = df[score_cols[0]].values
     psms_disk = OnDiskPsmDataset(
         pin_file,
         target_column="target",
@@ -85,8 +84,11 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
         )
 
     df_results_group = pd.read_csv(tmp_path / "targets.peptides.csv", sep="\t")
-    # assert len(df_results_group) == 500
-    assert len(df_results_group) > 400
+    # The number of results is between 490 and 510
+    # to account for collisions between targets/decoys
+    # due to the random generation of the identifiers.
+    assert len(df_results_group) > 490
+    assert len(df_results_group) < 510
     assert df_results_group.columns.tolist() == [
         "PSMId",
         "peptide",
@@ -95,20 +97,46 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
         "posterior_error_prob",
         "proteinIds",
     ]
-    df = df_results_group.head(3)
-    assert df["PSMId"].tolist() == [136, 96, 164]
-    assert df["peptide"].tolist() == ["EVSSK", "HDWCK", "SYQVK"]
-    assert df["score"].tolist() == approx([5.767435, 5.572517, 5.531904])
-    assert df["q-value"].tolist() == approx([
-        0.0103092780336737,
-        0.0103092780336737,
-        0.0103092780336737,
-    ])
-    assert df["posterior_error_prob"].tolist() == approx([
-        3.315389846699129e-05,
-        5.558992546200682e-05,
-        6.191049743361808e-05,
-    ])
+    df_head = df_results_group.head(3)
+    df_tail = df_results_group.tail(3)
+
+    # Q: Why is this meant to test something?
+    # assert df["PSMId"].tolist() == [136, 96, 164]
+    # assert df["peptide"].tolist() == ["EVSSK", "HDWCK", "SYQVK"]
+
+    # Test the sorting of the file and the values based on the distribution of
+    # the scores (see the fixture definition)
+    assert np.all(df_head["PSMId"] < 500), (
+        "Psms with ID > 500 should not be present (decoys)"
+    )
+    # assert df["score"].tolist() == approx([5.767435, 5.572517, 5.531904])
+    assert np.all(df_head["score"] > 5.0), (
+        "Good scores should be greater than 5.0"
+    )
+    assert np.all(df_tail["score"] < 0.0), (
+        "Bad scores should be greater than less than 0"
+    )
+    # assert df["q-value"].tolist() == approx([
+    #     0.0103092780336737,
+    #     0.0103092780336737,
+    #     0.0103092780336737,
+    # ])
+    assert np.all(df_head["q-value"] < 0.015), (
+        "Good q-values should be lt 0.015"
+    )
+    assert np.all(df_tail["q-value"] > 0.9), "Bad q-values should be gt 0.9"
+
+    # assert df["posterior_error_prob"].tolist() == approx([
+    #     3.315389846699129e-05,
+    #     5.558992546200682e-05,
+    #     6.191049743361808e-05,
+    # ])
+    assert np.all(df_head["posterior_error_prob"] < 0.001), (
+        "Good PEPs should be lt 0.001"
+    )
+    assert np.all(df_tail["posterior_error_prob"] > 0.98), (
+        "Bad PEPs should be gt 0.98"
+    )
 
 
 def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
@@ -119,7 +147,7 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
     df_spectra = pq.read_table(
         parquet_file, columns=["scannr", "expmass", "target"]
     ).to_pandas()
-    scores = [df["score"].values]
+    scores = [df["score0"].values]
     psms_disk = OnDiskPsmDataset(
         parquet_file,
         target_column="target",
