@@ -43,5 +43,9 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
+      - name: Set up Docker Buildx
+        if: runner.os == 'Linux'
+        uses: docker/setup-buildx-action@v3
       - name: Check Build
+        if: runner.os == 'Linux'
         run: make build
