@@ -287,12 +287,12 @@ def test_negative_features(tmp_path, psm_df_1000):
     # instead of just the negated feature??
     sorted_df1b = df1b[df1b.Label == 1].sort_values(by="specid")
     feature_col1 = sorted_df1b.feat
-    sorted_psms_df1b= psms_df1b.sort_values(by="PSMId")
+    sorted_psms_df1b = psms_df1b.sort_values(by="PSMId")
     score_col1 = sorted_psms_df1b.score
     np.testing.assert_equal(
         # Note, stable was introduced in v2.0.0
-        np.argsort(feature_col1.to_numpy()), # , stable=True),
-        np.argsort(score_col1.to_numpy()) # , stable=True)
+        np.argsort(feature_col1.to_numpy()),  # , stable=True),
+        np.argsort(score_col1.to_numpy()),  # , stable=True)
     )
     pd.testing.assert_series_equal(
         score_col1, feature_col1, check_index=False, check_names=False
