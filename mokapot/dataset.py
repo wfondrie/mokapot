@@ -593,17 +593,6 @@ class OnDiskPsmDataset(PsmDataset):
 
         return best_feat, best_positives, new_labels, best_desc
 
-    def update_labels(self, scores, target_column, eval_fdr=0.01, desc=True):
-        df = self.read_data(columns=target_column)
-        if target_column:
-            df = utils.convert_targets_column(df, target_column)
-        return _update_labels(
-            scores=scores,
-            targets=df[target_column],
-            eval_fdr=eval_fdr,
-            desc=desc,
-        )
-
     @staticmethod
     def _hash_row(x: np.ndarray) -> int:
         """
