@@ -382,6 +382,7 @@ def assign_confidence(
 
     @typechecked
     def create_output_writer(path: Path, level: str, initialize: bool):
+        # Note: This method does not create a writer, it writes the data.
         if level == "proteins":
             output_columns = output_column_names_proteins
         else:

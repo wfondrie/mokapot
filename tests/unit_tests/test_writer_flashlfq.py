@@ -18,9 +18,55 @@ EXPECTED_COLS = {
 }
 
 
+def is_flashlfq_df(df):
+    """Check if the df is a valid FlashLFQ input.
+
+    https://github.com/smith-chem-wisc/FlashLFQ/wiki/Identification-Input-Formats
+
+    - File Name - With or without file extension (e.g. MyFile or MyFile.mzML)
+    - Base Sequence - Should only contain an amino acid sequence
+      (e.g., PEPTIDE and not PEPT[Phosphorylation]IDE
+    - Full Sequence - Modified sequence. Can contain any characters
+      (e.g., PEPT[Phosphorylation]IDE is fine), but must be consistent between
+      the same peptidoform to get accurate results
+    - Peptide Monoisotopic Mass - Theoretical monoisotopic mass,
+      including modification mass
+    - Scan Retention Time - MS/MS identification scan retention time in minutes
+    - Precursor Charge - Charge of the ion selected for MS/MS resulting in the
+      identification. Use the number only (e.g., "3" and not "+3")
+    - Protein Accession - Protein accession(s) for the peptide.
+      It is important to list all of the parent protein options
+      if you want the "shared peptides" to be accurate.
+      Use the semicolon (;) to delimit different proteins.
+    """
+    # File Name	Scan Retention Time	Precursor Charge	Base Sequence
+    # Full Sequence	Peptide Monoisotopic Mass	Protein Accession
+    EXPECTED_COLS = {
+        "File Name": str,
+        "Base Sequence": str,
+        "Full Sequence": str,
+        "Peptide Monoisotopic Mass": float,
+        "Scan Retention Time": float,
+        "Precursor Charge": int,
+        "Protein Accession": str,
+    }
+    for col, coltype in EXPECTED_COLS.items():
+        assert col in df.columns, f"Column {col} not found in input"
+        assert isinstance(
+            df[col].iloc[0], coltype
+        ), f"Column {col} is not {coltype}"
+
+    # Check that the base sequence matches the pattern [A-Z]+
+    assert (
+        df["Base Sequence"].str.match("[A-Z]+").all()
+    ), "Base sequence must only contain amino acids"
+
+    return True
+
+
 @pytest.fixture
 def flashlfq_psms_ds(psm_df_builder):
-    """A small OnDiskPsmDataset"""
+    """A small-ish PSM dataset"""
     data = psm_df_builder(1000, 1000, score_diffs=[5.0])
     psms = LinearPsmDataset(
         psms=data.df,

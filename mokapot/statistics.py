@@ -3,6 +3,7 @@ from collections import namedtuple
 
 import numpy as np
 from typeguard import typechecked
+from dataclasses import dataclass
 
 SummaryStatistics = namedtuple(
     "SummaryStatistics", ("n", "min", "max", "sum", "mean", "var", "sd")
@@ -10,47 +11,30 @@ SummaryStatistics = namedtuple(
 
 
 @typechecked
+@dataclass(slots=True)
 class OnlineStatistics:
-    """
-    @class Statistics:
-        A class for performing basic statistical calculations.
+    """A class for performing basic statistical calculations.
 
-    @attribute min:
+    Parameters
+    ----------
+    min : float
         The minimum value encountered so far. Initialized to positive infinity.
-
-    @attribute max:
+    max : float
         The maximum value encountered so far. Initialized to negative infinity.
-
-    @attribute n:
+    n : int
         The number of values encountered so far. Initialized to 0.
-
-    @attribute sum:
+    sum : float
         The sum of all values encountered so far. Initialized to 0.0.
-
-    @attribute mean:
-        The mean value calculated based on the encountered values. Initialized
-        to 0.0.
-
-    @attribute var:
-        The variance value calculated based on the encountered values.
+    mean : float
+        The mean value calculated based on the encountered values. Initialized to 0.0.
+    var : float
+        The variance value calculated based on the encountered values. Initialized to 0.0.
+    sd : float
+        The standard deviation value calculated based on the encountered values.
         Initialized to 0.0.
+    M2n : float
+        The intermediate value used in calculating variance. Initialized to 0.0.
 
-    @attribute sd:
-        The standard deviation value calculated based on the encountered
-        values. Initialized to 0.0.
-
-    @attribute M2n:
-        The intermediate value used in calculating variance. Initialized to
-        0.0.
-
-    @method update(vals: np.ndarray):
-        Updates the statistics with an array of values.
-
-    Args:
-        vals (np.ndarray): An array of values to update the statistics.
-
-    Returns:
-        None.
     """
 
     min: float = math.inf
@@ -61,6 +45,7 @@ class OnlineStatistics:
 
     M2n: float = 0.0
     ddof: float = 1.0
+    unbiased: bool = True
 
     @property
     def var(self) -> float:
@@ -70,13 +55,13 @@ class OnlineStatistics:
     def sd(self) -> float:
         return math.sqrt(self.var)
 
-    def __init__(self, unbiased: bool = True):
-        if unbiased:
-            self.ddof = 1  # Use unbiased variance estimator
+    def __post_init__(self):
+        if self.unbiased:
+            # Use unbiased variance estimator
+            self.ddof = 1
         else:
-            self.ddof = (
-                0  # Use maximum likelihood (best L2) variance estimator
-            )
+            # Use maximum likelihood (best L2) variance estimator
+            self.ddof = 0
 
     def update(self, vals: np.ndarray) -> None:
         """
