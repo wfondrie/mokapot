@@ -230,8 +230,8 @@ class Model:
         feat_names = dataset.features.columns.tolist()
         if set(feat_names) != set(self.features):
             raise ValueError(
-                "Features of the input data do not match the "
-                "features of this Model."
+                "Features of the input data do not "
+                "match the features of this Model."
             )
 
         feat = self.scaler.transform(
@@ -325,7 +325,6 @@ class Model:
 
             if num_passed[i] == 0:
                 raise RuntimeError("Model performs worse after training.")
-
 
         # If the model performs worse than what was initialized:
         if (

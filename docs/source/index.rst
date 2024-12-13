@@ -41,7 +41,7 @@ Introduction
 
 Nearly every analysis of a bottom-up proteomics begins by using a search engine
 to assign putative peptides to the acquired mass spectra, yielding a collection
-of peptide-spectrum matches (PSMs). However, post-processing tools such as   
+of peptide-spectrum matches (PSMs). However, post-processing tools such as
 `Percolator <http://percolator.ms>`_ and `PeptideProphet
 <http://peptideprophet.sourceforge.net/>`_ have proven invaluable for improving
 the sensitivity of peptide detection and providing consistent statistical
@@ -56,7 +56,7 @@ while retaining valid, per-experiment confidence estimates. We designed mokapot
 to be extensible and support the analysis of additional types of proteomics
 data, such as cross-linked peptides from cross-linking mass spectrometry
 experiments. mokapot offers basic functionality from the command line, but using
-mokapot as a Python package unlocks maximum flexibility. 
+mokapot as a Python package unlocks maximum flexibility.
 
 Ready to try mokapot for your analyses? See below for details on how to install
 and use mokapot. Additionally, check out the :doc:`vignettes/index` for other
@@ -76,7 +76,7 @@ installed. If you think it may be installed, you can check with:
 If you need to install Python, we recommend using the `Anaconda Python
 distribution <https://www.anaconda.com/products/individual>`_. This distribution
 comes with most of the mokapot dependencies installed and provides the conda
-package manager.  
+package manager.
 
 mokapot also depends on several Python packages:
 
@@ -136,7 +136,7 @@ tab-delimited files, `mokapot.psms.txt` and `mokapot.peptides.txt`. For a full
 list of parameters, see the :doc:`Command Line Interface <cli>`.
 
 
-Use **mokapot** as a Python package 
+Use **mokapot** as a Python package
 ###################################
 
 It is easy to run the above analysis from the Python interpreter as well. First
@@ -175,7 +175,7 @@ question, someone else has a similar one.
        for large-scale phosphoproteomics." Nature communications 9.1 (2018):
        1-13.
 
- 
+
 .. toctree::
    :hidden:
    :maxdepth: 1

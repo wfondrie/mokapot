@@ -105,7 +105,7 @@ def test_model_predict(psms_dataset):
 
     # The case where a model is trained on a dataset with different features:
     psms_dataset._data["blah"] = np.random.randn(len(psms_dataset))
-    psms_dataset._feature_columns = ("score", "blah")
+    psms_dataset._feature_columns = ("score0", "blah")
     with pytest.raises(ValueError):
         model.predict(psms_dataset)
 
