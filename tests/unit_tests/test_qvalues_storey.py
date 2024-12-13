@@ -3,8 +3,7 @@ import json
 import numpy as np
 from pytest import approx
 
-from mokapot.qvalues_storey import empirical_pvalues, estimate_pi0
-from qvalues_storey import qvalues
+from mokapot.qvalues_storey import empirical_pvalues, estimate_pi0, qvalues
 
 
 def test_empirical_pvalues():
