@@ -87,7 +87,8 @@ def count_larger(pvals, lambdas):
     -------
     cumulative_counts : ndarray
         Array of cumulative counts, where each element corresponds to the count
-        of `pvals` that are greater than or equal to the corresponding value in `lambdas`.
+        of `pvals` that are greater than or equal to the corresponding value in
+        `lambdas`.
     """
     assert np.all(lambdas[1:] > lambdas[:-1])
     bin_edges = np.append(lambdas, np.inf)
@@ -145,7 +146,6 @@ def estimate_pi0(
     """
     N = len(pvals)
     lambdas = np.sort(lambdas)
-    L = len(lambdas)
 
     assert min(pvals) >= 0 and max(pvals) <= 1
     assert min(lambdas) >= 0 and max(lambdas) <= 1
