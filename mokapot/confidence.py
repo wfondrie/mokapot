@@ -18,6 +18,7 @@ confidence estimates, rather than initializing the classes below directly.
 import logging
 from contextlib import contextmanager
 from pathlib import Path
+from pprint import pformat
 from typing import Sequence, Iterator
 
 import numpy as np
@@ -340,34 +341,16 @@ def assign_confidence(
                 f"and dataset {di + 2} has columns {dataset.columns}"
             )
 
-    # Level data for psm level
-    level = "psms"
-    levels = [level]
-    level_data_path = {level: dest_dir / f"{file_root}{level}{file_ext}"}
-    level_hash_columns = {level: curr_dataset.spectrum_columns}
-
-    # Level data for higher rollup levels
-    extra_output_columns = []
-    if do_rollup:
-        level_columns = curr_dataset.level_columns
-
-        for level_column in level_columns:
-            level = level_column.lower() + "s"  # e.g. Peptide to peptides
-            levels.append(level)
-            level_data_path[level] = dest_dir / f"{file_root}{level}{file_ext}"
-            level_hash_columns[level] = [level_column]
-            if level not in ["psms", "peptides", "proteins"]:
-                extra_output_columns.append(level_column)
-
-    levels_or_proteins = levels
-    if proteins:
-        level = "proteins"
-        levels_or_proteins = [*levels, level]
-        level_data_path[level] = dest_dir / f"{file_root}{level}{file_ext}"
-        level_hash_columns[level] = curr_dataset.protein_column
+    level_manager = LevelManager.from_dataset(
+        dataset=curr_dataset,
+        do_rollup=do_rollup,
+        use_proteins=True if proteins else False,
+        dest_dir=dest_dir,
+        file_root=file_root,
+    )
 
     output_writers_factory = OutputWriterFactory(
-        extra_output_columns,
+        level_manager.extra_output_columns,
         is_sqlite=is_sqlite,
     )
 
@@ -381,38 +364,18 @@ def assign_confidence(
         #   column defs module, and further, have standardized columns
         #   directly from the pin reader (applying the renaming itself)
 
-        level_column_names = [
-            "PSMId",
-            dataset.target_column,
-            "peptide",
-            *extra_output_columns,
-            "proteinIds",
-            "score",
-        ]
-        level_input_column_names = [
-            dataset.specId_column,
-            dataset.target_column,
-            dataset.peptide_column,
-            *extra_output_columns,
-            dataset.protein_column,
-            "score",
-        ]
-
-        level_input_output_column_mapping = {
-            in_col: out_col
-            for in_col, out_col in strictzip(
-                level_input_column_names,
-                level_column_names,
-            )
-            if in_col is not None
-        }
+        # Q: why is this done here? it seems constant, since all
+        #    datasets have the same columns.
+        level_input_output_column_mapping = (
+            level_manager.build_output_col_mapping(dataset)
+        )
 
         file_prefix = file_root
         if prefix:
             file_prefix = f"{file_prefix}{prefix}."
 
         output_writers = {}
-        for level in levels_or_proteins:
+        for level in level_manager.levels_or_proteins:
             output_writers[level] = []
 
             outfile_targets = (
@@ -441,7 +404,9 @@ def assign_confidence(
             score_reader,
             dest_dir,
             file_prefix,
-            level_hash_columns["psms"] if deduplication else None,
+            level_manager.level_hash_columns["psms"]
+            if deduplication
+            else None,
             max_workers,
             level_input_output_column_mapping,
         ) as sorted_file_reader:
@@ -464,29 +429,32 @@ def assign_confidence(
 
             level_writers = {
                 level: TabularDataWriter.from_suffix(
-                    level_data_path[level],
+                    level_manager.level_data_paths[level],
                     columns=list(level_input_output_column_mapping.values()),
                     column_types=level_column_types,
                     buffer_size=CONFIDENCE_CHUNK_SIZE,
                     buffer_type=BufferType.Dicts,
                 )
-                for level in levels
+                for level in level_manager.levels
             }
-            for writer in level_writers.values():
+            for level, writer in level_writers.items():
+                LOGGER.info(f"Initializing writer for level {level}: {writer}")
                 writer.initialize()
 
             def hash_data_row(data_row):
                 return str([
                     data_row[level_input_output_column_mapping.get(col, col)]
-                    for col in level_hash_columns[level]
+                    for col in level_manager.level_hash_columns[level]
                 ])
 
-            seen_level_entities = {level: set() for level in levels}
+            seen_level_entities = {
+                level: set() for level in level_manager.levels
+            }
             score_stats = OnlineStatistics()
             psm_count = 0
             for data_row in sorted_file_iterator:
                 psm_count += 1
-                for level in levels:
+                for level in level_manager.levels:
                     if level != "psms" or deduplication:
                         psm_hash = hash_data_row(data_row)
                         if psm_hash in seen_level_entities[level]:
@@ -503,9 +471,13 @@ def assign_confidence(
                     level_writers[level].append_data(out_row)
                     score_stats.update_single(data_row["score"])
 
-            for level in levels:
+            for level in level_manager.levels:
                 count = len(seen_level_entities[level])
-                level_writers[level].finalize()
+                curr_writer = level_writers[level]
+                LOGGER.info(
+                    f"Finalizing writer for level {level}: {curr_writer}"
+                )
+                curr_writer.finalize()
                 if level == "psms":
                     if deduplication:
                         LOGGER.info(
@@ -522,8 +494,8 @@ def assign_confidence(
 
         con = Confidence(
             dataset=dataset,
-            levels=levels_or_proteins,
-            level_paths=level_data_path,
+            levels=level_manager.levels_or_proteins,
+            level_paths=level_manager.level_data_paths,
             out_writers=output_writers,
             eval_fdr=eval_fdr,
             write_decoys=write_decoys,
@@ -541,6 +513,160 @@ def assign_confidence(
             append_to_output_file = True
 
     return out
+
+
+# class MultiLevelWriter:
+
+
+class LevelManager:
+    """Manages level-specific data and operations."""
+
+    def __init__(
+        self,
+        *,
+        level_columns: list[str],
+        default_extension: str,
+        spectrum_columns: list[str],
+        do_rollup: bool,
+        use_proteins: bool,
+        dest_dir: Path,
+        file_root: str,
+    ):
+        self.level_columns = level_columns
+        self.default_extension = default_extension
+        self.spectrum_columns = spectrum_columns
+        self.use_proteins = use_proteins
+        self.dest_dir = dest_dir
+        self.file_root = file_root
+        self.do_rollup = do_rollup
+
+        self._initialize_levels()
+        self._setup_level_paths()
+        self._setup_hash_columns()
+        self._setup_protein_levels()
+        self._setup_extra_output_columns()
+
+        # self.level_data_paths = {}
+        # self.level_hash_columns = {}
+
+    @staticmethod
+    def from_dataset(
+        *,
+        dataset: PsmDataset,
+        do_rollup: bool,
+        use_proteins: bool,
+        dest_dir: Path,
+        file_root: str,
+    ):
+        level_columns = dataset.level_columns
+        default_extension = dataset.get_default_extension()
+        spectrum_columns = dataset.spectrum_columns
+        return LevelManager(
+            level_columns=level_columns,
+            default_extension=default_extension,
+            spectrum_columns=spectrum_columns,
+            do_rollup=do_rollup,
+            use_proteins=use_proteins,
+            dest_dir=dest_dir,
+            file_root=file_root,
+        )
+
+    def __repr__(self) -> str:
+        formatted_dict = pformat(self.__dict__)
+        return f"{self.__class__!s}({formatted_dict})"
+
+    def _initialize_levels(self) -> list[str]:
+        """Initialize processing levels based on configuration."""
+        levels = ["psms"]
+        if self.do_rollup:
+            level_columns = self.level_columns
+            levels.extend(col.lower() + "s" for col in level_columns)
+
+        self.levels = levels
+
+    def _setup_level_paths(
+        self,
+    ) -> None:
+        """Setup paths for each processing level."""
+        self.level_data_paths = {}
+        file_ext = self.default_extension
+        for level in self.levels:
+            self.level_data_paths[level] = (
+                self.dest_dir / f"{self.file_root}{level}{file_ext}"
+            )
+
+    def _setup_hash_columns(self) -> None:
+        """Setup hash columns for each level."""
+        self.level_hash_columns = {"psms": self.spectrum_columns}
+        for level in self.levels[1:]:
+            if level != "proteins":
+                self.level_hash_columns[level] = [
+                    level.rstrip("s").capitalize()
+                ]
+
+    def _setup_protein_levels(self) -> None:
+        levels_or_proteins = self.levels
+        if self.use_proteins:
+            levels_or_proteins = [*levels_or_proteins, "proteins"]
+            self.level_data_paths["proteins"] = (
+                self.dest_dir / f"{self.file_root}proteins{self.file_ext}"
+            )
+            self.level_hash_columns["proteins"] = self.protein_column
+
+        self.levels_or_proteins = levels_or_proteins
+
+    def _setup_extra_output_columns(self) -> None:
+        extra_output_columns = []
+        if self.do_rollup:
+            level_columns = self.level_columns
+
+            for level_column in level_columns:
+                level = level_column.lower() + "s"  # e.g. Peptide to peptides
+                if level not in self.levels:
+                    self.levels.append(level)
+
+                self.level_data_paths[level] = (
+                    self.dest_dir
+                    / f"{self.file_root}{level}{self.default_extension}"
+                )
+
+                # I am not sure why but over-writing some of the levels here is
+                # important, I think it has to do with with how the rollup
+                # levels are handled (columns are renamed).
+                self.level_hash_columns[level] = [level_column]
+                if level not in ["psms", "peptides", "proteins"]:
+                    extra_output_columns.append(level_column)
+
+        self.extra_output_columns = extra_output_columns
+
+    def build_output_col_mapping(self, dataset: PsmDataset) -> dict:
+        level_column_names = [
+            "PSMId",
+            dataset.target_column,
+            "peptide",
+            *self.extra_output_columns,
+            "proteinIds",
+            "score",
+        ]
+        level_input_column_names = [
+            dataset.specId_column,
+            dataset.target_column,
+            dataset.peptide_column,
+            *self.extra_output_columns,
+            dataset.protein_column,
+            "score",
+        ]
+
+        level_input_output_column_mapping = {
+            in_col: out_col
+            for in_col, out_col in strictzip(
+                level_input_column_names,
+                level_column_names,
+            )
+            if in_col is not None
+        }
+
+        return level_input_output_column_mapping
 
 
 class OutputWriterFactory:
@@ -568,20 +694,9 @@ class OutputWriterFactory:
             "posterior_error_prob",
         ]
 
-    def __str__(self) -> str:
-        out = "OutputWriterFactory("
-        out += f"extra_output_columns={self.extra_output_columns}, "
-        out += f"is_sqlite={self.is_sqlite})"
-        return out
-
     def __repr__(self) -> str:
-        out = "OutputWriterFactory:"
-        out += f"\textra_output_columns={self.extra_output_columns}, "
-        out += f"\tis_sqlite={self.is_sqlite}"
-        out += f"\toutput_column_names={self.output_column_names}, "
-        out += "\toutput_column_names_proteins="
-        out += f"{self.output_column_names_proteins}"
-        return out
+        formatted_dict = pformat(self.__dict__)
+        return f"{self.__class__!s}({formatted_dict})"
 
     def create_writer(
         self,
