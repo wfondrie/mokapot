@@ -332,8 +332,13 @@ def assign_confidence(
     # just take the first one for info (and make sure the other are the same)
     curr_dataset = datasets[0]
     file_ext = curr_dataset.get_default_extension()
-    for dataset in datasets[1:]:
-        assert dataset.columns == curr_dataset.columns
+    for di, dataset in enumerate(datasets[1:]):
+        if dataset.columns != curr_dataset.columns:
+            raise ValueError(
+                "Datasets must have the same columns. "
+                f"Dataset 1 has columns {curr_dataset.columns} "
+                f"and dataset {di + 2} has columns {dataset.columns}"
+            )
 
     # Level data for psm level
     level = "psms"
@@ -361,49 +366,10 @@ def assign_confidence(
         level_data_path[level] = dest_dir / f"{file_root}{level}{file_ext}"
         level_hash_columns[level] = curr_dataset.protein_column
 
-    output_column_names = [
-        "PSMId",
-        "peptide",
-        *extra_output_columns,
-        "score",
-        "q-value",
-        "posterior_error_prob",
-        "proteinIds",
-    ]
-
-    output_column_names_proteins = [
-        "mokapot protein group",
-        "best peptide",
-        "stripped sequence",
-        "score",
-        "q-value",
-        "posterior_error_prob",
-    ]
-
-    @typechecked
-    def create_output_writer(path: Path, level: str, initialize: bool):
-        # Note: This method does not create a writer, it writes the data.
-        if level == "proteins":
-            output_columns = output_column_names_proteins
-        else:
-            output_columns = output_column_names
-
-        # Create the writers
-        if is_sqlite:
-            writer = ConfidenceSqliteWriter(
-                sqlite_path,
-                columns=output_columns,
-                column_types=[],
-                level=level,
-                qvalue_column="q-value",
-                pep_column="posterior_error_prob",
-            )
-        else:
-            writer = TabularDataWriter.from_suffix(path, output_columns, [])
-
-        if initialize:
-            writer.initialize()
-        return writer
+    output_writers_factory = OutputWriterFactory(
+        extra_output_columns,
+        is_sqlite=is_sqlite,
+    )
 
     if prefixes is None:
         prefixes = [None] * len(datasets)
@@ -454,7 +420,7 @@ def assign_confidence(
             )
 
             output_writers[level].append(
-                create_output_writer(
+                output_writers_factory.create_writer(
                     outfile_targets, level, not append_to_output_file
                 )
             )
@@ -464,7 +430,7 @@ def assign_confidence(
                     dest_dir / f"{file_prefix}decoys.{level}{file_ext}"
                 )
                 output_writers[level].append(
-                    create_output_writer(
+                    output_writers_factory.create_output_writer(
                         outfile_decoys, level, not append_to_output_file
                     )
                 )
@@ -575,6 +541,75 @@ def assign_confidence(
             append_to_output_file = True
 
     return out
+
+
+class OutputWriterFactory:
+    """Factory class for creating output writers based on configuration."""
+
+    def __init__(self, extra_output_columns: list[str], is_sqlite: bool):
+        self.is_sqlite = is_sqlite
+        self.extra_output_columns = extra_output_columns
+        self.output_column_names = [
+            "PSMId",
+            "peptide",
+            *extra_output_columns,
+            "score",
+            "q-value",
+            "posterior_error_prob",
+            "proteinIds",
+        ]
+
+        self.output_column_names_proteins = [
+            "mokapot protein group",
+            "best peptide",
+            "stripped sequence",
+            "score",
+            "q-value",
+            "posterior_error_prob",
+        ]
+
+    def __str__(self) -> str:
+        out = "OutputWriterFactory("
+        out += f"extra_output_columns={self.extra_output_columns}, "
+        out += f"is_sqlite={self.is_sqlite})"
+        return out
+
+    def __repr__(self) -> str:
+        out = "OutputWriterFactory:"
+        out += f"\textra_output_columns={self.extra_output_columns}, "
+        out += f"\tis_sqlite={self.is_sqlite}"
+        out += f"\toutput_column_names={self.output_column_names}, "
+        out += "\toutput_column_names_proteins="
+        out += f"{self.output_column_names_proteins}"
+        return out
+
+    def create_writer(
+        self,
+        path: Path,
+        level: str,
+        initialize: bool,
+    ) -> TabularDataWriter | ConfidenceSqliteWriter:
+        """Create appropriate writer based on output type and level."""
+        output_columns = (
+            self.output_column_names_proteins
+            if level == "proteins"
+            else self.output_column_names
+        )
+
+        if self.is_sqlite:
+            return ConfidenceSqliteWriter(
+                path,
+                columns=output_columns,
+                column_types=[],
+                level=level,
+                qvalue_column="q-value",
+                pep_column="posterior_error_prob",
+            )
+
+        writer = TabularDataWriter.from_suffix(path, output_columns, [])
+        if initialize:
+            writer.initialize()
+        return writer
 
 
 @contextmanager
