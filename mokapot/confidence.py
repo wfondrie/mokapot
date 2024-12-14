@@ -15,6 +15,8 @@ We recommend using the :py:func:`~mokapot.brew()` function to obtain these
 confidence estimates, rather than initializing the classes below directly.
 """
 
+from __future__ import annotations
+
 import logging
 from contextlib import contextmanager
 from pathlib import Path
@@ -266,7 +268,7 @@ def assign_confidence(
     datasets: list[PsmDataset],
     scores_list: list[np.ndarray[float]],
     max_workers: int = 1,
-    eval_fdr=0.01,
+    eval_fdr: float = 0.01,
     dest_dir: Path | None = None,
     file_root: str = "",
     prefixes: list[str | None] | None = None,
@@ -422,75 +424,15 @@ def assign_confidence(
                 row_type=BufferType.Dicts
             )
             type_map = sorted_file_reader.get_schema(as_dict=True)
-            level_column_types = [
-                type_map[name]
-                for name in level_input_output_column_mapping.values()
-            ]
+            level_writers = LevelWriterCollection.from_manager(
+                level_manager=level_manager,
+                type_map=type_map,
+                level_input_output_column_mapping=level_input_output_column_mapping,
+                deduplication=deduplication,
+            )
 
-            level_writers = {
-                level: TabularDataWriter.from_suffix(
-                    level_manager.level_data_paths[level],
-                    columns=list(level_input_output_column_mapping.values()),
-                    column_types=level_column_types,
-                    buffer_size=CONFIDENCE_CHUNK_SIZE,
-                    buffer_type=BufferType.Dicts,
-                )
-                for level in level_manager.levels
-            }
-            for level, writer in level_writers.items():
-                LOGGER.info(f"Initializing writer for level {level}: {writer}")
-                writer.initialize()
-
-            def hash_data_row(data_row):
-                return str([
-                    data_row[level_input_output_column_mapping.get(col, col)]
-                    for col in level_manager.level_hash_columns[level]
-                ])
-
-            seen_level_entities = {
-                level: set() for level in level_manager.levels
-            }
-            score_stats = OnlineStatistics()
-            psm_count = 0
-            for data_row in sorted_file_iterator:
-                psm_count += 1
-                for level in level_manager.levels:
-                    if level != "psms" or deduplication:
-                        psm_hash = hash_data_row(data_row)
-                        if psm_hash in seen_level_entities[level]:
-                            if level == "psms":
-                                # If we are on the psms level, we can skip
-                                # checking the other levels
-                                break
-                            continue
-                        seen_level_entities[level].add(psm_hash)
-                    out_row = {
-                        col: data_row[col]
-                        for col in level_input_output_column_mapping.values()
-                    }
-                    level_writers[level].append_data(out_row)
-                    score_stats.update_single(data_row["score"])
-
-            for level in level_manager.levels:
-                count = len(seen_level_entities[level])
-                curr_writer = level_writers[level]
-                LOGGER.info(
-                    f"Finalizing writer for level {level}: {curr_writer}"
-                )
-                curr_writer.finalize()
-                if level == "psms":
-                    if deduplication:
-                        LOGGER.info(
-                            f"\t- Found {count} PSMs from unique spectra."
-                        )
-                    else:
-                        LOGGER.info(f"\t- Found {psm_count} PSMs.")
-                    LOGGER.info(
-                        f"\t- The average score was {score_stats.mean:.3f} "
-                        f"with standard deviation {score_stats.sd:.3f}."
-                    )
-                else:
-                    LOGGER.info(f"\t- Found {count} unique {level}.")
+            level_writers.sink_iterator(sorted_file_iterator)
+            level_writers.finalize()
 
         con = Confidence(
             dataset=dataset,
@@ -506,7 +448,7 @@ def assign_confidence(
             peps_algorithm=peps_algorithm,
             qvalue_algorithm=qvalue_algorithm,
             stream_confidence=stream_confidence,
-            score_stats=score_stats,
+            score_stats=level_writers.score_stats,
         )
         out.append(con)
         if not prefix:
@@ -515,7 +457,112 @@ def assign_confidence(
     return out
 
 
-# class MultiLevelWriter:
+class LevelWriterCollection:
+    def __init__(
+        self,
+        levels: list[str],
+        level_data_paths: dict[str, Path],
+        schema_dict: dict[str, np.dtype],
+        level_input_output_column_mapping: dict[str, str],
+        level_hash_columns: dict[str, list[str]],
+        deduplication: bool,
+    ):
+        # Do I need to pass the levels? cant I use the keys of the data paths?
+        self.levels = levels
+        self.deduplication = deduplication
+        self.level_input_output_column_mapping = (
+            level_input_output_column_mapping
+        )
+        self.level_hash_columns = level_hash_columns
+        level_column_types = [
+            schema_dict[name]
+            for name in level_input_output_column_mapping.values()
+        ]
+
+        self.level_writers = {
+            level: TabularDataWriter.from_suffix(
+                level_data_paths[level],
+                columns=list(level_input_output_column_mapping.values()),
+                column_types=level_column_types,
+                buffer_size=CONFIDENCE_CHUNK_SIZE,
+                buffer_type=BufferType.Dicts,
+            )
+            for level in levels
+        }
+        self.seen_level_entities = {level: set() for level in levels}
+        for level, writer in self.level_writers.items():
+            LOGGER.info(f"Initializing writer for level {level}: {writer}")
+            writer.initialize()
+
+        self.score_stats = OnlineStatistics()
+        self.psm_count = 0
+
+    def __repr__(self):
+        pretty_dict = pformat(self.__dict__)
+        return f"{self.__class__!s}({pretty_dict})"
+
+    @staticmethod
+    def from_manager(
+        level_manager: LevelManager,
+        type_map: dict[str, np.dtype],
+        level_input_output_column_mapping: dict[str, str],
+        deduplication: bool,
+    ) -> LevelWriterCollection:
+        level_data_paths = level_manager.level_data_paths
+        levels = level_manager.levels
+        hash_columns = level_manager.level_hash_columns
+        return LevelWriterCollection(
+            levels=levels,
+            level_data_paths=level_data_paths,
+            schema_dict=type_map,
+            level_input_output_column_mapping=level_input_output_column_mapping,
+            level_hash_columns=hash_columns,
+            deduplication=deduplication,
+        )
+
+    def hash_data_row(self, data_row, level):
+        return str([
+            data_row[self.level_input_output_column_mapping.get(col, col)]
+            for col in self.level_hash_columns[level]
+        ])
+
+    def sink_iterator(self, sorted_file_iterator):
+        for data_row in sorted_file_iterator:
+            self.psm_count += 1
+            for level in self.levels:
+                if level != "psms" or self.deduplication:
+                    psm_hash = self.hash_data_row(data_row, level=level)
+                    if psm_hash in self.seen_level_entities[level]:
+                        if level == "psms":
+                            # If we are on the psms level, we can skip
+                            # checking the other levels
+                            break
+                        continue
+                    self.seen_level_entities[level].add(psm_hash)
+                out_row = {
+                    col: data_row[col]
+                    for col in self.level_input_output_column_mapping.values()
+                }
+                self.level_writers[level].append_data(out_row)
+                self.score_stats.update_single(data_row["score"])
+
+    def finalize(self):
+        for level in self.levels:
+            count = len(self.seen_level_entities[level])
+            curr_writer = self.level_writers[level]
+            LOGGER.info(f"Finalizing writer for level {level}: {curr_writer}")
+            curr_writer.finalize()
+            if level == "psms":
+                if self.deduplication:
+                    LOGGER.info(f"\t- Found {count} PSMs from unique spectra.")
+                else:
+                    LOGGER.info(f"\t- Found {self.psm_count} PSMs.")
+                LOGGER.info(
+                    f"\t- The average score was {self.score_stats.mean:.3f} "
+                    f"with standard deviation {self.score_stats.sd:.3f}."
+                )
+            else:
+                LOGGER.info(f"\t- Found {count} unique {level}.")
 
 
 class LevelManager:
@@ -640,6 +687,9 @@ class LevelManager:
         self.extra_output_columns = extra_output_columns
 
     def build_output_col_mapping(self, dataset: PsmDataset) -> dict:
+        # Q: what would be the requirement here?
+        #    Could we use the spectrum columns? since multiple
+        #    columns can be used to identify a spectrum.
         level_column_names = [
             "PSMId",
             dataset.target_column,
