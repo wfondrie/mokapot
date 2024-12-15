@@ -352,12 +352,18 @@ def assign_confidence(
     )
 
     output_writers_factory = OutputWriterFactory(
-        level_manager.extra_output_columns,
+        extra_output_columns=level_manager.extra_output_columns,
         is_sqlite=is_sqlite,
+        append_to_output_file=append_to_output_file,
+        write_decoys=write_decoys,
     )
 
     if prefixes is None:
         prefixes = [None] * len(datasets)
+
+    level_input_output_column_mapping = level_manager.build_output_col_mapping(
+        curr_dataset
+    )
 
     out = []
 
@@ -366,39 +372,9 @@ def assign_confidence(
         #   column defs module, and further, have standardized columns
         #   directly from the pin reader (applying the renaming itself)
 
-        # Q: why is this done here? it seems constant, since all
-        #    datasets have the same columns.
-        level_input_output_column_mapping = (
-            level_manager.build_output_col_mapping(dataset)
+        output_writers, file_prefix = output_writers_factory.build_writers(
+            level_manager
         )
-
-        file_prefix = file_root
-        if prefix:
-            file_prefix = f"{file_prefix}{prefix}."
-
-        output_writers = {}
-        for level in level_manager.levels_or_proteins:
-            output_writers[level] = []
-
-            outfile_targets = (
-                dest_dir / f"{file_prefix}targets.{level}{file_ext}"
-            )
-
-            output_writers[level].append(
-                output_writers_factory.create_writer(
-                    outfile_targets, level, not append_to_output_file
-                )
-            )
-
-            if write_decoys and not is_sqlite:
-                outfile_decoys = (
-                    dest_dir / f"{file_prefix}decoys.{level}{file_ext}"
-                )
-                output_writers[level].append(
-                    output_writers_factory.create_output_writer(
-                        outfile_decoys, level, not append_to_output_file
-                    )
-                )
 
         score_reader = TabularDataReader.from_array(score, "score")
         with create_sorted_file_reader(
@@ -566,7 +542,36 @@ class LevelWriterCollection:
 
 
 class LevelManager:
-    """Manages level-specific data and operations."""
+    """Manages level-specific data and operations.
+
+    This class is meant to be used internally by the `Confidence` class.
+
+    Parameters
+    ----------
+    level_columns : list of str
+        The columns that can be used to aggregate PSMs.
+        For example, peptides, modified peptides, precursors.
+        would generate "rollups" of the PSMs at the PSM (default)
+        and in addition to that, the peptide and modified peptide
+        columns would generate "peptide groups" of PSMs (each).
+    default_extension : str
+        The default extension to use for the output files.
+        The extension will be used to determine the output format
+        when initializing the `LevelWriterCollection` which internally
+        uses the `TabularDataWriter.from_suffix` method.
+    spectrum_columns : list of str
+        The columns that uniquely identify a mass spectrum.
+    do_rollup : bool
+        Do we apply rollup on peptides, modified peptides etc.?
+    use_proteins : bool
+        Whether to roll up protein-level confidence estimates.
+    dest_dir : Path
+        The directory in which to save the files.
+    file_root : str
+        The prefix added to all output file names.
+        The final file names will be:
+        `dest_dir / file_root+level+default_extension`
+    """
 
     def __init__(
         self,
@@ -644,6 +649,8 @@ class LevelManager:
 
     def _setup_hash_columns(self) -> None:
         """Setup hash columns for each level."""
+
+        # Q: wouldnt the right thing here be to use spectrum_cols + peptide?
         self.level_hash_columns = {"psms": self.spectrum_columns}
         for level in self.levels[1:]:
             if level != "proteins":
@@ -722,13 +729,24 @@ class LevelManager:
 class OutputWriterFactory:
     """Factory class for creating output writers based on configuration."""
 
-    def __init__(self, extra_output_columns: list[str], is_sqlite: bool):
+    def __init__(
+        self,
+        *,
+        extra_output_columns: list[str],
+        is_sqlite: bool,
+        append_to_output_file: bool,
+        write_decoys: bool,
+    ):
+        # Q: are we deleting the sqlite ops?
         self.is_sqlite = is_sqlite
+        self.write_decoys = write_decoys
         self.extra_output_columns = extra_output_columns
+        self.append_to_output_file = append_to_output_file
         self.output_column_names = [
             "PSMId",
             "peptide",
             *extra_output_columns,
+            # Q: should we prefix these with "mokapot"?
             "score",
             "q-value",
             "posterior_error_prob",
@@ -750,6 +768,7 @@ class OutputWriterFactory:
 
     def create_writer(
         self,
+        *,
         path: Path,
         level: str,
         initialize: bool,
@@ -775,6 +794,50 @@ class OutputWriterFactory:
         if initialize:
             writer.initialize()
         return writer
+
+    def build_writers(
+        self, level_manager: LevelManager, prefix: str | None = None
+    ):
+        output_writers = {}
+
+        file_prefix = level_manager.file_root
+        if prefix:
+            file_prefix = f"{file_prefix}{prefix}."
+
+        for level in level_manager.levels_or_proteins:
+            output_writers[level] = []
+
+            name = [
+                str(file_prefix),
+                "targets.",
+                str(level),
+                str(level_manager.default_extension),
+            ]
+
+            outfile_targets = level_manager.dest_dir / "".join(name)
+
+            output_writers[level].append(
+                self.create_writer(
+                    path=outfile_targets,
+                    level=level,
+                    initialize=not self.append_to_output_file,
+                )
+            )
+
+            if self.write_decoys and not self.is_sqlite:
+                outfile_decoys = (
+                    self.dest_dir
+                    / f"{self.file_prefix}decoys.{level}{self.file_ext}"
+                )
+                output_writers[level].append(
+                    self.create_writer(
+                        path=outfile_decoys,
+                        level=level,
+                        initialize=not self.append_to_output_file,
+                    )
+                )
+
+        return output_writers, file_prefix
 
 
 @contextmanager

@@ -52,14 +52,14 @@ def is_flashlfq_df(df):
     }
     for col, coltype in EXPECTED_COLS.items():
         assert col in df.columns, f"Column {col} not found in input"
-        assert isinstance(
-            df[col].iloc[0], coltype
-        ), f"Column {col} is not {coltype}"
+        assert isinstance(df[col].iloc[0], coltype), (
+            f"Column {col} is not {coltype}"
+        )
 
     # Check that the base sequence matches the pattern [A-Z]+
-    assert (
-        df["Base Sequence"].str.match("[A-Z]+").all()
-    ), "Base sequence must only contain amino acids"
+    assert df["Base Sequence"].str.match("[A-Z]+").all(), (
+        "Base sequence must only contain amino acids"
+    )
 
     return True
 

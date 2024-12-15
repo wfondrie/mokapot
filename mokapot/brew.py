@@ -103,12 +103,15 @@ def brew(
         model = PercolatorModel()
 
     try:
+        # Q: what is this doing? Why does the randon number
+        # generater get set only if the model has an estimator?
+        # Shouldn't it assign it to all the models if they are passed?
         model.estimator
         model.rng = rng
     except AttributeError:
         pass
 
-        # Check that all of the datasets have the same features:
+    # Check that all of the datasets have the same features:
     feat_set = set(datasets[0].feature_columns)
     if not all([
         set(dataset.feature_columns) == feat_set for dataset in datasets

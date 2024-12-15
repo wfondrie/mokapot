@@ -748,7 +748,7 @@ class OnDiskPsmDataset(PsmDataset):
     def __init__(
         self,
         filename_or_reader: Path | TabularDataReader,
-        columns,
+        *,
         target_column,
         spectrum_columns,
         peptide_column,
@@ -756,7 +756,7 @@ class OnDiskPsmDataset(PsmDataset):
         feature_columns,
         metadata_columns,
         metadata_column_types,  # the columns+types could be a dict.
-        level_columns,
+        level_columns,  # What is this supposed to be?
         filename_column,
         scan_column,
         specId_column,  # Why does this have different capitalization?
@@ -773,7 +773,10 @@ class OnDiskPsmDataset(PsmDataset):
         else:
             self._reader = TabularDataReader.from_path(filename_or_reader)
 
+        columns = self.reader.get_column_names()
         self.columns = columns
+        # Q: Why ae columns asked for in the constructor?
+        # .  Since we can read them from the reader ...
         self._target_column = target_column
         self._peptide_column = peptide_column
         self._protein_column = protein_column
@@ -791,7 +794,6 @@ class OnDiskPsmDataset(PsmDataset):
         self._specId_column = specId_column
         self._spectra_dataframe = spectra_dataframe
 
-        columns = self.reader.get_column_names()
         opt_cols = OptionalColumns(
             filename=filename_column,
             scan=scan_column,
@@ -832,7 +834,7 @@ class OnDiskPsmDataset(PsmDataset):
         check_column(self.expmass_column)
         check_column(self.rt_column)
         check_column(self.charge_column)
-        check_column(self.specId_column)
+        # check_column(self.specId_column)
 
     def get_default_extension(self) -> str:
         return self.reader.get_default_extension()
@@ -852,6 +854,10 @@ class OnDiskPsmDataset(PsmDataset):
 
     @property
     def specId_column(self) -> str:
+        # breakpoint()
+        # I am thinking on removing this ... since the "key"
+        # of a spectrum is all the columns that identify it uniquely.
+        # ... not this column that might or might not be present.
         return self._specId_column
 
     @property
@@ -919,7 +925,7 @@ class OnDiskPsmDataset(PsmDataset):
         rep += f"Expmass column: {self.expmass_column}\n"
         rep += f"Rt column: {self.rt_column}\n"
         rep += f"Charge column: {self.charge_column}\n"
-        rep += f"SpecId column: {self.specId_column}\n"
+        # rep += f"SpecId column: {self.specId_column}\n"
         rep += f"Spectra DF: \n{spec_sec}\n"
         return rep
 

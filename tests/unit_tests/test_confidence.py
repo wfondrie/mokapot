@@ -34,7 +34,6 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
     # incorrectly (namely the last and before last)
 
     pin_file, df, _, score_cols = psm_df_1000
-    columns = list(pd.read_csv(pin_file, sep="\t").columns)
     df_spectra = pd.read_csv(
         pin_file, sep="\t", usecols=["scannr", "expmass", "target"]
     )
@@ -51,7 +50,6 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
         expmass_column="expmass",
         rt_column="ret_time",
         charge_column="charge",
-        columns=columns,
         protein_column="proteins",
         metadata_columns=[
             "specid",
@@ -143,7 +141,6 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
     """Test that assign_confidence() works with parquet files."""
 
     parquet_file, df, _ = psm_df_1000_parquet
-    columns = pq.ParquetFile(parquet_file).schema.names
     df_spectra = pq.read_table(
         parquet_file, columns=["scannr", "expmass", "target"]
     ).to_pandas()
@@ -160,7 +157,6 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
         expmass_column="expmass",
         rt_column="ret_time",
         charge_column="charge",
-        columns=columns,
         protein_column="proteins",
         metadata_columns=[
             "specid",
