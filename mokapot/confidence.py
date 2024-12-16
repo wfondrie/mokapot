@@ -666,6 +666,7 @@ class LevelManager:
         use_proteins: bool,
         dest_dir: Path,
         file_root: str,
+        protein_column: str | None,
     ):
         self.level_columns = level_columns
         self.default_extension = default_extension
@@ -674,6 +675,7 @@ class LevelManager:
         self.dest_dir = dest_dir
         self.file_root = file_root
         self.do_rollup = do_rollup
+        self.protein_column = protein_column
 
         self._initialize_levels()
         self._setup_level_paths()
@@ -693,6 +695,7 @@ class LevelManager:
         level_columns = dataset.level_columns
         default_extension = dataset.get_default_extension()
         spectrum_columns = dataset.spectrum_columns
+        protein_column = dataset.protein_column
         return LevelManager(
             level_columns=level_columns,
             default_extension=default_extension,
@@ -701,6 +704,7 @@ class LevelManager:
             use_proteins=use_proteins,
             dest_dir=dest_dir,
             file_root=file_root,
+            protein_column=protein_column,
         )
 
     def __repr__(self) -> str:
@@ -740,10 +744,11 @@ class LevelManager:
 
     def _setup_protein_levels(self) -> None:
         levels_or_proteins = self.levels
+        file_ext = self.default_extension
         if self.use_proteins:
             levels_or_proteins = [*levels_or_proteins, "proteins"]
             self.level_data_paths["proteins"] = (
-                self.dest_dir / f"{self.file_root}proteins{self.file_ext}"
+                self.dest_dir / f"{self.file_root}proteins{file_ext}"
             )
             self.level_hash_columns["proteins"] = self.protein_column
 

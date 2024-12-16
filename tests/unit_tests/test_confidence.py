@@ -130,7 +130,7 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
         "PSMId",
         "peptide",
         "score",
-        "q-value",
+        "mokapot_qvalue",
         "posterior_error_prob",
         "proteinIds",
     ]
@@ -158,10 +158,12 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
     #     0.0103092780336737,
     #     0.0103092780336737,
     # ])
-    assert np.all(df_head["q-value"] < 0.015), (
+    assert np.all(df_head["mokapot_qvalue"] < 0.015), (
         "Good q-values should be lt 0.015"
     )
-    assert np.all(df_tail["q-value"] > 0.9), "Bad q-values should be gt 0.9"
+    assert np.all(df_tail["mokapot_qvalue"] > 0.9), (
+        "Bad q-values should be gt 0.9"
+    )
 
     # assert df["posterior_error_prob"].tolist() == approx([
     #     3.315389846699129e-05,

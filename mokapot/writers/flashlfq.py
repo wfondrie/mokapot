@@ -101,7 +101,7 @@ def _format_flashlfq(conf):
     # OLD: passing = peptides["mokapot q-value"] <= eval_fdr
     eval_fdr = conf.eval_fdr
     passing = pd.read_csv(conf.out_writers["peptides"][0].file_name, sep="\t")
-    passing = passing[passing["q-value"] < eval_fdr]
+    passing = passing[passing["mokapot_qvalue"] <= eval_fdr]
 
     cols_pull = opt_cols
     cols_pull["PSMId"] = conf.dataset.specId_column
