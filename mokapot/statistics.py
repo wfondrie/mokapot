@@ -10,7 +10,6 @@ SummaryStatistics = namedtuple(
 )
 
 
-@typechecked
 @dataclass(slots=True)
 class OnlineStatistics:
     """A class for performing basic statistical calculations.
@@ -26,14 +25,18 @@ class OnlineStatistics:
     sum : float
         The sum of all values encountered so far. Initialized to 0.0.
     mean : float
-        The mean value calculated based on the encountered values. Initialized to 0.0.
+        The mean value calculated based on the encountered values.
+        Initialized to 0.0.
     var : float
-        The variance value calculated based on the encountered values. Initialized to 0.0.
+        The variance value calculated based on the encountered values.
+        Initialized to 0.0.
     sd : float
-        The standard deviation value calculated based on the encountered values.
+        The standard deviation value calculated based on the
+        encountered values.
         Initialized to 0.0.
     M2n : float
-        The intermediate value used in calculating variance. Initialized to 0.0.
+        The intermediate value used in calculating variance.
+        Initialized to 0.0.
 
     """
 

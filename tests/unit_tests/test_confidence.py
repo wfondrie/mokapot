@@ -9,7 +9,8 @@ import pyarrow.parquet as pq
 from pandas.testing import assert_frame_equal
 
 import mokapot
-from mokapot import OnDiskPsmDataset, assign_confidence
+from mokapot import OnDiskPsmDataset, assign_confidence, LinearPsmDataset
+import pytest
 
 
 @contextlib.contextmanager
@@ -23,7 +24,44 @@ def run_with_chunk_size(chunk_size):
         mokapot.confidence.CONFIDENCE_CHUNK_SIZE = old_chunk_size
 
 
-def test_chunked_assign_confidence(psm_df_1000, tmp_path):
+@pytest.fixture
+def inmem_psms_ds(psm_df_builder):
+    """A small-ish PSM dataset"""
+    data = psm_df_builder(1000, 1000, score_diffs=[5.0])
+    psms = LinearPsmDataset(
+        psms=data.df,
+        target_column="target",
+        spectrum_columns="specid",
+        peptide_column="peptide",
+        feature_columns=list(data.score_cols),
+        filename_column="filename",
+        scan_column="specid",
+        calcmass_column="calcmass",
+        expmass_column="expmass",
+        rt_column="ret_time",
+        charge_column="charge",
+        copy_data=True,
+    )
+    return psms
+
+
+@pytest.mark.parametrize("deduplication", [True, False])
+def test_assign_unscored_confidence(inmem_psms_ds, tmp_path, deduplication):
+    if deduplication:
+        pytest.skip("Deduplication is not working")
+    _foo = assign_confidence(
+        [inmem_psms_ds],
+        scores_list=None,
+        eval_fdr=0.01,
+        dest_dir=tmp_path,
+        max_workers=4,
+        deduplication=False,
+    )
+    # TODO actually add assertions here ...
+
+
+@pytest.mark.parametrize("deduplication", [True, False])
+def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
     """Test that assign_confidence() works correctly with small chunks"""
 
     # After correcting the targets column stuff and
@@ -79,6 +117,7 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
             dest_dir=tmp_path,
             max_workers=4,
             eval_fdr=0.02,
+            deduplication=deduplication,
         )
 
     df_results_group = pd.read_csv(tmp_path / "targets.peptides.csv", sep="\t")
@@ -137,7 +176,10 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
     )
 
 
-def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
+@pytest.mark.parametrize("deduplication", [True, False])
+def test_assign_confidence_parquet(
+    psm_df_1000_parquet, tmp_path, deduplication
+):
     """Test that assign_confidence() works with parquet files."""
 
     parquet_file, df, _ = psm_df_1000_parquet
@@ -187,6 +229,7 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
             dest_dir=tmp_path,
             max_workers=4,
             eval_fdr=0.02,
+            deduplication=deduplication,
         )
         df_results_group1 = pd.read_parquet(
             tmp_path / "targets.peptides.parquet"
@@ -201,6 +244,7 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
             dest_dir=tmp_path,
             max_workers=4,
             eval_fdr=0.02,
+            deduplication=deduplication,
         )
         df_results_group2 = pd.read_parquet(
             tmp_path / "targets.peptides.parquet"

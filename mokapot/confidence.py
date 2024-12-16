@@ -28,6 +28,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
+
 from mokapot.column_defs import get_standard_column_name
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import PsmDataset, OptionalColumns
@@ -57,6 +58,14 @@ from mokapot.utils import (
 from mokapot.writers.flashlfq import to_flashlfq
 
 LOGGER = logging.getLogger(__name__)
+
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    LOGGER.warning(
+        "Matplotlib is not installed. Confidence plots will not be available."
+    )
+    plt = None
 
 
 # Classes ---------------------------------------------------------------------
@@ -266,7 +275,7 @@ class Confidence(object):
 @typechecked
 def assign_confidence(
     datasets: list[PsmDataset],
-    scores_list: list[np.ndarray[float]],
+    scores_list: list[np.ndarray[float]] | None = None,
     max_workers: int = 1,
     eval_fdr: float = 0.01,
     dest_dir: Path | None = None,
@@ -334,7 +343,6 @@ def assign_confidence(
 
     # just take the first one for info (and make sure the other are the same)
     curr_dataset = datasets[0]
-    file_ext = curr_dataset.get_default_extension()
     for di, dataset in enumerate(datasets[1:]):
         if dataset.columns != curr_dataset.columns:
             raise ValueError(
@@ -365,9 +373,23 @@ def assign_confidence(
         curr_dataset
     )
 
+    scores_use = scores_list
+    if scores_use is None:
+        if any(dataset.scores is None for dataset in datasets):
+            feature = datasets[0].find_best_feature(eval_fdr).feature
+            scores_use = [
+                dataset.read_data(columns=[feature.name])[
+                    feature.name
+                ].to_numpy()
+                for dataset in datasets
+            ]
+            # TODO: warn that no scores are present and will fall back
+        else:
+            scores_use = [dataset.scores for dataset in datasets]
+
     out = []
 
-    for dataset, score, prefix in strictzip(datasets, scores_list, prefixes):
+    for dataset, score, prefix in strictzip(datasets, scores_use, prefixes):
         # todo: nice to have: move this column renaming stuff into the
         #   column defs module, and further, have standardized columns
         #   directly from the pin reader (applying the renaming itself)
@@ -1045,3 +1067,62 @@ def create_score_target_iterator(chunked_iterator: Iterator):
         scores = df_chunk["score"].values
         targets = ~df_chunk["is_decoy"].values
         yield scores, targets
+
+
+def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
+    """
+    Plot the cumulative number of discoveries over range of q-values.
+
+    Parameters
+    ----------
+    qvalues : numpy.ndarray
+        The q-values to plot.
+    threshold : float, optional
+        Indicates the maximum q-value to plot.
+    ax : matplotlib.pyplot.Axes, optional
+        The matplotlib Axes on which to plot. If `None` the current
+        Axes instance is used.
+    **kwargs : dict, optional
+        Arguments passed to :py:func:`matplotlib.axes.Axes.plot`.
+
+    Returns
+    -------
+    matplotlib.pyplot.Axes
+        An :py:class:`matplotlib.axes.Axes` with the cumulative
+        number of accepted target PSMs or peptides.
+    """
+    if ax is None:
+        if plt is None:
+            raise RuntimeError(
+                "Matplotlib is not installed. Confidence plots will not be "
+                "available."
+            )
+        ax = plt.gca()
+
+    # Calculate cumulative targets at each q-value
+    qvals = pd.Series(qvalues, name="qvalue")
+    qvals = qvals.sort_values(ascending=True).to_frame()
+    qvals["target"] = 1
+    qvals["num"] = qvals["target"].cumsum()
+    qvals = qvals.groupby(["qvalue"]).max().reset_index()
+    qvals = qvals[["qvalue", "num"]]
+
+    zero = pd.DataFrame({"qvalue": qvals["qvalue"][0], "num": 0}, index=[-1])
+    qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
+
+    xmargin = threshold * 0.05
+    ymax = qvals.num[qvals["qvalue"] <= (threshold + xmargin)].max()
+    ymargin = ymax * 0.05
+
+    # Set margins
+    curr_ylims = ax.get_ylim()
+    if curr_ylims[1] < ymax + ymargin:
+        ax.set_ylim(0 - ymargin, ymax + ymargin)
+
+    ax.set_xlim(0 - xmargin, threshold + xmargin)
+    ax.set_xlabel("q-value")
+    ax.set_ylabel("Discoveries")
+
+    ax.step(qvals["qvalue"].values, qvals.num.values, where="post", **kwargs)
+
+    return ax

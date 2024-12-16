@@ -108,13 +108,17 @@ def flashlfq_psms_ds_ondisk(psm_df_builder, tmp_path):
     return psms
 
 
-def test_internal_flashlfq_ondisk(flashlfq_psms_ds_ondisk):
+@pytest.parametrize("deduplication", [True, False])
+def test_internal_flashlfq_ondisk(flashlfq_psms_ds_ondisk, deduplication):
+    if deduplication:
+        pytest.skip("Deduplication is not working")
+
     mods, scores = mokapot.brew([flashlfq_psms_ds_ondisk], test_fdr=0.1)
     conf = mokapot.assign_confidence(
         [flashlfq_psms_ds_ondisk],
         scores_list=scores,
         eval_fdr=0.1,
-        deduplication=False,  # RN fails with deduplication = True
+        deduplication=deduplication,  # RN fails with deduplication = True
     )
     _tmp = _format_flashlfq(conf[0])
     for col in EXPECTED_COLS:

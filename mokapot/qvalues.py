@@ -136,7 +136,7 @@ def tdc(
         unique_metric = np.flip(unique_metric)
         indices = np.flip(indices)
 
-    qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
+    qvals = _fdr2qvalue(fdr, num_total, indices)
     qvals = np.flip(qvals)
     qvals = qvals[np.argsort(srt_idx)]
 
@@ -144,7 +144,7 @@ def tdc(
 
 
 @nb.njit
-def _fdr2qvalue(fdr, num_total, met, indices):
+def _fdr2qvalue(fdr, num_total, indices):
     """Quickly turn a list of FDRs to q-values.
 
     All of the inputs are assumed to be sorted.
@@ -155,8 +155,6 @@ def _fdr2qvalue(fdr, num_total, met, indices):
         A vector of all unique FDR values.
     num_total : numpy.ndarray
         A vector of the cumulative number of PSMs at each score.
-    met : numpy.ndarray
-        A vector of the scores for each PSM.
     indices : tuple of numpy.ndarray
         Tuple where the vector at index i indicates the PSMs that
         shared the unique FDR value in `fdr`.
@@ -167,10 +165,9 @@ def _fdr2qvalue(fdr, num_total, met, indices):
         A vector of q-values.
     """
     min_q = 1
-    qvals = np.ones(len(fdr))
-    group_fdr = np.ones(len(fdr))
+    qvals = np.ones_like(fdr)
     prev_idx = 0
-    for idx in range(met.shape[0]):
+    for idx in range(indices.shape[0]):
         next_idx = prev_idx + indices[idx]
         group = slice(prev_idx, next_idx)
         prev_idx = next_idx
@@ -181,7 +178,6 @@ def _fdr2qvalue(fdr, num_total, met, indices):
         if curr_fdr < min_q:
             min_q = curr_fdr
 
-        group_fdr[group] = curr_fdr
         qvals[group] = min_q
 
     return qvals

@@ -566,8 +566,13 @@ def _get_starting_labels(dataset: LinearPsmDataset, model):
     # JSPP 2024-12-14
     LOGGER.debug("Finding initial direction...")
     if model.direction is None and not model.is_trained:
-        feat_res = dataset._find_best_feature(model.train_fdr)
-        best_feat, feat_pass, start_labels, desc = feat_res
+        feat_res = dataset.find_best_feature(model.train_fdr)
+        best_feat, feat_pass, start_labels, desc = (
+            feat_res.feature.name,
+            feat_res.feature.positives,
+            feat_res.new_labels,
+            feat_res.feature.descending,
+        )
         LOGGER.info(
             "\t- Selected feature %s with %i PSMs at q<=%g.",
             best_feat,

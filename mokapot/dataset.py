@@ -67,6 +67,20 @@ class OptionalColumns:
         }
 
 
+@dataclass
+class BestFeatureProperties:
+    name: str
+    positives: int
+    fdr: float
+    descending: bool
+
+
+@dataclass
+class LabeledBestFeature:
+    feature: BestFeatureProperties
+    new_labels: np.ndarray
+
+
 class PsmDataset(ABC):
     """Store a collection of PSMs and their features.
 
@@ -259,6 +273,21 @@ class PsmDataset(ABC):
     def read_data(
         self, columns: list[str] | None = None, chunk_size: int | None = None
     ) -> pd.DataFrame | Generator[pd.DataFrame, None, None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def find_best_feature(self, eval_fdr: float) -> LabeledBestFeature:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def scores(self) -> np.ndarray | None:
+        # q: should i rename this to mokapot_scores?
+        raise NotImplementedError
+
+    @scores.setter
+    @abstractmethod
+    def scores(self, scores: np.ndarray | None):
         raise NotImplementedError
 
 
@@ -659,7 +688,7 @@ class LinearPsmDataset(PsmDataset):
             index=self._feature_columns,
         )
 
-    def _find_best_feature(self, eval_fdr):
+    def find_best_feature(self, eval_fdr: float) -> LabeledBestFeature:
         """
         Find the best feature to separate targets from decoys at the
         specified false-discovery rate threshold.
@@ -704,7 +733,16 @@ class LinearPsmDataset(PsmDataset):
                 f"No PSMs found below the 'eval_fdr' {eval_fdr}."
             )
 
-        return best_feat, best_positives, new_labels, best_desc
+        out = LabeledBestFeature(
+            feature=BestFeatureProperties(
+                name=best_feat,
+                positives=best_positives,
+                descending=best_desc,
+                fdr=eval_fdr,
+            ),
+            new_labels=new_labels,
+        )
+        return out
 
     def _calibrate_scores(self, scores, eval_fdr, desc=True):
         calibrate_scores(
@@ -740,6 +778,16 @@ class LinearPsmDataset(PsmDataset):
 
     def get_default_extension(self) -> str:
         return ".csv"
+
+    @property
+    def scores(self) -> np.ndarray | None:
+        if not hasattr(self, "_scores"):
+            return None
+        return self._scores
+
+    @scores.setter
+    def scores(self, scores: np.ndarray | None):
+        self._scores = scores
 
 
 @typechecked
@@ -981,7 +1029,7 @@ class OnDiskPsmDataset(PsmDataset):
             == 1
         ).sum()
 
-    def find_best_feature(self, eval_fdr):
+    def find_best_feature(self, eval_fdr: float) -> LabeledBestFeature:
         best_feat = None
         best_positives = 0
         new_labels = None
@@ -1021,7 +1069,16 @@ class OnDiskPsmDataset(PsmDataset):
                 f"No PSMs found below the 'eval_fdr' {eval_fdr}."
             )
 
-        return best_feat, best_positives, new_labels, best_desc
+        out = LabeledBestFeature(
+            feature=BestFeatureProperties(
+                name=best_feat,
+                positives=best_positives,
+                descending=best_desc,
+                fdr=eval_fdr,
+            ),
+            new_labels=new_labels,
+        )
+        return out
 
     def update_labels(self, scores, target_column, eval_fdr=0.01, desc=True):
         df = self.read_data(columns=target_column)
@@ -1123,6 +1180,16 @@ class OnDiskPsmDataset(PsmDataset):
         else:
             return self.reader.read(columns=columns)
 
+    @property
+    def scores(self) -> np.ndarray | None:
+        if not hasattr(self, "_scores"):
+            return None
+        return self._scores
+
+    @scores.setter
+    def scores(self, scores: np.ndarray | None):
+        self._scores = scores
+
 
 @typechecked
 def _update_labels(
@@ -1130,7 +1197,7 @@ def _update_labels(
     targets: np.ndarray[bool] | pd.Series,
     eval_fdr: float = 0.01,
     desc: bool = True,
-) -> np.ndarray[bool] | pd.Series:
+) -> np.ndarray[bool]:
     """Return the label for each PSM, given it's score.
 
     This method is used during model training to define positive examples,
