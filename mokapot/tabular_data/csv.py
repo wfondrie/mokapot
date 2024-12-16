@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Generator
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -97,6 +98,10 @@ class CSVFileWriter(TabularDataWriter):
 
     def initialize(self):
         # Just write header information
+        if Path(self.file_name).exists():
+            warnings.warn(
+                f"CSV file {self.file_name} exists, but will be overwritten."
+            )
         df = pd.DataFrame(columns=self.columns)
         df.to_csv(self.file_name, **self.stdargs)
 
@@ -110,3 +115,6 @@ class CSVFileWriter(TabularDataWriter):
 
     def get_associated_reader(self):
         return CSVFileReader(self.file_name, sep=self.stdargs["sep"])
+
+    def read(self):
+        return pd.read_csv(self.file_name, sep=self.stdargs["sep"])

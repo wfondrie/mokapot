@@ -108,7 +108,7 @@ def flashlfq_psms_ds_ondisk(psm_df_builder, tmp_path):
     return psms
 
 
-@pytest.parametrize("deduplication", [True, False])
+@pytest.mark.parametrize("deduplication", [True, False])
 def test_internal_flashlfq_ondisk(flashlfq_psms_ds_ondisk, deduplication):
     if deduplication:
         pytest.skip("Deduplication is not working")

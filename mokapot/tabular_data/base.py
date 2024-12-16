@@ -310,6 +310,11 @@ class TabularDataWriter(ABC):
     def finalize(self):
         pass
 
+    @abstractmethod
+    def read(self) -> pd.DataFrame:
+        # TODO: Evaluate if this method should allow lazier reading.
+        raise NotImplementedError
+
     def __enter__(self):
         self.initialize()
         return self

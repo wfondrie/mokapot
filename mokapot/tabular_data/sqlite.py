@@ -101,3 +101,7 @@ class ConfidenceSqliteWriter(SqliteWriter):
             row["q_value"] = row[self.qvalue_column]
             row["posterior_error_prob"] = row[self.pep_column]
         self.connection.executemany(query, data)
+
+    def read(self, level: str = "psms"):
+        table_name, table_id_col, mokapot_id_col = self.level_cols[level]
+        return pd.read_sql_table(table_name, self.connection)

@@ -149,7 +149,7 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
     df0 = TabularDataReader.from_path(file0).read()
     df1 = TabularDataReader.from_path(file1).read()
 
-    qval_column = "q-value"
+    qval_column = "mokapot_qvalue"
     assert_series_equal(df0[qval_column], df1[qval_column], atol=0.02)
     assert (
         estimate_abs_int(df0.score, df1[qval_column] - df0[qval_column])

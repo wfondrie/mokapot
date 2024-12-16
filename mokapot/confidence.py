@@ -29,7 +29,7 @@ from joblib import Parallel, delayed
 from typeguard import typechecked
 
 
-from mokapot.column_defs import get_standard_column_name
+from mokapot.column_defs import get_standard_column_name, Q_VALUE_COL_NAME
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import PsmDataset, OptionalColumns
 from mokapot.peps import (
@@ -82,7 +82,7 @@ class Confidence(object):
         eval_fdr: float = 0.01,
         write_decoys: bool = False,
         do_rollup: bool = True,
-        proteins=None,
+        proteins: pd.DataFrame | None = None,
         peps_error: bool = False,
         rng=0,
         peps_algorithm: str = "qvality",
@@ -131,7 +131,7 @@ class Confidence(object):
         self.write_decoys = write_decoys
         self.levels = levels
         self.do_rollup = do_rollup
-        self.proteins = proteins
+        self._proteins = proteins
         self.peps_error = peps_error
         self.rng = rng
         self.score_stats = score_stats
@@ -165,7 +165,6 @@ class Confidence(object):
         rep += f"Eval FDR: {self.eval_fdr}\n"
         rep += f"Write decoys: {self.write_decoys}\n"
         rep += f"Do rollup: {self.do_rollup}\n"
-        rep += f"Proteins: {self.proteins}\n"
         rep += f"Peps error: {self.peps_error}\n"
         rep += f"Rng: {self.rng}\n"
         rep += f"Score stats: {self.score_stats}\n"
@@ -181,7 +180,7 @@ class Confidence(object):
         peps_algorithm: str = "qvality",
         qvalue_algorithm: str = "tdc",
         stream_confidence: bool = False,
-        score_stats=None,
+        score_stats: OnlineStatistics | None = None,
         eval_fdr: float = 0.01,
     ):
         """
@@ -262,13 +261,58 @@ class Confidence(object):
     def get_optional_columns(self) -> OptionalColumns:
         return self.dataset.get_optional_columns()
 
+    def read(self, level: str) -> pd.DataFrame:
+        """Read the results for a given level."""
+        if level not in self.levels:
+            raise ValueError(
+                f"Level {level} not found. Available levels are: {self.levels}"
+            )
+        tmp = [x.read() for x in self.out_writers[level]]
+        return pd.concat(tmp)
+
     @property
-    def peptides(self) -> pd.Series:
-        return self.dataset.peptides
+    def peptides(self) -> pd.DataFrame:
+        return self.read("peptides")
+
+    @property
+    def psms(self) -> pd.DataFrame:
+        return self.read("psms")
+
+    @property
+    def proteins(self) -> pd.DataFrame:
+        return self.read("proteins")
 
     def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
         """Save confidenct peptides for quantification with FlashLFQ."""
         return to_flashlfq(self, out_file)
+
+    def plot_qvalues(
+        self, level: str, threshold: float = 0.1, ax=None, **kwargs
+    ):
+        """Plot the q-values for a given level.
+
+        Parameters
+        ----------
+        level : str
+            The level to plot.
+        threshold : float, optional
+            Indicates the maximum q-value to plot.
+        ax : matplotlib.pyplot.Axes, optional
+            The matplotlib Axes on which to plot. If `None` the current
+            Axes instance is used.
+        **kwargs : dict, optional
+            Arguments passed to :py:func:`matplotlib.axes.Axes.plot`.
+
+        Returns
+        -------
+        matplotlib.pyplot.Axes
+            A `matplotlib.axes.Axes` with the cumulative
+            number of accepted target PSMs or peptides.
+        """
+
+        all_read = [x.read() for x in self.out_writers[level]]
+        qvals = pd.concat(all_read)[Q_VALUE_COL_NAME]
+        return plot_qvalues(qvals, threshold=threshold, ax=ax, **kwargs)
 
 
 # Functions -------------------------------------------------------------------
@@ -315,8 +359,9 @@ def assign_confidence(
     dest_dir : Path or None, optional
         The directory in which to save the files. :code:`None` will use the
         current working directory.
-    prefixes : [str]
+    prefixes : [str] or None
         The prefixes added to all output file names.
+        If None, a single concatenated file will be created.
     write_decoys : bool, optional
         Save decoys confidence estimates as well?
     deduplication: bool
@@ -375,8 +420,11 @@ def assign_confidence(
 
     scores_use = scores_list
     if scores_use is None:
+        LOGGER.info("No scores passed, attempting to find them.")
         if any(dataset.scores is None for dataset in datasets):
+            LOGGER.info("No scores found, attempting to find best feature.")
             feature = datasets[0].find_best_feature(eval_fdr).feature
+            LOGGER.info("Best feature found: %s", feature)
             scores_use = [
                 dataset.read_data(columns=[feature.name])[
                     feature.name
@@ -385,6 +433,7 @@ def assign_confidence(
             ]
             # TODO: warn that no scores are present and will fall back
         else:
+            LOGGER.info("Scores found in psms, using them.")
             scores_use = [dataset.scores for dataset in datasets]
 
     out = []
@@ -395,20 +444,23 @@ def assign_confidence(
         #   directly from the pin reader (applying the renaming itself)
 
         output_writers, file_prefix = output_writers_factory.build_writers(
-            level_manager
+            level_manager,
+            prefix=prefix,
         )
 
         score_reader = TabularDataReader.from_array(score, "score")
         with create_sorted_file_reader(
-            dataset,
-            score_reader,
-            dest_dir,
-            file_prefix,
-            level_manager.level_hash_columns["psms"]
-            if deduplication
-            else None,
-            max_workers,
-            level_input_output_column_mapping,
+            dataset=dataset,
+            score_reader=score_reader,
+            dest_dir=dest_dir,
+            file_prefix=file_prefix,
+            deduplication_columns=(
+                level_manager.level_hash_columns["psms"]
+                if deduplication
+                else None
+            ),
+            max_workers=max_workers,
+            input_output_column_mapping=level_input_output_column_mapping,
         ) as sorted_file_reader:
             LOGGER.info("Assigning confidence...")
             LOGGER.info("Performing target-decoy competition...")
@@ -450,12 +502,18 @@ def assign_confidence(
         )
         out.append(con)
         if not prefix:
-            append_to_output_file = True
+            # Having None as a prefix means that all outputs will be
+            # written to a single file, thus after the first iteration
+            # we stop initializing the writers (bc that generates over-writing
+            # the files instead of appending to them).
+            output_writers_factory.append_to_output_file = True
 
     return out
 
 
 class LevelWriterCollection:
+    """ """
+
     def __init__(
         self,
         levels: list[str],
@@ -519,6 +577,9 @@ class LevelWriterCollection:
         )
 
     def hash_data_row(self, data_row, level):
+        # TODO: benchmark if actually hashing here would be better.
+        # .     It feels inefficient to keep large numbers of large strings
+        #       in memory.
         return str([
             data_row[self.level_input_output_column_mapping.get(col, col)]
             for col in self.level_hash_columns[level]
@@ -619,9 +680,6 @@ class LevelManager:
         self._setup_hash_columns()
         self._setup_protein_levels()
         self._setup_extra_output_columns()
-
-        # self.level_data_paths = {}
-        # self.level_hash_columns = {}
 
     @staticmethod
     def from_dataset(
@@ -770,7 +828,7 @@ class OutputWriterFactory:
             *extra_output_columns,
             # Q: should we prefix these with "mokapot"?
             "score",
-            "q-value",
+            Q_VALUE_COL_NAME,
             "posterior_error_prob",
             "proteinIds",
         ]
@@ -780,7 +838,7 @@ class OutputWriterFactory:
             "best peptide",
             "stripped sequence",
             "score",
-            "q-value",
+            Q_VALUE_COL_NAME,
             "posterior_error_prob",
         ]
 
@@ -808,7 +866,7 @@ class OutputWriterFactory:
                 columns=output_columns,
                 column_types=[],
                 level=level,
-                qvalue_column="q-value",
+                qvalue_column=Q_VALUE_COL_NAME,
                 pep_column="posterior_error_prob",
             )
 
@@ -819,7 +877,32 @@ class OutputWriterFactory:
 
     def build_writers(
         self, level_manager: LevelManager, prefix: str | None = None
-    ):
+    ) -> tuple[
+        dict[str, list[TabularDataWriter] | list[ConfidenceSqliteWriter]], str
+    ]:
+        """Build output writers for each level.
+
+        Parameters
+        ----------
+        level_manager : LevelManager
+            The level manager.
+        prefix : str, optional
+            The prefix to use for the output files, by default None.
+            It will be used to create the file names whose pattern is
+            "{self.dest_dir}/{file_root}{prefix}.{level}{file_ext}".
+
+        Returns
+        -------
+        tuple[
+            dict[
+                str,
+                list[TabularDataWriter] | list[ConfidenceSqliteWriter]
+            ],
+            str
+        ]
+            A tuple containing the output writers and the file prefix.
+
+        """
         output_writers = {}
 
         file_prefix = level_manager.file_root
@@ -847,10 +930,13 @@ class OutputWriterFactory:
             )
 
             if self.write_decoys and not self.is_sqlite:
-                outfile_decoys = (
-                    self.dest_dir
-                    / f"{self.file_prefix}decoys.{level}{self.file_ext}"
-                )
+                decoy_name = [
+                    str(file_prefix),
+                    "decoys.",
+                    str(level),
+                    str(level_manager.default_extension),
+                ]
+                outfile_decoys = level_manager.dest_dir / "".join(decoy_name)
                 output_writers[level].append(
                     self.create_writer(
                         path=outfile_decoys,
@@ -886,7 +972,8 @@ def create_sorted_file_reader(
         input_output_column_mapping.get(name, name) for name in input_columns
     ]
     file_iterator = reader.get_chunked_data_iterator(
-        CONFIDENCE_CHUNK_SIZE, output_columns
+        chunk_size=CONFIDENCE_CHUNK_SIZE,
+        columns=output_columns,
     )
 
     #  Write those chunks in parallel, where the columns are given
@@ -911,7 +998,7 @@ def create_sorted_file_reader(
     ]
 
     sorted_file_reader = MergedTabularDataReader(
-        readers,
+        readers=readers,
         priority_column="score",
         reader_chunk_size=CONFIDENCE_CHUNK_SIZE,
     )
@@ -950,7 +1037,7 @@ def _save_sorted_metadata_chunks(
         try:
             chunk_metadata.drop_duplicates(deduplication_columns, inplace=True)
         except KeyError as e:
-            msg = "Duplication error in the following columns: "
+            msg = "Duplication error trying to use the following columns: "
             msg += str(deduplication_columns)
             msg += f". Found: {chunk_metadata.columns} "
             msg += ". Please check the input data."

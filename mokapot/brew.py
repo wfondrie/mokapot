@@ -306,6 +306,7 @@ def brew(
     # Coherces the tuple to a list
     models = list(models)
 
+    LOGGER.info("Assigning scores to PSMs...")
     for score, dataset in strictzip(scores, datasets):
         dataset.scores = score
 

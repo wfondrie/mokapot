@@ -5,6 +5,7 @@ Helper classes and methods used for streaming of tabular data.
 from __future__ import annotations
 
 import warnings
+from pprint import pformat
 from typing import Generator, Callable, Iterator
 
 import numpy as np
@@ -397,6 +398,13 @@ class BufferedWriter(TabularDataWriter):
         # correctly initialized and finalized, so we make sure
         self.finalized = False
         self.initialized = False
+
+    def __repr__(self):
+        IGNORE_KEYS = {"buffer"}
+        dict_repr = pformat({
+            k: v for k, v in self.__dict__.items() if k not in IGNORE_KEYS
+        })
+        return f"{self.__class__!s}({dict_repr})"
 
     def __del__(self):
         if self.initialized and not self.finalized:
