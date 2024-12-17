@@ -26,10 +26,11 @@ import numpy as np
 import pandas as pd
 from typeguard import typechecked
 
-from mokapot import qvalues, utils
+from mokapot import utils
+from mokapot.algorithms import QvalueAlgorithm
 from mokapot.parsers.fasta import read_fasta
 from mokapot.proteins import Proteins
-from .tabular_data import TabularDataReader
+from mokapot.tabular_data import TabularDataReader
 
 LOGGER = logging.getLogger(__name__)
 
@@ -702,17 +703,17 @@ def _update_labels(
     Returns
     -------
     np.ndarray
-        The label of each PSM, where 1 indicates a positive example, -1
-        indicates a negative example, and 0 removes the PSM from training.
-        Typically, 0 is reserved for targets, below a specified FDR
-        threshold.
+        The label of each PSM, where 1 indicates a positive example (probably
+        true target), -1 indicates a negative example (decoy), and 0 removes
+        he PSM from training (probably false target). Typically, 0 is reserved
+        for targets, below a specified FDR threshold.
     """
     if isinstance(scores, pd.Series):
         scores = scores.values.astype(float)
     if isinstance(targets, pd.Series):
         targets = targets.values.astype(bool)
 
-    qvals = qvalues.tdc(scores, target=targets, desc=desc)
+    qvals = QvalueAlgorithm.eval(scores, targets=targets, desc=desc)
     unlabeled = np.logical_and(qvals > eval_fdr, targets)
     new_labels = np.ones(len(qvals))
     new_labels[~targets] = -1

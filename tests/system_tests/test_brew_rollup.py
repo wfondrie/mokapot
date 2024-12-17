@@ -5,7 +5,6 @@ At least for now, they do not check the correctness of the
 output, just that the expect outputs are created.
 """
 
-import shutil
 from pathlib import Path
 from typing import Any, List
 
@@ -100,8 +99,8 @@ def rollup_src_dirs(tmp_path_factory):
     # Note: If you want to keep the files, create a file or directory name
     # "dont_remove_me" in the dest_dir e.g. by the command
     # mkdir -p scratch/testing/dont_remove_me
-    if not Path.exists(dest_dir / "dont_remove_me"):
-        shutil.rmtree(dest_dir)
+    # if not Path.exists(dest_dir / "dont_remove_me"):
+    #     shutil.rmtree(dest_dir)
 
 
 @pytest.mark.parametrize(

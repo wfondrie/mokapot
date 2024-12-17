@@ -210,7 +210,6 @@ def do_rollup(config):
             compute_and_write_confidence(
                 temp_reader,
                 writer,
-                config.qvalue_algorithm,
                 config.peps_algorithm,
                 config.stream_confidence,
                 score_stats,

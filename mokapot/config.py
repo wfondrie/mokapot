@@ -64,9 +64,7 @@ def _parser():
         "psm_files",
         type=Path,
         nargs="+",
-        help=(
-            "A collection of PSMs in the Percolator tab-delimited or PepXML " "format."
-        ),
+        help=("A collection of PSMs in the Percolator tab-delimited or PepXML format."),
     )
 
     parser.add_argument(
@@ -148,7 +146,7 @@ def _parser():
         "--clip_nterm_methionine",
         default=False,
         action="store_true",
-        help=("Remove methionine residues that occur" " at the protein N-terminus.",),
+        help=("Remove methionine residues that occur at the protein N-terminus.",),
     )
 
     parser.add_argument(
@@ -253,9 +251,7 @@ def _parser():
         "--override",
         default=False,
         action="store_true",
-        help=(
-            "Use the learned model even if it performs worse " "than the best feature."
-        ),
+        help=("Use the learned model even if it performs worse than the best feature."),
     )
 
     parser.add_argument(
@@ -315,6 +311,16 @@ def _parser():
     )
 
     parser.add_argument(
+        "--tdc",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        help=(
+            "Specifies whether input comes from target decoy competition "
+            "(default) or from separate search."
+        ),
+    )
+
+    parser.add_argument(
         "--peps_error",
         default=False,
         action="store_true",
@@ -332,12 +338,34 @@ def _parser():
     )
 
     parser.add_argument(
+        "--pi0_algorithm",
+        default="default",
+        choices=[
+            "default",
+            "tdc",
+            "slope",
+            "storey_smoother",
+            "storey_fixed",
+            "storey_bootstrap",
+        ],
+        help=("Specify the algorithm for pi0 estimation. "),
+    )
+
+    parser.add_argument(
+        "--pi0_eval_lambda",
+        default=0.5,
+        help=("Specify the lambda in Storey's pi0 estimation for evaluation. "),
+    )
+
+    parser.add_argument(
         "--qvalue_algorithm",
-        default="tdc",
-        choices=["tdc", "from_peps", "from_counts"],
+        default="default",
+        choices=["default", "tdc", "from_counts", "storey"],
         help=(
-            "Specify the algorithm for qvalue computation. `tdc` is "
-            "the default mokapot algorithm."
+            "Specify the algorithm for qvalue computation. If the `tdc` option"
+            "is set to true (which is the default0 `default` evals to `tdc`, "
+            "the original mokapot algorithm, which works only with tdc. "
+            "Otherwise, it defaults to `storey`."
         ),
     )
 

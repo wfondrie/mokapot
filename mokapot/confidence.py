@@ -26,6 +26,7 @@ import pandas as pd
 from joblib import delayed, Parallel
 from typeguard import typechecked
 
+from algorithms import QvalueAlgorithm
 from mokapot.column_defs import get_standard_column_name
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import OnDiskPsmDataset
@@ -36,7 +37,7 @@ from mokapot.peps import (
     TDHistData,
 )
 from mokapot.picked_protein import picked_protein
-from mokapot.qvalues import qvalues_from_scores, qvalues_func_from_hist
+from mokapot.qvalues import qvalues_func_from_hist
 from mokapot.statistics import HistData, OnlineStatistics
 from mokapot.tabular_data import (
     BufferType,
@@ -74,7 +75,6 @@ class Confidence(object):
         peps_error: bool = False,
         rng=0,
         peps_algorithm: str = "qvality",
-        qvalue_algorithm: str = "tdc",
         stream_confidence: bool = False,
         score_stats=None,
     ):
@@ -125,7 +125,6 @@ class Confidence(object):
             write_decoys=write_decoys,
             peps_error=peps_error,
             peps_algorithm=peps_algorithm,
-            qvalue_algorithm=qvalue_algorithm,
             stream_confidence=stream_confidence,
             score_stats=score_stats,
             eval_fdr=eval_fdr,
@@ -139,7 +138,6 @@ class Confidence(object):
         write_decoys: bool = False,
         peps_error: bool = False,
         peps_algorithm: str = "qvality",
-        qvalue_algorithm: str = "tdc",
         stream_confidence: bool = False,
         score_stats=None,
         eval_fdr: float = 0.01,
@@ -181,7 +179,6 @@ class Confidence(object):
             compute_and_write_confidence(
                 reader,
                 writer,
-                qvalue_algorithm,
                 peps_algorithm,
                 stream_confidence,
                 score_stats,
@@ -236,7 +233,6 @@ def assign_confidence(
     rng=0,
     peps_error=False,
     peps_algorithm="qvality",
-    qvalue_algorithm="tdc",
     sqlite_path=None,
     stream_confidence=False,
 ):
@@ -498,7 +494,6 @@ def assign_confidence(
             rng=rng,
             peps_error=peps_error,
             peps_algorithm=peps_algorithm,
-            qvalue_algorithm=qvalue_algorithm,
             stream_confidence=stream_confidence,
             score_stats=score_stats,
         )
@@ -602,7 +597,6 @@ def _save_sorted_metadata_chunks(
 def compute_and_write_confidence(
     temp_reader: TabularDataReader,
     writer: TabularDataWriter,
-    qvalue_algorithm: str,
     peps_algorithm: str,
     stream_confidence: bool,
     score_stats: OnlineStatistics,
@@ -628,9 +622,9 @@ def compute_and_write_confidence(
         # Estimate q-values and assign
         LOGGER.info(
             f"Assigning q-values to {level} "
-            f"(using {qvalue_algorithm} algorithm) ..."
+            f"(using {QvalueAlgorithm.long_desc()} algorithm) ..."
         )
-        qvals = qvalues_from_scores(scores, targets, qvalue_algorithm)
+        qvals = QvalueAlgorithm.eval(scores, targets)
         data[qvals_column] = qvals
 
         # Logging update on q-values

@@ -28,6 +28,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from typeguard import typechecked
 
+from algorithms import QvalueAlgorithm
 from mokapot import LinearPsmDataset
 
 LOGGER = logging.getLogger(__name__)
@@ -310,6 +311,11 @@ class Model:
             scores = scores[original_idx]
 
             # Update target
+            LOGGER.debug(
+                "\t- Iteration %i: estimating q-values with: %s.",
+                i,
+                QvalueAlgorithm.long_desc(),
+            )
             target = dataset._update_labels(scores, eval_fdr=self.train_fdr)
             target = target[shuffled_idx]
             num_passed.append((target == 1).sum())

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from algorithms import configure_algorithms
 from . import __version__
 from .brew import brew
 from .confidence import assign_confidence
@@ -48,6 +49,9 @@ def main(main_args=None):
     # Suppress warning if asked for
     if config.suppress_warnings:
         warnings.filterwarnings("ignore")
+
+    # Configure confidence algorithms
+    configure_algorithms(config)
 
     # Write header
     logging.info("mokapot version %s", str(__version__))
@@ -143,7 +147,6 @@ def main(main_args=None):
         proteins=proteins,
         peps_error=config.peps_error,
         peps_algorithm=config.peps_algorithm,
-        qvalue_algorithm=config.qvalue_algorithm,
         sqlite_path=config.sqlite_db_path,
         stream_confidence=config.stream_confidence,
     )
