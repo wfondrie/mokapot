@@ -30,8 +30,6 @@ from typeguard import typechecked
 
 from mokapot import qvalues
 from mokapot import utils
-from mokapot.parsers.fasta import read_fasta
-from mokapot.proteins import Proteins
 from .tabular_data import TabularDataReader, DataFrameReader
 
 LOGGER = logging.getLogger(__name__)
@@ -106,29 +104,6 @@ class PsmDataset(ABC):
     def rng(self, rng):
         """Set the random number generator"""
         self._rng = np.random.default_rng(rng)
-
-    def add_proteins(self, proteins, **kwargs):
-        """Add protein information to the dataset.
-
-        Protein sequence information is required to compute protein-level
-        confidence estimates using the picked-protein approach.
-
-        Parameters
-        ----------
-        proteins : a Proteins object or str
-            The :py:class:`~mokapot.proteins.Proteins` object defines the
-            mapping of peptides to proteins and the mapping of decoy proteins
-            to their corresponding target proteins. Alternatively, a string
-            specifying a FASTA file can be specified which will be parsed to
-            define these mappings.
-        **kwargs : dict
-            Keyword arguments to be passed to the
-            :py:class:`mokapot.read_fasta()` function.
-        """
-        if not isinstance(proteins, Proteins):
-            proteins = read_fasta(proteins, **kwargs)
-
-        self._proteins = proteins
 
     @abstractmethod
     def get_optional_columns(self) -> OptionalColumns:
@@ -656,11 +631,6 @@ class LinearPsmDataset(PsmDataset):
     def columns(self):
         """The columns of the dataset."""
         return self.data.columns.tolist()
-
-    @property
-    def has_proteins(self):
-        """Has a FASTA file been added?"""
-        return self._proteins is not None
 
     def _targets_count_by_feature(self, desc, eval_fdr):
         """

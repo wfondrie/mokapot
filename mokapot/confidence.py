@@ -13,6 +13,8 @@ acquisition proteomics datasets.
 
 We recommend using the :py:func:`~mokapot.brew()` function to obtain these
 confidence estimates, rather than initializing the classes below directly.
+
+TODO: update this docstring.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from mokapot.peps import (
     peps_func_from_hist_nnls,
     PepsConvergenceError,
 )
+from mokapot.proteins import Proteins
 from mokapot.picked_protein import picked_protein
 from mokapot.qvalues import qvalues_from_scores, qvalues_func_from_hist
 from mokapot.statistics import OnlineStatistics, HistData
@@ -70,8 +73,45 @@ except ImportError:
 
 # Classes ---------------------------------------------------------------------
 @typechecked
-class Confidence(object):
-    """Estimate the statistical confidence for a collection of PSMs."""
+class Confidence:
+    """Calculate, Store and provide access to confidence estimates.
+
+    This class stores confidence estimates (q-values and PEPs) computed for
+    different levels (PSMs, peptides, proteins) and provides methods
+    to access, save and visualize these estimates.
+
+    Parameters
+    ----------
+    dataset : PsmDataset
+        The dataset containing PSMs and metadata
+    levels : list[str]
+        Levels at which confidence estimation was performed
+        (e.g. ['psms','peptides'])
+    level_paths : dict[str, Path]
+        Paths to intermediate files for each confidence level
+    out_writers : dict[str, Sequence[TabularDataWriter]]
+        Writers for outputting results at each level
+    eval_fdr : float, optional
+        FDR threshold for evaluation metrics, by default 0.01
+    write_decoys : bool, optional
+        Whether to write decoy results, by default False
+    do_rollup : bool, optional
+        Whether to perform protein inference, by default True
+    proteins : pd.DataFrame, optional
+        Protein annotations if protein inference is used
+    peps_error : bool, optional
+        Whether to raise error on PEP calculation failure, by default False
+    rng : int or np.random.Generator, optional
+        Random number generator for reproducibility
+    peps_algorithm : str, optional
+        Algorithm for PEP calculation, by default "qvality"
+    qvalue_algorithm : str, optional
+        Algorithm for q-value calculation, by default "tdc"
+    stream_confidence : bool, optional
+        Whether to stream confidence calculations, by default False
+    score_stats : OnlineStatistics, optional
+        Pre-computed score statistics if streaming
+    """
 
     def __init__(
         self,
@@ -82,7 +122,7 @@ class Confidence(object):
         eval_fdr: float = 0.01,
         write_decoys: bool = False,
         do_rollup: bool = True,
-        proteins: pd.DataFrame | None = None,
+        proteins: Proteins | None = None,
         peps_error: bool = False,
         rng=0,
         peps_algorithm: str = "qvality",
@@ -90,34 +130,6 @@ class Confidence(object):
         stream_confidence: bool = False,
         score_stats=None,
     ):
-        """Initialize a Confidence object.
-
-        Assign confidence estimates to a set of PSMs
-
-        Estimate q-values and posterior error probabilities (PEPs) for PSMs and
-        peptides when ranked by the provided scores.
-
-        Parameters
-        ----------
-        dataset : OnDiskPsmDataset
-            An OnDiskPsmDataset.
-        rng : int or np.random.Generator, optional
-            A seed or generator used for cross-validation split creation and to
-            break ties, or ``None`` to use the default random number generator
-            state.
-        levels : list[str]
-            Levels at which confidence estimation was performed
-        level_paths : list[Path]
-                Files with unique psms and unique peptides.
-        out_paths : list[list[Path]]
-            The output files where the results will be written
-        eval_fdr : float
-            The FDR threshold at which to report performance. This parameter
-            has no affect on the analysis itself, only logging messages.
-        write_decoys : bool
-            Save decoys confidence estimates as well?
-        """
-
         self.dataset = dataset
         self._score_column = "score"
         self._target_column = dataset.target_column
@@ -172,7 +184,7 @@ class Confidence(object):
 
     def _assign_confidence(
         self,
-        levels: list[str],
+        levels: list[str],  # why is this passed if its a property of self?
         level_path_map: dict[str, Path],
         out_writers_map: dict[str, Sequence[TabularDataWriter]],
         write_decoys: bool = False,
@@ -237,26 +249,28 @@ class Confidence(object):
 
             level_path.unlink(missing_ok=True)
 
-    def _write_protein_level_data(self, level_paths, proteins, rng):
+    def _write_protein_level_data(
+        self, level_paths: dict[str, Path], proteins: Proteins, rng
+    ):
         psms = TabularDataReader.from_path(level_paths["psms"]).read()
-        proteins = picked_protein(
-            psms,
-            self._target_column,
-            self._peptide_column,
-            self._score_column,
-            proteins,
-            rng,
+        proteins_df = picked_protein(
+            peptides=psms,
+            target_column=self._target_column,
+            peptide_column=self._peptide_column,
+            score_column=self._score_column,
+            proteins=proteins,
+            rng=rng,
         )
-        proteins = proteins.sort_values(
+        proteins_df = proteins_df.sort_values(
             by=self._score_column, ascending=False
         ).reset_index(drop=True)
         protein_writer = TabularDataWriter.from_suffix(
             file_name=level_paths["proteins"],
-            columns=proteins.columns.tolist(),
-            column_types=proteins.dtypes.tolist(),
+            columns=proteins_df.columns.tolist(),
+            column_types=proteins_df.dtypes.tolist(),
         )
-        protein_writer.write(proteins)
-        LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
+        protein_writer.write(proteins_df)
+        LOGGER.info("\t- Found %i unique protein groups.", len(proteins_df))
 
     def get_optional_columns(self) -> OptionalColumns:
         return self.dataset.get_optional_columns()
@@ -326,16 +340,16 @@ def assign_confidence(
     file_root: str = "",
     prefixes: list[str | None] | None = None,
     write_decoys: bool = False,
-    deduplication=True,
-    do_rollup=True,
-    proteins=None,
-    append_to_output_file=False,
-    rng=0,
-    peps_error=False,
-    peps_algorithm="qvality",
-    qvalue_algorithm="tdc",
-    sqlite_path=None,
-    stream_confidence=False,
+    deduplication: bool = True,
+    do_rollup: bool = True,
+    proteins: Proteins | None = None,
+    append_to_output_file: bool = False,
+    rng: int | np.random.Generator = 0,
+    peps_error: bool = False,
+    peps_algorithm="qvality",  # TODO make this an enum (2024-12-17)
+    qvalue_algorithm="tdc",  # TODO make this an enum (2024-12-17)
+    sqlite_path: Path | None = None,
+    stream_confidence: bool = False,
 ) -> list[Confidence]:
     """Assign confidence to PSMs peptides, and optionally, proteins.
 
@@ -512,8 +526,6 @@ def assign_confidence(
 
 
 class LevelWriterCollection:
-    """ """
-
     def __init__(
         self,
         levels: list[str],
@@ -628,6 +640,8 @@ class LevelManager:
     """Manages level-specific data and operations.
 
     This class is meant to be used internally by the `Confidence` class.
+    But it basically bundles the output path creation logic and the column
+    +level mapping logic.
 
     Parameters
     ----------
@@ -654,6 +668,10 @@ class LevelManager:
         The prefix added to all output file names.
         The final file names will be:
         `dest_dir / file_root+level+default_extension`
+    protein_column : str, optional
+        The column that specifies which protein(s) the detected peptide might
+        have originated from. This column is not used to compute protein-level
+        confidence estimates, it is just propagated to the output.
     """
 
     def __init__(

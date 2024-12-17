@@ -79,7 +79,7 @@ select = ["E", "F", "T20"]  # T20 is for print() statements.
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"docs/*.ipynb" = ["T20"]
+"docs/**/*.ipynb" = ["T20"]
 "test_parser_pepxml.py" = ["E501"]
 
 [tool.setuptools]

@@ -5,15 +5,22 @@ confidence estimates.
 
 import logging
 import pandas as pd
+import numpy as np
 
 from mokapot import utils
 from mokapot.peptides import match_decoy
+from mokapot.proteins import Proteins
 
 LOGGER = logging.getLogger(__name__)
 
 
 def picked_protein(
-    peptides, target_column, peptide_column, score_column, proteins, rng
+    peptides: pd.DataFrame,
+    target_column: str,
+    peptide_column: str,
+    score_column: str,
+    proteins: Proteins,
+    rng: int | np.random.Generator,
 ):
     """Perform the picked-protein approach
 
@@ -25,6 +32,8 @@ def picked_protein(
         The column in `peptides` indicating if the peptide is a target.
     peptide_column : str
         The column in `peptides` containing the peptide sequence.
+    score_column : str
+        The column in `peptides` containing the score.
     proteins : Proteins object
         A Proteins object.
     rng : int or numpy.random.Generator
@@ -142,6 +151,7 @@ def strip_peptides(sequences):
         sequences.str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
         .str.replace(r"^.*?\.", "", regex=True)
         .str.replace(r"\..*?$", "", regex=True)
+        .str.strip("-")
     )
 
     # Sometimes folks use lowercase letters for the termini or mods:
@@ -153,7 +163,7 @@ def strip_peptides(sequences):
     return sequences
 
 
-def group_with_decoys(peptides, proteins):
+def group_with_decoys(peptides: pd.DataFrame, proteins: Proteins):
     """Retrieve the protein group in the case where the FASTA has decoys.
 
     Parameters
