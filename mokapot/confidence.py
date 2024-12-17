@@ -26,7 +26,7 @@ import pandas as pd
 from joblib import delayed, Parallel
 from typeguard import typechecked
 
-from algorithms import QvalueAlgorithm
+from mokapot.algorithms import QvalueAlgorithm
 from mokapot.column_defs import get_standard_column_name
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import OnDiskPsmDataset

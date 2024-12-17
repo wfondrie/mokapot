@@ -15,9 +15,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 from typeguard import typechecked
 
+import mokapot.peps as peps
 import mokapot.qvalues as qvalues
 import mokapot.qvalues_storey as qvalues_storey
-import peps
 
 
 ## Algorithms for pi0 estimation

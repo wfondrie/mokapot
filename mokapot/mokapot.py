@@ -11,8 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-from algorithms import configure_algorithms
 from . import __version__
+from .algorithms import configure_algorithms
 from .brew import brew
 from .confidence import assign_confidence
 from .config import Config
