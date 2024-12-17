@@ -7,25 +7,20 @@ output, just that the expect outputs are created.
 
 import shutil
 from pathlib import Path
-from typing import List, Any
+from typing import Any, List
 
 import pytest
 from filelock import FileLock
 from pandas.testing import assert_series_equal
 
 from mokapot.rollup import compute_rollup_levels
-from mokapot.tabular_data import (
-    TabularDataReader,
-    CSVFileReader,
-    ParquetFileWriter,
-)
-from ..helpers.cli import run_mokapot_cli, _run_cli
+from mokapot.tabular_data import CSVFileReader, ParquetFileWriter, \
+    TabularDataReader
+from ..helpers.cli import _run_cli, run_mokapot_cli
 from ..helpers.math import estimate_abs_int
 
 
-def run_brew_rollup(
-    params: List[Any], run_in_subprocess=None, capture_output=False
-):
+def run_brew_rollup(params: List[Any], run_in_subprocess=None, capture_output=False):
     from mokapot.brew_rollup import main
 
     return _run_cli(
@@ -151,14 +146,9 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
 
     qval_column = "q-value"
     assert_series_equal(df0[qval_column], df1[qval_column], atol=0.02)
+    assert estimate_abs_int(df0.score, df1[qval_column] - df0[qval_column]) < 0.002
     assert (
-        estimate_abs_int(df0.score, df1[qval_column] - df0[qval_column])
-        < 0.002
-    )
-    assert (
-        estimate_abs_int(
-            df0.score, df1.posterior_error_prob - df0.posterior_error_prob
-        )
+        estimate_abs_int(df0.score, df1.posterior_error_prob - df0.posterior_error_prob)
         < 0.03
     )
 

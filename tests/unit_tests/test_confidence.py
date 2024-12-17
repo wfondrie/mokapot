@@ -10,7 +10,7 @@ from pandas.testing import assert_frame_equal
 from pytest import approx
 
 import mokapot
-from mokapot import OnDiskPsmDataset, assign_confidence
+from mokapot import assign_confidence, OnDiskPsmDataset
 
 
 @contextlib.contextmanager
@@ -99,16 +99,20 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
     assert df["PSMId"].tolist() == [136, 96, 164]
     assert df["peptide"].tolist() == ["EVSSK", "HDWCK", "SYQVK"]
     assert df["score"].tolist() == approx([5.767435, 5.572517, 5.531904])
-    assert df["q-value"].tolist() == approx([
-        0.0103092780336737,
-        0.0103092780336737,
-        0.0103092780336737,
-    ])
-    assert df["posterior_error_prob"].tolist() == approx([
-        3.315389846699129e-05,
-        5.558992546200682e-05,
-        6.191049743361808e-05,
-    ])
+    assert df["q-value"].tolist() == approx(
+        [
+            0.0103092780336737,
+            0.0103092780336737,
+            0.0103092780336737,
+        ]
+    )
+    assert df["posterior_error_prob"].tolist() == approx(
+        [
+            3.315389846699129e-05,
+            5.558992546200682e-05,
+            6.191049743361808e-05,
+        ]
+    )
 
 
 def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
@@ -164,9 +168,7 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
             max_workers=4,
             eval_fdr=0.02,
         )
-        df_results_group1 = pd.read_parquet(
-            tmp_path / "targets.peptides.parquet"
-        )
+        df_results_group1 = pd.read_parquet(tmp_path / "targets.peptides.parquet")
 
     with run_with_chunk_size(10000):
         np.random.seed(42)
@@ -178,8 +180,6 @@ def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):
             max_workers=4,
             eval_fdr=0.02,
         )
-        df_results_group2 = pd.read_parquet(
-            tmp_path / "targets.peptides.parquet"
-        )
+        df_results_group2 = pd.read_parquet(tmp_path / "targets.peptides.parquet")
 
     assert_frame_equal(df_results_group1, df_results_group2)

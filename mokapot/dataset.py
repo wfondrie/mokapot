@@ -26,8 +26,7 @@ import numpy as np
 import pandas as pd
 from typeguard import typechecked
 
-from mokapot import qvalues
-from mokapot import utils
+from mokapot import qvalues, utils
 from mokapot.parsers.fasta import read_fasta
 from mokapot.proteins import Proteins
 from .tabular_data import TabularDataReader

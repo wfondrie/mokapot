@@ -34,9 +34,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Constants -------------------------------------------------------------------
 PERC_GRID = {
-    "class_weight": [
-        {0: neg, 1: pos} for neg in (0.1, 1, 10) for pos in (0.1, 1, 10)
-    ]
+    "class_weight": [{0: neg, 1: pos} for neg in (0.1, 1, 10) for pos in (0.1, 1, 10)]
 }
 
 
@@ -230,13 +228,10 @@ class Model:
         feat_names = dataset.features.columns.tolist()
         if set(feat_names) != set(self.features):
             raise ValueError(
-                "Features of the input data do not match the "
-                "features of this Model."
+                "Features of the input data do not match the " "features of this Model."
             )
 
-        feat = self.scaler.transform(
-            dataset.features.loc[:, self.features].values
-        )
+        feat = self.scaler.transform(dataset.features.loc[:, self.features].values)
 
         return _get_scores(self.estimator, feat)
 
@@ -319,13 +314,10 @@ class Model:
             target = target[shuffled_idx]
             num_passed.append((target == 1).sum())
 
-            LOGGER.debug(
-                "\t- Iteration %i: %i training PSMs passed.", i, num_passed[i]
-            )
+            LOGGER.debug("\t- Iteration %i: %i training PSMs passed.", i, num_passed[i])
 
             if num_passed[i] == 0:
                 raise RuntimeError("Model performs worse after training.")
-
 
         # If the model performs worse than what was initialized:
         if (

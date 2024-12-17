@@ -15,9 +15,7 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
 
     def _fill_text(self, text, width, indent):
         text_list = text.splitlines(keepends=True)
-        return "\n".join(
-            _process_line(line, width, indent) for line in text_list
-        )
+        return "\n".join(_process_line(line, width, indent) for line in text_list)
 
 
 class Config:
@@ -67,8 +65,7 @@ def _parser():
         type=Path,
         nargs="+",
         help=(
-            "A collection of PSMs in the Percolator tab-delimited or PepXML "
-            "format."
+            "A collection of PSMs in the Percolator tab-delimited or PepXML " "format."
         ),
     )
 
@@ -151,10 +148,7 @@ def _parser():
         "--clip_nterm_methionine",
         default=False,
         action="store_true",
-        help=(
-            "Remove methionine residues that occur"
-            " at the protein N-terminus.",
-        ),
+        help=("Remove methionine residues that occur" " at the protein N-terminus.",),
     )
 
     parser.add_argument(
@@ -260,8 +254,7 @@ def _parser():
         default=False,
         action="store_true",
         help=(
-            "Use the learned model even if it performs worse "
-            "than the best feature."
+            "Use the learned model even if it performs worse " "than the best feature."
         ),
     )
 

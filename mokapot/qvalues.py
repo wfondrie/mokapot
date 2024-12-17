@@ -1,16 +1,18 @@
 """
 This module estimates q-values.
 """
-import numpy as np
-import numba as nb
-from typeguard import typechecked
+
 from typing import Callable
 
+import numba as nb
+import numpy as np
+from typeguard import typechecked
+
 from mokapot.peps import (
-    peps_from_scores_hist_nnls,
-    monotonize_simple,
-    hist_data_from_scores,
     estimate_pi0_by_slope,
+    hist_data_from_scores,
+    monotonize_simple,
+    peps_from_scores_hist_nnls,
     TDHistData,
 )
 
@@ -26,9 +28,7 @@ QVALUE_ALGORITHM = {
 
 
 @typechecked
-def tdc(
-    scores: np.ndarray[float], target: np.ndarray[bool], desc: bool = True
-):
+def tdc(scores: np.ndarray[float], target: np.ndarray[bool], desc: bool = True):
     """Estimate q-values using target decoy competition.
 
     Estimates q-values using the simple target decoy competition method.
@@ -220,8 +220,7 @@ def qvalues_from_scores(
         return qvalue_function(scores, targets)
     else:
         raise ValueError(
-            "Unknown qvalue algorithm in qvalues_from_scores:"
-            f" {qvalue_algorithm}"
+            "Unknown qvalue algorithm in qvalues_from_scores:" f" {qvalue_algorithm}"
         )
 
 
@@ -280,18 +279,12 @@ def qvalues_from_peps(
 
     target_scores = scores_sorted[targets_sorted]
     target_peps = peps_sorted[targets_sorted]
-    target_fdr = target_peps.cumsum() / np.arange(
-        1, len(target_peps) + 1, dtype=float
-    )
-    target_qvalues = monotonize_simple(
-        target_fdr, ascending=True, reverse=True
-    )
+    target_fdr = target_peps.cumsum() / np.arange(1, len(target_peps) + 1, dtype=float)
+    target_qvalues = monotonize_simple(target_fdr, ascending=True, reverse=True)
 
     # Note: we need to flip the arrays again, since interp needs scores in
     #   ascending order
-    qvalues = np.interp(
-        scores, np.flip(target_scores), np.flip(target_qvalues)
-    )
+    qvalues = np.interp(scores, np.flip(target_scores), np.flip(target_qvalues))
     return qvalues
 
 
@@ -354,9 +347,7 @@ def qvalues_from_counts(
         * ((~targets_sorted).cumsum() + 1)
         / np.maximum(targets_sorted.cumsum(), 1)
     )
-    qvalues_sorted = monotonize_simple(
-        fdr_sorted, ascending=True, reverse=True
-    )
+    qvalues_sorted = monotonize_simple(fdr_sorted, ascending=True, reverse=True)
 
     # Extract unique scores and take qvalue from the last of them
     scores_uniq, idx_uniq, rev_uniq, cnt_uniq = np.unique(
@@ -411,9 +402,7 @@ def qvalues_func_from_hist(
 
     fdr_flipped = factor * (decoys_sum + 1) / np.maximum(targets_sum, 1)
     fdr_flipped = np.clip(fdr_flipped, 0.0, 1.0)
-    qvalues_flipped = monotonize_simple(
-        fdr_flipped, ascending=True, reverse=True
-    )
+    qvalues_flipped = monotonize_simple(fdr_flipped, ascending=True, reverse=True)
     qvalues = np.flip(qvalues_flipped)
 
     # We need to append zero to end of the qvalues for right edge of the last

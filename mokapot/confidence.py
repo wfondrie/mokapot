@@ -15,14 +15,15 @@ We recommend using the :py:func:`~mokapot.brew()` function or the
 :py:meth:`~mokapot.PsmDataset.assign_confidence()` method to obtain these
 confidence estimates, rather than initializing the classes below directly.
 """
+
 import logging
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Sequence, Iterator
+from typing import Iterator, Sequence
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
+from joblib import delayed, Parallel
 from typeguard import typechecked
 
 from mokapot.column_defs import get_standard_column_name
@@ -30,13 +31,13 @@ from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import OnDiskPsmDataset
 from mokapot.peps import (
     peps_from_scores,
-    TDHistData,
     peps_func_from_hist_nnls,
     PepsConvergenceError,
+    TDHistData,
 )
 from mokapot.picked_protein import picked_protein
 from mokapot.qvalues import qvalues_from_scores, qvalues_func_from_hist
-from mokapot.statistics import OnlineStatistics, HistData
+from mokapot.statistics import HistData, OnlineStatistics
 from mokapot.tabular_data import (
     BufferType,
     ColumnMappedReader,
@@ -44,8 +45,9 @@ from mokapot.tabular_data import (
     ConfidenceSqliteWriter,
     join_readers,
     MergedTabularDataReader,
+    TabularDataReader,
+    TabularDataWriter,
 )
-from mokapot.tabular_data import TabularDataReader, TabularDataWriter
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 from mokapot.utils import (
     convert_targets_column,
@@ -158,9 +160,7 @@ class Confidence(object):
         """
         if stream_confidence:
             if score_stats is None:
-                raise ValueError(
-                    "score stats must be provided for streamed confidence"
-                )
+                raise ValueError("score stats must be provided for streamed confidence")
 
         for level in levels:
             level_path = level_path_map[level]
@@ -382,9 +382,7 @@ def assign_confidence(
 
         level_input_output_column_mapping = {
             in_col: out_col
-            for in_col, out_col in zip(
-                level_input_column_names, level_column_names
-            )
+            for in_col, out_col in zip(level_input_column_names, level_column_names)
         }
 
         file_prefix = file_root
@@ -395,20 +393,14 @@ def assign_confidence(
         for level in levels_or_proteins:
             output_writers[level] = []
 
-            outfile_targets = (
-                dest_dir / f"{file_prefix}targets.{level}{file_ext}"
-            )
+            outfile_targets = dest_dir / f"{file_prefix}targets.{level}{file_ext}"
 
             output_writers[level].append(
-                create_output_writer(
-                    outfile_targets, level, not append_to_output_file
-                )
+                create_output_writer(outfile_targets, level, not append_to_output_file)
             )
 
             if write_decoys and not is_sqlite:
-                outfile_decoys = (
-                    dest_dir / f"{file_prefix}decoys.{level}{file_ext}"
-                )
+                outfile_decoys = dest_dir / f"{file_prefix}decoys.{level}{file_ext}"
                 output_writers[level].append(
                     create_output_writer(
                         outfile_decoys, level, not append_to_output_file
@@ -437,9 +429,7 @@ def assign_confidence(
                 row_type=BufferType.Dicts
             )
             type_map = sorted_file_reader.get_schema(as_dict=True)
-            level_column_types = [
-                type_map[name] for name in level_column_names
-            ]
+            level_column_types = [type_map[name] for name in level_column_names]
 
             level_writers = {
                 level: TabularDataWriter.from_suffix(
@@ -455,10 +445,12 @@ def assign_confidence(
                 writer.initialize()
 
             def hash_data_row(data_row):
-                return str([
-                    data_row[level_input_output_column_mapping.get(col, col)]
-                    for col in level_hash_columns[level]
-                ])
+                return str(
+                    [
+                        data_row[level_input_output_column_mapping.get(col, col)]
+                        for col in level_hash_columns[level]
+                    ]
+                )
 
             seen_level_entities = {level: set() for level in levels}
             score_stats = OnlineStatistics()
@@ -475,9 +467,7 @@ def assign_confidence(
                                 break
                             continue
                         seen_level_entities[level].add(psm_hash)
-                    out_row = {
-                        col: data_row[col] for col in level_column_names
-                    }
+                    out_row = {col: data_row[col] for col in level_column_names}
                     level_writers[level].append_data(out_row)
                     score_stats.update_single(data_row["score"])
 
@@ -486,9 +476,7 @@ def assign_confidence(
                 level_writers[level].finalize()
                 if level == "psms":
                     if deduplication:
-                        LOGGER.info(
-                            f"\t- Found {count} PSMs from unique spectra."
-                        )
+                        LOGGER.info(f"\t- Found {count} PSMs from unique spectra.")
                     else:
                         LOGGER.info(f"\t- Found {psm_count} PSMs.")
                     LOGGER.info(
@@ -533,10 +521,12 @@ def create_sorted_file_reader(
 
     # Create a reader that only reads columns given in psms.metadata_columns
     # in chunks of size CONFIDENCE_CHUNK_SIZE and joins the scores to it
-    reader = join_readers([
-        ColumnMappedReader(dataset.reader, input_output_column_mapping),
-        score_reader,
-    ])
+    reader = join_readers(
+        [
+            ColumnMappedReader(dataset.reader, input_output_column_mapping),
+            score_reader,
+        ]
+    )
     input_columns = dataset.metadata_columns + ["score"]
     output_columns = [
         input_output_column_mapping.get(name, name) for name in input_columns
@@ -560,9 +550,7 @@ def create_sorted_file_reader(
         for i, chunk_metadata in enumerate(file_iterator)
     )
 
-    readers = [
-        TabularDataReader.from_path(path) for path in scores_metadata_paths
-    ]
+    readers = [TabularDataReader.from_path(path) for path in scores_metadata_paths]
 
     sorted_file_reader = MergedTabularDataReader(
         readers,
@@ -579,9 +567,7 @@ def create_sorted_file_reader(
             try:
                 sc_path.unlink()
             except Exception as e:
-                LOGGER.warning(
-                    "Caught exception while deleting temp files: %s", e
-                )
+                LOGGER.warning("Caught exception while deleting temp files: %s", e)
 
 
 @typechecked
