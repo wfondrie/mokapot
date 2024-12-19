@@ -8,8 +8,8 @@ independently.
 The following classes store the confidence estimates for a dataset based on the
 provided score. They provide utilities to access, save, and plot these
 estimates for the various relevant levels (i.e. PSMs, peptides, and proteins).
-The :py:class:`Confidence` class is the primary interface for handling confidence
-estimates in data-dependent acquisition proteomics datasets.
+The :py:class:`Confidence` class is the primary interface for handling
+confidence estimates in data-dependent acquisition proteomics datasets.
 
 The module provides:
 - Confidence estimation at PSM, peptide, and protein levels
@@ -17,9 +17,9 @@ The module provides:
 - Visualization utilities for confidence estimates
 - Export capabilities in various formats
 
-We recommend using the :py:func:`~mokapot.brew()` followed by the `assign_confidence`
-function to obtain these confidence estimates, rather than initializing the
-classes below directly.
+We recommend using the :py:func:`~mokapot.brew()` followed by the
+`assign_confidence` function to obtain these confidence estimates,
+rather than initializing the classes below directly.
 """
 
 from __future__ import annotations
@@ -202,22 +202,26 @@ class Confidence:
     ):
         """Assign confidence estimates to PSMs and peptides.
 
-        This method processes the dataset to assign confidence estimates (q-values and PEPs)
-        at different levels (PSMs, peptides) using the specified algorithms. It can optionally
-        stream the confidence calculations for large datasets.
+        This method processes the dataset to assign confidence estimates
+        (q-values and PEPs) at different levels (PSMs, peptides) using the
+        specified algorithms. It can optionally stream the confidence
+        calculations for large datasets.
 
         Parameters
         ----------
         levels : list[str]
-            The levels at which to compute confidence estimates (e.g., ['psms', 'peptides']).
+            The levels at which to compute confidence estimates
+            (e.g., ['psms', 'peptides']).
         level_path_map : dict[str, Path]
-            Mapping of confidence levels to their corresponding file paths for intermediate data.
+            Mapping of confidence levels to their corresponding file paths
+            for intermediate data.
         out_writers_map : dict[str, Sequence[TabularDataWriter]]
             Mapping of confidence levels to their output writers for results.
         write_decoys : bool, optional
             Whether to include decoy results in the output, by default False.
         peps_error : bool, optional
-            Whether to raise an error if PEP calculation fails, by default False.
+            Whether to raise an error if PEP calculation fails
+            by default False.
         peps_algorithm : str, optional
             Algorithm to use for posterior error probability calculation.
             Currently supports "qvality" (default).
@@ -225,9 +229,11 @@ class Confidence:
             Algorithm to use for q-value calculation.
             Currently supports "tdc" (default).
         stream_confidence : bool, optional
-            Whether to stream confidence calculations for large datasets, by default False.
+            Whether to stream confidence calculations for large datasets
+            by default False.
         score_stats : OnlineStatistics | None, optional
-            Pre-computed score statistics if streaming is enabled, by default None.
+            Pre-computed score statistics if streaming is enabled
+            by default None.
         eval_fdr : float, optional
             FDR threshold for evaluation metrics, by default 0.01.
         """
@@ -388,8 +394,8 @@ def assign_confidence(
     max_workers : int, optional
         Number of parallel workers to use for processing, by default 1.
     eval_fdr : float, optional
-        The FDR threshold at which to report and evaluate performance, by default 0.01.
-        This affects logging messages and the FDR threshold applied for some output formats.
+        The FDR threshold at which to report and evaluate performance,
+        by default 0.01.
     dest_dir : Path | None, optional
         The directory in which to save the files. None will use the
         current working directory, by default None.
@@ -403,7 +409,8 @@ def assign_confidence(
     deduplication : bool, optional
         Whether to perform deduplication on the PSM level, by default True.
     do_rollup : bool, optional
-        Whether to apply rollup on peptides, modified peptides etc., by default True.
+        Whether to apply rollup on peptides, modified peptides etc.
+        by default True.
     proteins : Proteins | None, optional
         Collection of proteins for protein inference, by default None.
     append_to_output_file : bool, optional
@@ -412,19 +419,22 @@ def assign_confidence(
         Random number generator or seed for reproducibility, by default 0.
     peps_error : bool, optional
         Whether to raise error on PEP calculation failure, by default False.
-    peps_algorithm : {'qvality', 'qvality_bin', 'kde_nnls', 'hist_nnls'}, optional
-        Algorithm for posterior error probability calculation, by default "qvality".
+    peps_algorithm : {'qvality', 'qvality_bin', 'kde_nnls', 'hist_nnls'}
+        Algorithm for posterior error probability calculation
+        by default "qvality".
     qvalue_algorithm : {'tdc', 'hist'}, optional
         Algorithm for q-value calculation, by default "tdc".
     sqlite_path : Path | None, optional
         Path to the SQLite database to write mokapot results, by default None.
     stream_confidence : bool, optional
-        Whether to stream confidence calculations for large datasets, by default False.
+        Whether to stream confidence calculations for large datasets
+        by default False.
 
     Returns
     -------
     list[Confidence]
-        A list of Confidence objects containing the confidence estimates for each dataset.
+        A list of Confidence objects containing the confidence estimates for
+        each dataset.
     """
 
     # Note: I am really not a big fan of how large this function is ...
