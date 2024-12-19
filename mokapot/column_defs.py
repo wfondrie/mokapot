@@ -1,3 +1,4 @@
+Q_VALUE_COL_NAME = "mokapot_qvalue"
 STANDARD_COLUMN_NAME_MAP = {
     "SpecId": "psm_id",
     "PSMId": "psm_id",
@@ -10,7 +11,7 @@ STANDARD_COLUMN_NAME_MAP = {
     "ModifiedPeptide": "modified_peptide",
     "modifiedpeptide": "modified_peptide",
     # "q-value": "q_value",
-    "q-value": "q-value",
+    "q-value": Q_VALUE_COL_NAME,
 }
 
 

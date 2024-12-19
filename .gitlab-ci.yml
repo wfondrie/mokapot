@@ -1,14 +1,14 @@
 image: python:3.10.5
 
 variables:
-  PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.cache/pip"
+  PIP_CACHE_DIR: ${CI_PROJECT_DIR}/.cache/pip
 
 stages:
   - publish
   - test
 
 cache:
-  key: "${CI_COMMIT_REF_SLUG}"
+  key: ${CI_COMMIT_REF_SLUG}
   paths:
     - .cache/pip
     - .venv
@@ -35,7 +35,7 @@ publish:
   extends: .with_twine
   stage: publish
   rules:
-    - if: '$CI_COMMIT_TAG != null'
+    - if: $CI_COMMIT_TAG != null
   script:
     - python -m build --sdist --wheel .
     - TWINE_PASSWORD=${CI_JOB_TOKEN} TWINE_USERNAME=gitlab-ci-token python -m twine upload --repository-url https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/packages/pypi dist/*

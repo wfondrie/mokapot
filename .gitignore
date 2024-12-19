@@ -113,3 +113,6 @@ venv.bak/
 tests/integration_tests/run*
 /temp/
 /.run/
+
+targets.peptides.csv
+targets.psms.csv

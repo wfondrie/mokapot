@@ -1,4 +1,4 @@
-Fast and flexible semi-supervised learning for peptide detection.  
+Fast and flexible semi-supervised learning for peptide detection.
 
 mokapot is fundamentally a Python implementation of the semi-supervised learning
 algorithm first introduced by Percolator. We developed mokapot to add additional
@@ -12,19 +12,19 @@ experiments. mokapot offers basic functionality from the command line, but using
 mokapot as a Python package unlocks maximum flexibility.
 
 For more information, check out our
-[documentation](https://mokapot.readthedocs.io).  
+[documentation](https://mokapot.readthedocs.io).
 
-## Citing  
-If you use mokapot in your work, please cite:  
+## Citing
+If you use mokapot in your work, please cite:
 
 > Fondrie W. E. & Noble W. S. mokapot: Fast and Flexible Semisupervised
 > Learning for Peptide Detection. J Proteome Res (2021) doi:
 > 10.1021/acs.jproteome.0c01010. PMID: 33596079.
 > [Link](https://doi.org/10.1021/acs.jproteome.0c01010)
 
-## Installation  
+## Installation
 
-mokapot requires Python 3.6+ and can be installed with pip or conda.  
+mokapot requires Python 3.6+ and can be installed with pip or conda.
 
 Using conda:
 ```
@@ -36,19 +36,19 @@ Using pip:
 $ pip3 install mokapot
 ```
 
-Additionally, you can install the development version directly from GitHub:  
+Additionally, you can install the development version directly from GitHub:
 
 ```
 $ pip3 install git+git://github.com/wfondrie/mokapot
 ```
 
-## Basic Usage  
+## Basic Usage
 
 Before you can use mokapot, you need PSMs assigned by a search engine available
 in the [Percolator tab-delimited file
 format](https://github.com/percolator/percolator/wiki/Interface#tab-delimited-file-format)
-(often referred to as the Percolator input, or "PIN", file format) or as a 
-PepXML file. 
+(often referred to as the Percolator input, or "PIN", file format) or as a
+PepXML file.
 
 Simple mokapot analyses can be performed at the command line:
 
@@ -68,4 +68,3 @@ results.to_txt()
 
 Check out our [documentation](https://mokapot.readthedocs.io) for more details
 and examples of mokapot in action.
-

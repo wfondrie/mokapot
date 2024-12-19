@@ -15,7 +15,7 @@ from mokapot.constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
-from mokapot.dataset import OnDiskPsmDataset
+from mokapot.dataset import OnDiskPsmDataset, PsmDataset
 from mokapot.parsers.helpers import (
     find_optional_column,
     find_columns,
@@ -35,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 def read_pin(
     pin_files,
-    max_workers,
+    max_workers: int,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
@@ -146,7 +146,7 @@ def read_percolator(
     expmass_column=None,
     rt_column=None,
     charge_column=None,
-):
+) -> OnDiskPsmDataset:
     """
     Read a Percolator tab-delimited file.
 
@@ -161,8 +161,7 @@ def read_percolator(
 
     Returns
     -------
-    pandas.DataFrame
-        A DataFrame of the parsed data.
+    OnDiskPsmDataset
     """
 
     LOGGER.info("Reading %s...", perc_file)
@@ -193,6 +192,7 @@ def read_percolator(
     expmass = find_optional_column(expmass_column, columns, "expmass")
     ret_time = find_optional_column(rt_column, columns, "ret_time")
     charge = find_optional_column(charge_column, columns, "charge_column")
+    # Q: Why isnt `specid` used here?
     spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
 
     # Only add charge to features if there aren't other charge columns:
@@ -221,6 +221,8 @@ def read_percolator(
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
+    # Q: this really feels like a bad idea ... concurrent mutation of a list
+    # .  where the elements are concrruently mutated datafames in-place.
     features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
             reader=reader,
@@ -252,7 +254,6 @@ def read_percolator(
 
     return OnDiskPsmDataset(
         perc_file,
-        columns=columns,
         target_column=labels,
         spectrum_columns=spectra,
         peptide_column=peptides,
@@ -306,7 +307,7 @@ def get_rows_from_dataframe(
     idx: Iterable,
     chunk: pd.DataFrame,
     train_psms,
-    dataset: OnDiskPsmDataset,
+    target_column: str,
     file_idx: int,
 ):
     """
@@ -320,18 +321,18 @@ def get_rows_from_dataframe(
         Contains subsets of dataframes that are already extracted.
     chunk : dataframe
         Subset of a dataframe.
-    dataset : OnDiskPsmDataset
-        A collection of PSMs.
+    target_column : str
+        The target column name, expected to be in the dataframe.
     file_idx : the index of the file being searched
 
     Returns
     -------
-    List
-        list of list of dataframes
+    None
+        The function modifies the `train_psms` list in place.
     """
     chunk = convert_targets_column(
         data=chunk,
-        target_column=dataset.target_column,
+        target_column=target_column,
     )
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
@@ -347,8 +348,8 @@ def concat_and_reindex_chunks(df, orig_idx):
 
 @typechecked
 def parse_in_chunks(
-    datasets: list[OnDiskPsmDataset],
-    train_idx: list,
+    datasets: list[PsmDataset],
+    train_idx: list[list[list[int]]],
     chunk_size: int,
     max_workers: int,
 ) -> list[pd.DataFrame]:
@@ -359,9 +360,12 @@ def parse_in_chunks(
     ----------
     datasets : OnDiskPsmDataset
         A collection of PSMs.
-    train_idx : list of a list of a list of indexes (first level are training
-        splits, second one is the number of input files, third level the
-        actual idexes The indexes to select from data.
+    train_idx : list of a list of a list of indexes
+        - first level are training splits,
+        - second one is the number of input files
+        - third level the actual idexes The indexes to select from data.
+        Thus if you have 3 splits, 2 files and 10 PSMs per file, the
+        "shape" of the list is [3,2,10]
     chunk_size : int
         The chunk size in bytes.
     max_workers: int
@@ -379,16 +383,36 @@ def parse_in_chunks(
     for dataset, idx, file_idx in zip(
         datasets, zip(*train_idx), range(len(datasets))
     ):
-        reader = dataset.reader
-        file_iterator = reader.get_chunked_data_iterator(
-            chunk_size=chunk_size, columns=dataset.columns
-        )
-        Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(get_rows_from_dataframe)(
-                idx, chunk, train_psms, dataset, file_idx
+        # Note: Here idx is a tuple of len == number of folds
+        #       each element is a list of ints, so each list is
+        #       the indices for each split of the dataset.
+
+        # Note2: Technically the file_idx is not a file but a dataset
+        #        index.
+        if hasattr(dataset, "reader"):
+            # Handle OnDiskPsmDataset
+            reader = dataset.reader
+            file_iterator = reader.get_chunked_data_iterator(
+                chunk_size=chunk_size, columns=dataset.columns
             )
-            for chunk in file_iterator
-        )
+            # Q: Is it really a good idea to modify a list in place
+            #    in a parallel loop?
+            Parallel(n_jobs=max_workers, require="sharedmem")(
+                delayed(get_rows_from_dataframe)(
+                    idx, chunk, train_psms, dataset.target_column, file_idx
+                )
+                for chunk in file_iterator
+            )
+        else:
+            # Handle LinearPsmDataset
+            chunk = dataset.data
+            get_rows_from_dataframe(
+                idx,
+                chunk,
+                train_psms=train_psms,
+                target_column=dataset.target_column,
+                file_idx=file_idx,
+            )
     train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(concat_and_reindex_chunks)(df=df, orig_idx=orig_idx)
         for df, orig_idx in zip(train_psms, zip(*train_idx))
