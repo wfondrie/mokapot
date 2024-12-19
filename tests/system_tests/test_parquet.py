@@ -25,7 +25,7 @@ def test_parquet_output(tmp_path):
         "PSMId",
         "peptide",
         "score",
-        "q-value",
+        "mokapot_qvalue",
         "posterior_error_prob",
         "proteinIds",
     ]

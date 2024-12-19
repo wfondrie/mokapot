@@ -8,16 +8,26 @@ independently.
 The following classes store the confidence estimates for a dataset based on the
 provided score. They provide utilities to access, save, and plot these
 estimates for the various relevant levels (i.e. PSMs, peptides, and proteins).
-The :py:func:`Confidence` class is appropriate for most data-dependent
-acquisition proteomics datasets.
+The :py:class:`Confidence` class is the primary interface for handling confidence
+estimates in data-dependent acquisition proteomics datasets.
 
-We recommend using the :py:func:`~mokapot.brew()` function to obtain these
-confidence estimates, rather than initializing the classes below directly.
+The module provides:
+- Confidence estimation at PSM, peptide, and protein levels
+- Streaming processing for large datasets
+- Visualization utilities for confidence estimates
+- Export capabilities in various formats
+
+We recommend using the :py:func:`~mokapot.brew()` followed by the `assign_confidence`
+function to obtain these confidence estimates, rather than initializing the
+classes below directly.
 """
+
+from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
 from pathlib import Path
+from pprint import pformat
 from typing import Sequence, Iterator
 
 import numpy as np
@@ -25,7 +35,8 @@ import pandas as pd
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
-from mokapot.column_defs import get_standard_column_name
+
+from mokapot.column_defs import get_standard_column_name, Q_VALUE_COL_NAME
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import PsmDataset, OptionalColumns
 from mokapot.peps import (
@@ -34,6 +45,7 @@ from mokapot.peps import (
     peps_func_from_hist_nnls,
     PepsConvergenceError,
 )
+from mokapot.proteins import Proteins
 from mokapot.picked_protein import picked_protein
 from mokapot.qvalues import qvalues_from_scores, qvalues_func_from_hist
 from mokapot.statistics import OnlineStatistics, HistData
@@ -55,11 +67,56 @@ from mokapot.writers.flashlfq import to_flashlfq
 
 LOGGER = logging.getLogger(__name__)
 
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    LOGGER.warning(
+        "Matplotlib is not installed. Confidence plots will not be available."
+    )
+    plt = None
+
 
 # Classes ---------------------------------------------------------------------
 @typechecked
-class Confidence(object):
-    """Estimate the statistical confidence for a collection of PSMs."""
+class Confidence:
+    """Calculate, Store and provide access to confidence estimates.
+
+    This class stores confidence estimates (q-values and PEPs) computed for
+    different levels (PSMs, peptides, proteins) and provides methods
+    to access, save and visualize these estimates.
+
+    Parameters
+    ----------
+    dataset : PsmDataset
+        The dataset containing PSMs and metadata
+    levels : list[str]
+        Levels at which confidence estimation was performed
+        (e.g. ['psms','peptides'])
+    level_paths : dict[str, Path]
+        Paths to intermediate files for each confidence level
+    out_writers : dict[str, Sequence[TabularDataWriter]]
+        Writers for outputting results at each level
+    eval_fdr : float, optional
+        FDR threshold for evaluation metrics, by default 0.01
+    write_decoys : bool, optional
+        Whether to write decoy results, by default False
+    do_rollup : bool, optional
+        Whether to perform protein inference, by default True
+    proteins : pd.DataFrame, optional
+        Protein annotations if protein inference is used
+    peps_error : bool, optional
+        Whether to raise error on PEP calculation failure, by default False
+    rng : int or np.random.Generator, optional
+        Random number generator for reproducibility
+    peps_algorithm : str, optional
+        Algorithm for PEP calculation, by default "qvality"
+    qvalue_algorithm : str, optional
+        Algorithm for q-value calculation, by default "tdc"
+    stream_confidence : bool, optional
+        Whether to stream confidence calculations, by default False
+    score_stats : OnlineStatistics, optional
+        Pre-computed score statistics if streaming
+    """
 
     def __init__(
         self,
@@ -70,7 +127,7 @@ class Confidence(object):
         eval_fdr: float = 0.01,
         write_decoys: bool = False,
         do_rollup: bool = True,
-        proteins=None,
+        proteins: Proteins | None = None,
         peps_error: bool = False,
         rng=0,
         peps_algorithm: str = "qvality",
@@ -78,34 +135,6 @@ class Confidence(object):
         stream_confidence: bool = False,
         score_stats=None,
     ):
-        """Initialize a Confidence object.
-
-        Assign confidence estimates to a set of PSMs
-
-        Estimate q-values and posterior error probabilities (PEPs) for PSMs and
-        peptides when ranked by the provided scores.
-
-        Parameters
-        ----------
-        dataset : OnDiskPsmDataset
-            An OnDiskPsmDataset.
-        rng : int or np.random.Generator, optional
-            A seed or generator used for cross-validation split creation and to
-            break ties, or ``None`` to use the default random number generator
-            state.
-        levels : list[str]
-            Levels at which confidence estimation was performed
-        level_paths : list[Path]
-                Files with unique psms and unique peptides.
-        out_paths : list[list[Path]]
-            The output files where the results will be written
-        eval_fdr : float
-            The FDR threshold at which to report performance. This parameter
-            has no affect on the analysis itself, only logging messages.
-        write_decoys : bool
-            Save decoys confidence estimates as well?
-        """
-
         self.dataset = dataset
         self._score_column = "score"
         self._target_column = dataset.target_column
@@ -119,7 +148,7 @@ class Confidence(object):
         self.write_decoys = write_decoys
         self.levels = levels
         self.do_rollup = do_rollup
-        self.proteins = proteins
+        self._proteins = proteins
         self.peps_error = peps_error
         self.rng = rng
         self.score_stats = score_stats
@@ -153,7 +182,6 @@ class Confidence(object):
         rep += f"Eval FDR: {self.eval_fdr}\n"
         rep += f"Write decoys: {self.write_decoys}\n"
         rep += f"Do rollup: {self.do_rollup}\n"
-        rep += f"Proteins: {self.proteins}\n"
         rep += f"Peps error: {self.peps_error}\n"
         rep += f"Rng: {self.rng}\n"
         rep += f"Score stats: {self.score_stats}\n"
@@ -169,22 +197,39 @@ class Confidence(object):
         peps_algorithm: str = "qvality",
         qvalue_algorithm: str = "tdc",
         stream_confidence: bool = False,
-        score_stats=None,
+        score_stats: OnlineStatistics | None = None,
         eval_fdr: float = 0.01,
     ):
-        """
-        Assign confidence to PSMs and peptides.
+        """Assign confidence estimates to PSMs and peptides.
+
+        This method processes the dataset to assign confidence estimates (q-values and PEPs)
+        at different levels (PSMs, peptides) using the specified algorithms. It can optionally
+        stream the confidence calculations for large datasets.
 
         Parameters
         ----------
-        level_path_map : List(Path)
-            Files with unique psms and unique peptides.
-        levels : List(str)
-            the levels at which confidence estimation was performed
-        out_paths : List(Path)
-            The output files where the results will be written
+        levels : list[str]
+            The levels at which to compute confidence estimates (e.g., ['psms', 'peptides']).
+        level_path_map : dict[str, Path]
+            Mapping of confidence levels to their corresponding file paths for intermediate data.
+        out_writers_map : dict[str, Sequence[TabularDataWriter]]
+            Mapping of confidence levels to their output writers for results.
         write_decoys : bool, optional
-            Save decoys confidence estimates as well?
+            Whether to include decoy results in the output, by default False.
+        peps_error : bool, optional
+            Whether to raise an error if PEP calculation fails, by default False.
+        peps_algorithm : str, optional
+            Algorithm to use for posterior error probability calculation.
+            Currently supports "qvality" (default).
+        qvalue_algorithm : str, optional
+            Algorithm to use for q-value calculation.
+            Currently supports "tdc" (default).
+        stream_confidence : bool, optional
+            Whether to stream confidence calculations for large datasets, by default False.
+        score_stats : OnlineStatistics | None, optional
+            Pre-computed score statistics if streaming is enabled, by default None.
+        eval_fdr : float, optional
+            FDR threshold for evaluation metrics, by default 0.01.
         """
         if stream_confidence:
             if score_stats is None:
@@ -226,100 +271,160 @@ class Confidence(object):
 
             level_path.unlink(missing_ok=True)
 
-    def _write_protein_level_data(self, level_paths, proteins, rng):
+    def _write_protein_level_data(
+        self,
+        level_paths: dict[str, Path],
+        proteins: Proteins,
+        rng: int | np.random.Generator,
+    ):
         psms = TabularDataReader.from_path(level_paths["psms"]).read()
-        proteins = picked_protein(
-            psms,
-            self._target_column,
-            self._peptide_column,
-            self._score_column,
-            proteins,
-            rng,
+        proteins_df = picked_protein(
+            peptides=psms,
+            target_column=self._target_column,
+            peptide_column=self._peptide_column,
+            score_column=self._score_column,
+            proteins=proteins,
+            rng=rng,
         )
-        proteins = proteins.sort_values(
+        proteins_df = proteins_df.sort_values(
             by=self._score_column, ascending=False
         ).reset_index(drop=True)
         protein_writer = TabularDataWriter.from_suffix(
             file_name=level_paths["proteins"],
-            columns=proteins.columns.tolist(),
-            column_types=proteins.dtypes.tolist(),
+            columns=proteins_df.columns.tolist(),
+            column_types=proteins_df.dtypes.tolist(),
         )
-        protein_writer.write(proteins)
-        LOGGER.info("\t- Found %i unique protein groups.", len(proteins))
+        protein_writer.write(proteins_df)
+        LOGGER.info("\t- Found %i unique protein groups.", len(proteins_df))
 
     def get_optional_columns(self) -> OptionalColumns:
         return self.dataset.get_optional_columns()
 
+    def read(self, level: str) -> pd.DataFrame:
+        """Read the results for a given level."""
+        if level not in self.levels:
+            raise ValueError(
+                f"Level {level} not found. Available levels are: {self.levels}"
+            )
+        tmp = [x.read() for x in self.out_writers[level]]
+        return pd.concat(tmp)
+
     @property
-    def peptides(self) -> pd.Series:
-        return self.dataset.peptides
+    def peptides(self) -> pd.DataFrame:
+        return self.read("peptides")
+
+    @property
+    def psms(self) -> pd.DataFrame:
+        return self.read("psms")
+
+    @property
+    def proteins(self) -> pd.DataFrame:
+        return self.read("proteins")
 
     def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
         """Save confidenct peptides for quantification with FlashLFQ."""
         return to_flashlfq(self, out_file)
+
+    def plot_qvalues(
+        self, level: str, threshold: float = 0.1, ax=None, **kwargs
+    ):
+        """Plot the q-values for a given level.
+
+        Parameters
+        ----------
+        level : str
+            The level to plot.
+        threshold : float, optional
+            Indicates the maximum q-value to plot.
+        ax : matplotlib.pyplot.Axes, optional
+            The matplotlib Axes on which to plot. If `None` the current
+            Axes instance is used.
+        **kwargs : dict, optional
+            Arguments passed to :py:func:`matplotlib.axes.Axes.plot`.
+
+        Returns
+        -------
+        matplotlib.pyplot.Axes
+            A `matplotlib.axes.Axes` with the cumulative
+            number of accepted target PSMs or peptides.
+        """
+
+        all_read = [x.read() for x in self.out_writers[level]]
+        qvals = pd.concat(all_read)[Q_VALUE_COL_NAME]
+        return plot_qvalues(qvals, threshold=threshold, ax=ax, **kwargs)
 
 
 # Functions -------------------------------------------------------------------
 @typechecked
 def assign_confidence(
     datasets: list[PsmDataset],
-    scores_list: list[np.ndarray[float]],
+    scores_list: list[np.ndarray[float]] | None = None,
     max_workers: int = 1,
-    eval_fdr=0.01,
+    eval_fdr: float = 0.01,
     dest_dir: Path | None = None,
     file_root: str = "",
     prefixes: list[str | None] | None = None,
     write_decoys: bool = False,
-    deduplication=True,
-    do_rollup=True,
-    proteins=None,
-    append_to_output_file=False,
-    rng=0,
-    peps_error=False,
+    deduplication: bool = True,
+    do_rollup: bool = True,
+    proteins: Proteins | None = None,
+    append_to_output_file: bool = False,
+    rng: int | np.random.Generator = 0,
+    peps_error: bool = False,
     peps_algorithm="qvality",
     qvalue_algorithm="tdc",
-    sqlite_path=None,
-    stream_confidence=False,
-) -> list[Confidence]:
-    """Assign confidence to PSMs peptides, and optionally, proteins.
+    sqlite_path: Path | None = None,
+    stream_confidence: bool = False,
+):
+    """Assign confidence to PSMs, peptides, and optionally proteins.
 
     Parameters
     ----------
-    max_workers
-    datasets : list[OnDiskPsmDataset]
+    datasets : list[PsmDataset]
         A collection of PSMs.
-    scores_list : list[numpy.ndarray]
+    scores_list : list[numpy.ndarray[float]] | None, optional
         The scores by which to rank the PSMs. Usually derived from
-        `mokapot.brew`
-    rng : int or np.random.Generator, optional
-        A seed or generator used for cross-validation split creation and to
-        break ties, or ``None`` to use the default random number generator
-        state.
-    eval_fdr : float
-        The FDR threshold at which to report and evaluate performance. If
-        `scores` is not :code:`None`, this parameter has no affect on the
-        analysis itself, but does affect logging messages and the FDR
-        threshold applied for some output formats, such as FlashLFQ.
-    dest_dir : Path or None, optional
-        The directory in which to save the files. :code:`None` will use the
-        current working directory.
-    prefixes : [str]
+        `mokapot.brew`, by default None.
+    max_workers : int, optional
+        Number of parallel workers to use for processing, by default 1.
+    eval_fdr : float, optional
+        The FDR threshold at which to report and evaluate performance, by default 0.01.
+        This affects logging messages and the FDR threshold applied for some output formats.
+    dest_dir : Path | None, optional
+        The directory in which to save the files. None will use the
+        current working directory, by default None.
+    file_root : str, optional
+        Base name prefix for output files, by default "".
+    prefixes : list[str | None] | None, optional
         The prefixes added to all output file names.
+        If None, a single concatenated file will be created, by default None.
     write_decoys : bool, optional
-        Save decoys confidence estimates as well?
-    deduplication: bool
-        Are we performing deduplication on the psm level?
-    do_rollup: bool
-        do we apply rollup on peptides, modified peptides etc.?
-    proteins: Proteins, optional
-        collection of proteins
-    append_to_output_file: bool
-        do we append results to file ?
-    sqlite_path: Path to the sqlite database to write mokapot results
+        Save decoy confidence estimates as well?, by default False.
+    deduplication : bool, optional
+        Whether to perform deduplication on the PSM level, by default True.
+    do_rollup : bool, optional
+        Whether to apply rollup on peptides, modified peptides etc., by default True.
+    proteins : Proteins | None, optional
+        Collection of proteins for protein inference, by default None.
+    append_to_output_file : bool, optional
+        Whether to append results to existing file, by default False.
+    rng : int | np.random.Generator, optional
+        Random number generator or seed for reproducibility, by default 0.
+    peps_error : bool, optional
+        Whether to raise error on PEP calculation failure, by default False.
+    peps_algorithm : {'qvality', 'qvality_bin', 'kde_nnls', 'hist_nnls'}, optional
+        Algorithm for posterior error probability calculation, by default "qvality".
+    qvalue_algorithm : {'tdc', 'hist'}, optional
+        Algorithm for q-value calculation, by default "tdc".
+    sqlite_path : Path | None, optional
+        Path to the SQLite database to write mokapot results, by default None.
+    stream_confidence : bool, optional
+        Whether to stream confidence calculations for large datasets, by default False.
 
     Returns
     -------
     list[Confidence]
+        A list of Confidence objects containing the confidence estimates for each dataset.
     """
 
     # Note: I am really not a big fan of how large this function is ...
@@ -331,153 +436,79 @@ def assign_confidence(
 
     # just take the first one for info (and make sure the other are the same)
     curr_dataset = datasets[0]
-    file_ext = curr_dataset.get_default_extension()
-    for dataset in datasets[1:]:
-        assert dataset.columns == curr_dataset.columns
-
-    # Level data for psm level
-    level = "psms"
-    levels = [level]
-    level_data_path = {level: dest_dir / f"{file_root}{level}{file_ext}"}
-    level_hash_columns = {level: curr_dataset.spectrum_columns}
-
-    # Level data for higher rollup levels
-    extra_output_columns = []
-    if do_rollup:
-        level_columns = curr_dataset.level_columns
-
-        for level_column in level_columns:
-            level = level_column.lower() + "s"  # e.g. Peptide to peptides
-            levels.append(level)
-            level_data_path[level] = dest_dir / f"{file_root}{level}{file_ext}"
-            level_hash_columns[level] = [level_column]
-            if level not in ["psms", "peptides", "proteins"]:
-                extra_output_columns.append(level_column)
-
-    levels_or_proteins = levels
-    if proteins:
-        level = "proteins"
-        levels_or_proteins = [*levels, level]
-        level_data_path[level] = dest_dir / f"{file_root}{level}{file_ext}"
-        level_hash_columns[level] = curr_dataset.protein_column
-
-    output_column_names = [
-        "PSMId",
-        "peptide",
-        *extra_output_columns,
-        "score",
-        "q-value",
-        "posterior_error_prob",
-        "proteinIds",
-    ]
-
-    output_column_names_proteins = [
-        "mokapot protein group",
-        "best peptide",
-        "stripped sequence",
-        "score",
-        "q-value",
-        "posterior_error_prob",
-    ]
-
-    @typechecked
-    def create_output_writer(path: Path, level: str, initialize: bool):
-        # Note: This method does not create a writer, it writes the data.
-        if level == "proteins":
-            output_columns = output_column_names_proteins
-        else:
-            output_columns = output_column_names
-
-        # Create the writers
-        if is_sqlite:
-            writer = ConfidenceSqliteWriter(
-                sqlite_path,
-                columns=output_columns,
-                column_types=[],
-                level=level,
-                qvalue_column="q-value",
-                pep_column="posterior_error_prob",
+    for di, dataset in enumerate(datasets[1:]):
+        if dataset.columns != curr_dataset.columns:
+            raise ValueError(
+                "Datasets must have the same columns. "
+                f"Dataset 1 has columns {curr_dataset.columns} "
+                f"and dataset {di + 2} has columns {dataset.columns}"
             )
-        else:
-            writer = TabularDataWriter.from_suffix(path, output_columns, [])
 
-        if initialize:
-            writer.initialize()
-        return writer
+    level_manager = LevelManager.from_dataset(
+        dataset=curr_dataset,
+        do_rollup=do_rollup,
+        use_proteins=True if proteins else False,
+        dest_dir=dest_dir,
+        file_root=file_root,
+    )
+
+    output_writers_factory = OutputWriterFactory(
+        extra_output_columns=level_manager.extra_output_columns,
+        is_sqlite=is_sqlite,
+        append_to_output_file=append_to_output_file,
+        write_decoys=write_decoys,
+    )
 
     if prefixes is None:
         prefixes = [None] * len(datasets)
 
+    level_input_output_column_mapping = level_manager.build_output_col_mapping(
+        curr_dataset
+    )
+
+    scores_use = scores_list
+    if scores_use is None:
+        LOGGER.info("No scores passed, attempting to find them.")
+        if any(dataset.scores is None for dataset in datasets):
+            LOGGER.info("No scores found, attempting to find best feature.")
+            feature = datasets[0].find_best_feature(eval_fdr).feature
+            LOGGER.info("Best feature found: %s", feature)
+            scores_use = [
+                dataset.read_data(columns=[feature.name])[
+                    feature.name
+                ].to_numpy()
+                for dataset in datasets
+            ]
+            # TODO: warn that no scores are present and will fall back
+        else:
+            LOGGER.info("Scores found in psms, using them.")
+            scores_use = [dataset.scores for dataset in datasets]
+
     out = []
 
-    for dataset, score, prefix in strictzip(datasets, scores_list, prefixes):
+    for dataset, score, prefix in strictzip(datasets, scores_use, prefixes):
         # todo: nice to have: move this column renaming stuff into the
         #   column defs module, and further, have standardized columns
         #   directly from the pin reader (applying the renaming itself)
 
-        level_column_names = [
-            "PSMId",
-            dataset.target_column,
-            "peptide",
-            *extra_output_columns,
-            "proteinIds",
-            "score",
-        ]
-        level_input_column_names = [
-            dataset.specId_column,
-            dataset.target_column,
-            dataset.peptide_column,
-            *extra_output_columns,
-            dataset.protein_column,
-            "score",
-        ]
-
-        level_input_output_column_mapping = {
-            in_col: out_col
-            for in_col, out_col in strictzip(
-                level_input_column_names,
-                level_column_names,
-            )
-            if in_col is not None
-        }
-
-        file_prefix = file_root
-        if prefix:
-            file_prefix = f"{file_prefix}{prefix}."
-
-        output_writers = {}
-        for level in levels_or_proteins:
-            output_writers[level] = []
-
-            outfile_targets = (
-                dest_dir / f"{file_prefix}targets.{level}{file_ext}"
-            )
-
-            output_writers[level].append(
-                create_output_writer(
-                    outfile_targets, level, not append_to_output_file
-                )
-            )
-
-            if write_decoys and not is_sqlite:
-                outfile_decoys = (
-                    dest_dir / f"{file_prefix}decoys.{level}{file_ext}"
-                )
-                output_writers[level].append(
-                    create_output_writer(
-                        outfile_decoys, level, not append_to_output_file
-                    )
-                )
+        output_writers, file_prefix = output_writers_factory.build_writers(
+            level_manager,
+            prefix=prefix,
+        )
 
         score_reader = TabularDataReader.from_array(score, "score")
         with create_sorted_file_reader(
-            dataset,
-            score_reader,
-            dest_dir,
-            file_prefix,
-            level_hash_columns["psms"] if deduplication else None,
-            max_workers,
-            level_input_output_column_mapping,
+            dataset=dataset,
+            score_reader=score_reader,
+            dest_dir=dest_dir,
+            file_prefix=file_prefix,
+            deduplication_columns=(
+                level_manager.level_hash_columns["psms"]
+                if deduplication
+                else None
+            ),
+            max_workers=max_workers,
+            input_output_column_mapping=level_input_output_column_mapping,
         ) as sorted_file_reader:
             LOGGER.info("Assigning confidence...")
             LOGGER.info("Performing target-decoy competition...")
@@ -491,73 +522,20 @@ def assign_confidence(
                 row_type=BufferType.Dicts
             )
             type_map = sorted_file_reader.get_schema(as_dict=True)
-            level_column_types = [
-                type_map[name]
-                for name in level_input_output_column_mapping.values()
-            ]
+            level_writers = LevelWriterCollection.from_manager(
+                level_manager=level_manager,
+                type_map=type_map,
+                level_input_output_column_mapping=level_input_output_column_mapping,
+                deduplication=deduplication,
+            )
 
-            level_writers = {
-                level: TabularDataWriter.from_suffix(
-                    level_data_path[level],
-                    columns=list(level_input_output_column_mapping.values()),
-                    column_types=level_column_types,
-                    buffer_size=CONFIDENCE_CHUNK_SIZE,
-                    buffer_type=BufferType.Dicts,
-                )
-                for level in levels
-            }
-            for writer in level_writers.values():
-                writer.initialize()
-
-            def hash_data_row(data_row):
-                return str([
-                    data_row[level_input_output_column_mapping.get(col, col)]
-                    for col in level_hash_columns[level]
-                ])
-
-            seen_level_entities = {level: set() for level in levels}
-            score_stats = OnlineStatistics()
-            psm_count = 0
-            for data_row in sorted_file_iterator:
-                psm_count += 1
-                for level in levels:
-                    if level != "psms" or deduplication:
-                        psm_hash = hash_data_row(data_row)
-                        if psm_hash in seen_level_entities[level]:
-                            if level == "psms":
-                                # If we are on the psms level, we can skip
-                                # checking the other levels
-                                break
-                            continue
-                        seen_level_entities[level].add(psm_hash)
-                    out_row = {
-                        col: data_row[col]
-                        for col in level_input_output_column_mapping.values()
-                    }
-                    level_writers[level].append_data(out_row)
-                    score_stats.update_single(data_row["score"])
-
-            for level in levels:
-                count = len(seen_level_entities[level])
-                level_writers[level].finalize()
-                if level == "psms":
-                    if deduplication:
-                        LOGGER.info(
-                            f"\t- Found {count} PSMs from unique spectra."
-                        )
-                    else:
-                        LOGGER.info(f"\t- Found {psm_count} PSMs.")
-                    LOGGER.info(
-                        f"\t- The average score was {score_stats.mean:.3f} "
-                        f"with standard deviation {score_stats.sd:.3f}."
-                    )
-                else:
-                    LOGGER.info(f"\t- Found {count} unique {level}.")
+            level_writers.sink_iterator(sorted_file_iterator)
+            level_writers.finalize()
 
         con = Confidence(
             dataset=dataset,
-            levels=levels_or_proteins,
-            level_paths=level_data_path,
+            levels=level_manager.levels_or_proteins,
+            level_paths=level_manager.level_data_paths,
             out_writers=output_writers,
             eval_fdr=eval_fdr,
             write_decoys=write_decoys,
@@ -568,13 +546,463 @@ def assign_confidence(
             peps_algorithm=peps_algorithm,
             qvalue_algorithm=qvalue_algorithm,
             stream_confidence=stream_confidence,
-            score_stats=score_stats,
+            score_stats=level_writers.score_stats,
         )
         out.append(con)
         if not prefix:
-            append_to_output_file = True
+            # Having None as a prefix means that all outputs will be
+            # written to a single file, thus after the first iteration
+            # we stop initializing the writers (bc that generates over-writing
+            # the files instead of appending to them).
+            output_writers_factory.append_to_output_file = True
 
     return out
+
+
+class LevelWriterCollection:
+    def __init__(
+        self,
+        levels: list[str],
+        level_data_paths: dict[str, Path],
+        schema_dict: dict[str, np.dtype],
+        level_input_output_column_mapping: dict[str, str],
+        level_hash_columns: dict[str, list[str]],
+        deduplication: bool,
+    ):
+        # Do I need to pass the levels? cant I use the keys of the data paths?
+        self.levels = levels
+        self.deduplication = deduplication
+        self.level_input_output_column_mapping = (
+            level_input_output_column_mapping
+        )
+        self.level_hash_columns = level_hash_columns
+        level_column_types = [
+            schema_dict[name]
+            for name in level_input_output_column_mapping.values()
+        ]
+
+        self.level_writers = {
+            level: TabularDataWriter.from_suffix(
+                level_data_paths[level],
+                columns=list(level_input_output_column_mapping.values()),
+                column_types=level_column_types,
+                buffer_size=CONFIDENCE_CHUNK_SIZE,
+                buffer_type=BufferType.Dicts,
+            )
+            for level in levels
+        }
+        self.seen_level_entities = {level: set() for level in levels}
+        for level, writer in self.level_writers.items():
+            LOGGER.info(f"Initializing writer for level {level}: {writer}")
+            writer.initialize()
+
+        self.score_stats = OnlineStatistics()
+        self.psm_count = 0
+
+    def __repr__(self):
+        pretty_dict = pformat(self.__dict__)
+        return f"{self.__class__!s}({pretty_dict})"
+
+    @staticmethod
+    def from_manager(
+        level_manager: LevelManager,
+        type_map: dict[str, np.dtype],
+        level_input_output_column_mapping: dict[str, str],
+        deduplication: bool,
+    ) -> LevelWriterCollection:
+        level_data_paths = level_manager.level_data_paths
+        levels = level_manager.levels
+        hash_columns = level_manager.level_hash_columns
+        return LevelWriterCollection(
+            levels=levels,
+            level_data_paths=level_data_paths,
+            schema_dict=type_map,
+            level_input_output_column_mapping=level_input_output_column_mapping,
+            level_hash_columns=hash_columns,
+            deduplication=deduplication,
+        )
+
+    def hash_data_row(self, data_row, level):
+        # TODO: benchmark if actually hashing here would be better.
+        # .     It feels inefficient to keep large numbers of large strings
+        #       in memory.
+        return str([
+            data_row[self.level_input_output_column_mapping.get(col, col)]
+            for col in self.level_hash_columns[level]
+        ])
+
+    def sink_iterator(self, sorted_file_iterator):
+        for data_row in sorted_file_iterator:
+            self.psm_count += 1
+            for level in self.levels:
+                if level != "psms" or self.deduplication:
+                    psm_hash = self.hash_data_row(data_row, level=level)
+                    if psm_hash in self.seen_level_entities[level]:
+                        if level == "psms":
+                            # If we are on the psms level, we can skip
+                            # checking the other levels
+                            break
+                        continue
+                    self.seen_level_entities[level].add(psm_hash)
+                out_row = {
+                    col: data_row[col]
+                    for col in self.level_input_output_column_mapping.values()
+                }
+                self.level_writers[level].append_data(out_row)
+                self.score_stats.update_single(data_row["score"])
+
+    def finalize(self):
+        for level in self.levels:
+            count = len(self.seen_level_entities[level])
+            curr_writer = self.level_writers[level]
+            LOGGER.info(f"Finalizing writer for level {level}: {curr_writer}")
+            curr_writer.finalize()
+            if level == "psms":
+                if self.deduplication:
+                    LOGGER.info(f"\t- Found {count} PSMs from unique spectra.")
+                else:
+                    LOGGER.info(f"\t- Found {self.psm_count} PSMs.")
+                LOGGER.info(
+                    f"\t- The average score was {self.score_stats.mean:.3f} "
+                    f"with standard deviation {self.score_stats.sd:.3f}."
+                )
+            else:
+                LOGGER.info(f"\t- Found {count} unique {level}.")
+
+
+class LevelManager:
+    """Manages level-specific data and operations.
+
+    This class is meant to be used internally by the `Confidence` class.
+    But it basically bundles the output path creation logic and the column
+    +level mapping logic.
+
+    Parameters
+    ----------
+    level_columns : list of str
+        The columns that can be used to aggregate PSMs.
+        For example, peptides, modified peptides, precursors.
+        would generate "rollups" of the PSMs at the PSM (default)
+        and in addition to that, the peptide and modified peptide
+        columns would generate "peptide groups" of PSMs (each).
+    default_extension : str
+        The default extension to use for the output files.
+        The extension will be used to determine the output format
+        when initializing the `LevelWriterCollection` which internally
+        uses the `TabularDataWriter.from_suffix` method.
+    spectrum_columns : list of str
+        The columns that uniquely identify a mass spectrum.
+    do_rollup : bool
+        Do we apply rollup on peptides, modified peptides etc.?
+    use_proteins : bool
+        Whether to roll up protein-level confidence estimates.
+    dest_dir : Path
+        The directory in which to save the files.
+    file_root : str
+        The prefix added to all output file names.
+        The final file names will be:
+        `dest_dir / file_root+level+default_extension`
+    protein_column : str, optional
+        The column that specifies which protein(s) the detected peptide might
+        have originated from. This column is not used to compute protein-level
+        confidence estimates, it is just propagated to the output.
+    """
+
+    def __init__(
+        self,
+        *,
+        level_columns: list[str],
+        default_extension: str,
+        spectrum_columns: list[str],
+        do_rollup: bool,
+        use_proteins: bool,
+        dest_dir: Path,
+        file_root: str,
+        protein_column: str | None,
+    ):
+        self.level_columns = level_columns
+        self.default_extension = default_extension
+        self.spectrum_columns = spectrum_columns
+        self.use_proteins = use_proteins
+        self.dest_dir = dest_dir
+        self.file_root = file_root
+        self.do_rollup = do_rollup
+        self.protein_column = protein_column
+
+        self._initialize_levels()
+        self._setup_level_paths()
+        self._setup_hash_columns()
+        self._setup_protein_levels()
+        self._setup_extra_output_columns()
+
+    @staticmethod
+    def from_dataset(
+        *,
+        dataset: PsmDataset,
+        do_rollup: bool,
+        use_proteins: bool,
+        dest_dir: Path,
+        file_root: str,
+    ):
+        level_columns = dataset.level_columns
+        default_extension = dataset.get_default_extension()
+        spectrum_columns = dataset.spectrum_columns
+        protein_column = dataset.protein_column
+        return LevelManager(
+            level_columns=level_columns,
+            default_extension=default_extension,
+            spectrum_columns=spectrum_columns,
+            do_rollup=do_rollup,
+            use_proteins=use_proteins,
+            dest_dir=dest_dir,
+            file_root=file_root,
+            protein_column=protein_column,
+        )
+
+    def __repr__(self) -> str:
+        formatted_dict = pformat(self.__dict__)
+        return f"{self.__class__!s}({formatted_dict})"
+
+    def _initialize_levels(self) -> list[str]:
+        """Initialize processing levels based on configuration."""
+        levels = ["psms"]
+        if self.do_rollup:
+            level_columns = self.level_columns
+            levels.extend(col.lower() + "s" for col in level_columns)
+
+        self.levels = levels
+
+    def _setup_level_paths(
+        self,
+    ) -> None:
+        """Setup paths for each processing level."""
+        self.level_data_paths = {}
+        file_ext = self.default_extension
+        for level in self.levels:
+            self.level_data_paths[level] = (
+                self.dest_dir / f"{self.file_root}{level}{file_ext}"
+            )
+
+    def _setup_hash_columns(self) -> None:
+        """Setup hash columns for each level."""
+
+        # Q: wouldnt the right thing here be to use spectrum_cols + peptide?
+        self.level_hash_columns = {"psms": self.spectrum_columns}
+        for level in self.levels[1:]:
+            if level != "proteins":
+                self.level_hash_columns[level] = [
+                    level.rstrip("s").capitalize()
+                ]
+
+    def _setup_protein_levels(self) -> None:
+        levels_or_proteins = self.levels
+        file_ext = self.default_extension
+        if self.use_proteins:
+            levels_or_proteins = [*levels_or_proteins, "proteins"]
+            self.level_data_paths["proteins"] = (
+                self.dest_dir / f"{self.file_root}proteins{file_ext}"
+            )
+            self.level_hash_columns["proteins"] = self.protein_column
+
+        self.levels_or_proteins = levels_or_proteins
+
+    def _setup_extra_output_columns(self) -> None:
+        extra_output_columns = []
+        if self.do_rollup:
+            level_columns = self.level_columns
+
+            for level_column in level_columns:
+                level = level_column.lower() + "s"  # e.g. Peptide to peptides
+                if level not in self.levels:
+                    self.levels.append(level)
+
+                self.level_data_paths[level] = (
+                    self.dest_dir
+                    / f"{self.file_root}{level}{self.default_extension}"
+                )
+
+                # I am not sure why but over-writing some of the levels here is
+                # important, I think it has to do with with how the rollup
+                # levels are handled (columns are renamed).
+                self.level_hash_columns[level] = [level_column]
+                if level not in ["psms", "peptides", "proteins"]:
+                    extra_output_columns.append(level_column)
+
+        self.extra_output_columns = extra_output_columns
+
+    def build_output_col_mapping(self, dataset: PsmDataset) -> dict:
+        # Q: what would be the requirement here?
+        #    Could we use the spectrum columns? since multiple
+        #    columns can be used to identify a spectrum.
+        level_column_names = [
+            "PSMId",
+            dataset.target_column,
+            "peptide",
+            *self.extra_output_columns,
+            "proteinIds",
+            "score",
+        ]
+        level_input_column_names = [
+            dataset.specId_column,
+            dataset.target_column,
+            dataset.peptide_column,
+            *self.extra_output_columns,
+            dataset.protein_column,
+            "score",
+        ]
+
+        level_input_output_column_mapping = {
+            in_col: out_col
+            for in_col, out_col in strictzip(
+                level_input_column_names,
+                level_column_names,
+            )
+            if in_col is not None
+        }
+
+        return level_input_output_column_mapping
+
+
+class OutputWriterFactory:
+    """Factory class for creating output writers based on configuration."""
+
+    def __init__(
+        self,
+        *,
+        extra_output_columns: list[str],
+        is_sqlite: bool,
+        append_to_output_file: bool,
+        write_decoys: bool,
+    ):
+        # Q: are we deleting the sqlite ops?
+        self.is_sqlite = is_sqlite
+        self.write_decoys = write_decoys
+        self.extra_output_columns = extra_output_columns
+        self.append_to_output_file = append_to_output_file
+        self.output_column_names = [
+            "PSMId",
+            "peptide",
+            *extra_output_columns,
+            # Q: should we prefix these with "mokapot"?
+            "score",
+            Q_VALUE_COL_NAME,
+            "posterior_error_prob",
+            "proteinIds",
+        ]
+
+        self.output_column_names_proteins = [
+            "mokapot protein group",
+            "best peptide",
+            "stripped sequence",
+            "score",
+            Q_VALUE_COL_NAME,
+            "posterior_error_prob",
+        ]
+
+    def __repr__(self) -> str:
+        formatted_dict = pformat(self.__dict__)
+        return f"{self.__class__!s}({formatted_dict})"
+
+    def create_writer(
+        self,
+        *,
+        path: Path,
+        level: str,
+        initialize: bool,
+    ) -> TabularDataWriter | ConfidenceSqliteWriter:
+        """Create appropriate writer based on output type and level."""
+        output_columns = (
+            self.output_column_names_proteins
+            if level == "proteins"
+            else self.output_column_names
+        )
+
+        if self.is_sqlite:
+            return ConfidenceSqliteWriter(
+                path,
+                columns=output_columns,
+                column_types=[],
+                level=level,
+                qvalue_column=Q_VALUE_COL_NAME,
+                pep_column="posterior_error_prob",
+            )
+
+        writer = TabularDataWriter.from_suffix(path, output_columns, [])
+        if initialize:
+            writer.initialize()
+        return writer
+
+    def build_writers(
+        self, level_manager: LevelManager, prefix: str | None = None
+    ) -> tuple[
+        dict[str, list[TabularDataWriter] | list[ConfidenceSqliteWriter]], str
+    ]:
+        """Build output writers for each level.
+
+        Parameters
+        ----------
+        level_manager : LevelManager
+            The level manager.
+        prefix : str, optional
+            The prefix to use for the output files, by default None.
+            It will be used to create the file names whose pattern is
+            "{self.dest_dir}/{file_root}{prefix}.{level}{file_ext}".
+
+        Returns
+        -------
+        tuple[
+            dict[
+                str,
+                list[TabularDataWriter] | list[ConfidenceSqliteWriter]
+            ],
+            str
+        ]
+            A tuple containing the output writers and the file prefix.
+
+        """
+        output_writers = {}
+
+        file_prefix = level_manager.file_root
+        if prefix:
+            file_prefix = f"{file_prefix}{prefix}."
+
+        for level in level_manager.levels_or_proteins:
+            output_writers[level] = []
+
+            name = [
+                str(file_prefix),
+                "targets.",
+                str(level),
+                str(level_manager.default_extension),
+            ]
+
+            outfile_targets = level_manager.dest_dir / "".join(name)
+
+            output_writers[level].append(
+                self.create_writer(
+                    path=outfile_targets,
+                    level=level,
+                    initialize=not self.append_to_output_file,
+                )
+            )
+
+            if self.write_decoys and not self.is_sqlite:
+                decoy_name = [
+                    str(file_prefix),
+                    "decoys.",
+                    str(level),
+                    str(level_manager.default_extension),
+                ]
+                outfile_decoys = level_manager.dest_dir / "".join(decoy_name)
+                output_writers[level].append(
+                    self.create_writer(
+                        path=outfile_decoys,
+                        level=level,
+                        initialize=not self.append_to_output_file,
+                    )
+                )
+
+        return output_writers, file_prefix
 
 
 @contextmanager
@@ -601,7 +1029,8 @@ def create_sorted_file_reader(
         input_output_column_mapping.get(name, name) for name in input_columns
     ]
     file_iterator = reader.get_chunked_data_iterator(
-        CONFIDENCE_CHUNK_SIZE, output_columns
+        chunk_size=CONFIDENCE_CHUNK_SIZE,
+        columns=output_columns,
     )
 
     #  Write those chunks in parallel, where the columns are given
@@ -626,7 +1055,7 @@ def create_sorted_file_reader(
     ]
 
     sorted_file_reader = MergedTabularDataReader(
-        readers,
+        readers=readers,
         priority_column="score",
         reader_chunk_size=CONFIDENCE_CHUNK_SIZE,
     )
@@ -665,7 +1094,7 @@ def _save_sorted_metadata_chunks(
         try:
             chunk_metadata.drop_duplicates(deduplication_columns, inplace=True)
         except KeyError as e:
-            msg = "Duplication error in the following columns: "
+            msg = "Duplication error trying to use the following columns: "
             msg += str(deduplication_columns)
             msg += f". Found: {chunk_metadata.columns} "
             msg += ". Please check the input data."
@@ -782,3 +1211,62 @@ def create_score_target_iterator(chunked_iterator: Iterator):
         scores = df_chunk["score"].values
         targets = ~df_chunk["is_decoy"].values
         yield scores, targets
+
+
+def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
+    """
+    Plot the cumulative number of discoveries over range of q-values.
+
+    Parameters
+    ----------
+    qvalues : numpy.ndarray
+        The q-values to plot.
+    threshold : float, optional
+        Indicates the maximum q-value to plot.
+    ax : matplotlib.pyplot.Axes, optional
+        The matplotlib Axes on which to plot. If `None` the current
+        Axes instance is used.
+    **kwargs : dict, optional
+        Arguments passed to :py:func:`matplotlib.axes.Axes.plot`.
+
+    Returns
+    -------
+    matplotlib.pyplot.Axes
+        An :py:class:`matplotlib.axes.Axes` with the cumulative
+        number of accepted target PSMs or peptides.
+    """
+    if ax is None:
+        if plt is None:
+            raise RuntimeError(
+                "Matplotlib is not installed. Confidence plots will not be "
+                "available."
+            )
+        ax = plt.gca()
+
+    # Calculate cumulative targets at each q-value
+    qvals = pd.Series(qvalues, name="qvalue")
+    qvals = qvals.sort_values(ascending=True).to_frame()
+    qvals["target"] = 1
+    qvals["num"] = qvals["target"].cumsum()
+    qvals = qvals.groupby(["qvalue"]).max().reset_index()
+    qvals = qvals[["qvalue", "num"]]
+
+    zero = pd.DataFrame({"qvalue": qvals["qvalue"][0], "num": 0}, index=[-1])
+    qvals = pd.concat([zero, qvals], sort=True).reset_index(drop=True)
+
+    xmargin = threshold * 0.05
+    ymax = qvals.num[qvals["qvalue"] <= (threshold + xmargin)].max()
+    ymargin = ymax * 0.05
+
+    # Set margins
+    curr_ylims = ax.get_ylim()
+    if curr_ylims[1] < ymax + ymargin:
+        ax.set_ylim(0 - ymargin, ymax + ymargin)
+
+    ax.set_xlim(0 - xmargin, threshold + xmargin)
+    ax.set_xlabel("q-value")
+    ax.set_ylabel("Discoveries")
+
+    ax.step(qvals["qvalue"].values, qvals.num.values, where="post", **kwargs)
+
+    return ax

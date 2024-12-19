@@ -14,14 +14,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 def read_fasta(
-    fasta_files,
-    enzyme="[KR]",
-    missed_cleavages=2,
-    clip_nterm_methionine=False,
-    min_length=6,
-    max_length=50,
-    semi=False,
-    decoy_prefix="decoy_",
+    fasta_files: str | list[str] | tuple[str],
+    enzyme: str | re.Pattern = "[KR]",
+    missed_cleavages: int = 2,
+    clip_nterm_methionine: bool = False,
+    min_length: int = 6,
+    max_length: int = 50,
+    semi: bool = False,
+    decoy_prefix: str = "decoy_",
 ):
     """Parse a FASTA file, storing a mapping of peptides and proteins.
 
@@ -310,7 +310,7 @@ def digest(
 
 
 # Private Functions -----------------------------------------------------------
-def _parse_fasta_files(fasta_files):
+def _parse_fasta_files(fasta_files: str | list[str] | tuple[str]) -> list[str]:
     """Read a fasta file and divide into proteins
 
     Parameters

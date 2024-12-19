@@ -30,8 +30,6 @@ from typeguard import typechecked
 
 from mokapot import qvalues
 from mokapot import utils
-from mokapot.parsers.fasta import read_fasta
-from mokapot.proteins import Proteins
 from .tabular_data import TabularDataReader, DataFrameReader
 
 LOGGER = logging.getLogger(__name__)
@@ -67,6 +65,20 @@ class OptionalColumns:
         }
 
 
+@dataclass
+class BestFeatureProperties:
+    name: str
+    positives: int
+    fdr: float
+    descending: bool
+
+
+@dataclass
+class LabeledBestFeature:
+    feature: BestFeatureProperties
+    new_labels: np.ndarray
+
+
 class PsmDataset(ABC):
     """Store a collection of PSMs and their features.
 
@@ -92,29 +104,6 @@ class PsmDataset(ABC):
     def rng(self, rng):
         """Set the random number generator"""
         self._rng = np.random.default_rng(rng)
-
-    def add_proteins(self, proteins, **kwargs):
-        """Add protein information to the dataset.
-
-        Protein sequence information is required to compute protein-level
-        confidence estimates using the picked-protein approach.
-
-        Parameters
-        ----------
-        proteins : a Proteins object or str
-            The :py:class:`~mokapot.proteins.Proteins` object defines the
-            mapping of peptides to proteins and the mapping of decoy proteins
-            to their corresponding target proteins. Alternatively, a string
-            specifying a FASTA file can be specified which will be parsed to
-            define these mappings.
-        **kwargs : dict
-            Keyword arguments to be passed to the
-            :py:class:`mokapot.read_fasta()` function.
-        """
-        if not isinstance(proteins, Proteins):
-            proteins = read_fasta(proteins, **kwargs)
-
-        self._proteins = proteins
 
     @abstractmethod
     def get_optional_columns(self) -> OptionalColumns:
@@ -259,6 +248,21 @@ class PsmDataset(ABC):
     def read_data(
         self, columns: list[str] | None = None, chunk_size: int | None = None
     ) -> pd.DataFrame | Generator[pd.DataFrame, None, None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def find_best_feature(self, eval_fdr: float) -> LabeledBestFeature:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def scores(self) -> np.ndarray | None:
+        # q: should i rename this to mokapot_scores?
+        raise NotImplementedError
+
+    @scores.setter
+    @abstractmethod
+    def scores(self, scores: np.ndarray | None):
         raise NotImplementedError
 
 
@@ -628,11 +632,6 @@ class LinearPsmDataset(PsmDataset):
         """The columns of the dataset."""
         return self.data.columns.tolist()
 
-    @property
-    def has_proteins(self):
-        """Has a FASTA file been added?"""
-        return self._proteins is not None
-
     def _targets_count_by_feature(self, desc, eval_fdr):
         """
         iterate over features and count the number of positive examples
@@ -659,7 +658,7 @@ class LinearPsmDataset(PsmDataset):
             index=self._feature_columns,
         )
 
-    def _find_best_feature(self, eval_fdr):
+    def find_best_feature(self, eval_fdr: float) -> LabeledBestFeature:
         """
         Find the best feature to separate targets from decoys at the
         specified false-discovery rate threshold.
@@ -704,7 +703,16 @@ class LinearPsmDataset(PsmDataset):
                 f"No PSMs found below the 'eval_fdr' {eval_fdr}."
             )
 
-        return best_feat, best_positives, new_labels, best_desc
+        out = LabeledBestFeature(
+            feature=BestFeatureProperties(
+                name=best_feat,
+                positives=best_positives,
+                descending=best_desc,
+                fdr=eval_fdr,
+            ),
+            new_labels=new_labels,
+        )
+        return out
 
     def _calibrate_scores(self, scores, eval_fdr, desc=True):
         calibrate_scores(
@@ -741,6 +749,16 @@ class LinearPsmDataset(PsmDataset):
     def get_default_extension(self) -> str:
         return ".csv"
 
+    @property
+    def scores(self) -> np.ndarray | None:
+        if not hasattr(self, "_scores"):
+            return None
+        return self._scores
+
+    @scores.setter
+    def scores(self, scores: np.ndarray | None):
+        self._scores = scores
+
 
 @typechecked
 class OnDiskPsmDataset(PsmDataset):
@@ -748,7 +766,7 @@ class OnDiskPsmDataset(PsmDataset):
     def __init__(
         self,
         filename_or_reader: Path | TabularDataReader,
-        columns,
+        *,
         target_column,
         spectrum_columns,
         peptide_column,
@@ -756,7 +774,7 @@ class OnDiskPsmDataset(PsmDataset):
         feature_columns,
         metadata_columns,
         metadata_column_types,  # the columns+types could be a dict.
-        level_columns,
+        level_columns,  # What is this supposed to be?
         filename_column,
         scan_column,
         specId_column,  # Why does this have different capitalization?
@@ -773,7 +791,10 @@ class OnDiskPsmDataset(PsmDataset):
         else:
             self._reader = TabularDataReader.from_path(filename_or_reader)
 
+        columns = self.reader.get_column_names()
         self.columns = columns
+        # Q: Why ae columns asked for in the constructor?
+        # .  Since we can read them from the reader ...
         self._target_column = target_column
         self._peptide_column = peptide_column
         self._protein_column = protein_column
@@ -791,7 +812,6 @@ class OnDiskPsmDataset(PsmDataset):
         self._specId_column = specId_column
         self._spectra_dataframe = spectra_dataframe
 
-        columns = self.reader.get_column_names()
         opt_cols = OptionalColumns(
             filename=filename_column,
             scan=scan_column,
@@ -832,7 +852,7 @@ class OnDiskPsmDataset(PsmDataset):
         check_column(self.expmass_column)
         check_column(self.rt_column)
         check_column(self.charge_column)
-        check_column(self.specId_column)
+        # check_column(self.specId_column)
 
     def get_default_extension(self) -> str:
         return self.reader.get_default_extension()
@@ -852,6 +872,10 @@ class OnDiskPsmDataset(PsmDataset):
 
     @property
     def specId_column(self) -> str:
+        # breakpoint()
+        # I am thinking on removing this ... since the "key"
+        # of a spectrum is all the columns that identify it uniquely.
+        # ... not this column that might or might not be present.
         return self._specId_column
 
     @property
@@ -919,7 +943,7 @@ class OnDiskPsmDataset(PsmDataset):
         rep += f"Expmass column: {self.expmass_column}\n"
         rep += f"Rt column: {self.rt_column}\n"
         rep += f"Charge column: {self.charge_column}\n"
-        rep += f"SpecId column: {self.specId_column}\n"
+        # rep += f"SpecId column: {self.specId_column}\n"
         rep += f"Spectra DF: \n{spec_sec}\n"
         return rep
 
@@ -975,7 +999,7 @@ class OnDiskPsmDataset(PsmDataset):
             == 1
         ).sum()
 
-    def find_best_feature(self, eval_fdr):
+    def find_best_feature(self, eval_fdr: float) -> LabeledBestFeature:
         best_feat = None
         best_positives = 0
         new_labels = None
@@ -1015,7 +1039,16 @@ class OnDiskPsmDataset(PsmDataset):
                 f"No PSMs found below the 'eval_fdr' {eval_fdr}."
             )
 
-        return best_feat, best_positives, new_labels, best_desc
+        out = LabeledBestFeature(
+            feature=BestFeatureProperties(
+                name=best_feat,
+                positives=best_positives,
+                descending=best_desc,
+                fdr=eval_fdr,
+            ),
+            new_labels=new_labels,
+        )
+        return out
 
     def update_labels(self, scores, target_column, eval_fdr=0.01, desc=True):
         df = self.read_data(columns=target_column)
@@ -1117,6 +1150,16 @@ class OnDiskPsmDataset(PsmDataset):
         else:
             return self.reader.read(columns=columns)
 
+    @property
+    def scores(self) -> np.ndarray | None:
+        if not hasattr(self, "_scores"):
+            return None
+        return self._scores
+
+    @scores.setter
+    def scores(self, scores: np.ndarray | None):
+        self._scores = scores
+
 
 @typechecked
 def _update_labels(
@@ -1124,7 +1167,7 @@ def _update_labels(
     targets: np.ndarray[bool] | pd.Series,
     eval_fdr: float = 0.01,
     desc: bool = True,
-) -> np.ndarray[bool] | pd.Series:
+) -> np.ndarray[bool]:
     """Return the label for each PSM, given it's score.
 
     This method is used during model training to define positive examples,

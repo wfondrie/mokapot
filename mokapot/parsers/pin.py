@@ -221,6 +221,8 @@ def read_percolator(
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
+    # Q: this really feels like a bad idea ... concurrent mutation of a list
+    # .  where the elements are concrruently mutated datafames in-place.
     features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
             reader=reader,
@@ -252,7 +254,6 @@ def read_percolator(
 
     return OnDiskPsmDataset(
         perc_file,
-        columns=columns,
         target_column=labels,
         spectrum_columns=spectra,
         peptide_column=peptides,

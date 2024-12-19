@@ -43,7 +43,7 @@ def test_basic_cli(tmp_path, scope_files):
         "PSMId",
         "peptide",
         "score",
-        "q-value",
+        "mokapot_qvalue",
         "posterior_error_prob",
         "proteinIds",
     ]

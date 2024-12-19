@@ -6,6 +6,7 @@ import numpy as np
 import numba as nb
 from typeguard import typechecked
 from typing import Callable
+import os
 
 from mokapot.peps import (
     peps_from_scores_hist_nnls,
@@ -126,6 +127,10 @@ def tdc(
     )
 
     # Calculate q-values
+    # Note: I really feel like unique values from floats is not the best idea
+    #       ...
+    #       a sane alternative would be to use a specific precision and make it
+    #       an integer.
     unique_metric, indices = np.unique(scores, return_counts=True)
 
     # Some arrays need to be flipped so that we can loop through from
@@ -136,7 +141,7 @@ def tdc(
         unique_metric = np.flip(unique_metric)
         indices = np.flip(indices)
 
-    qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
+    qvals = _fdr2qvalue(fdr, num_total, indices)
     qvals = np.flip(qvals)
     qvals = qvals[np.argsort(srt_idx)]
 
@@ -144,7 +149,7 @@ def tdc(
 
 
 @nb.njit
-def _fdr2qvalue(fdr, num_total, met, indices):
+def _fdr2qvalue(fdr, num_total, indices):
     """Quickly turn a list of FDRs to q-values.
 
     All of the inputs are assumed to be sorted.
@@ -155,8 +160,6 @@ def _fdr2qvalue(fdr, num_total, met, indices):
         A vector of all unique FDR values.
     num_total : numpy.ndarray
         A vector of the cumulative number of PSMs at each score.
-    met : numpy.ndarray
-        A vector of the scores for each PSM.
     indices : tuple of numpy.ndarray
         Tuple where the vector at index i indicates the PSMs that
         shared the unique FDR value in `fdr`.
@@ -167,24 +170,39 @@ def _fdr2qvalue(fdr, num_total, met, indices):
         A vector of q-values.
     """
     min_q = 1
-    qvals = np.ones(len(fdr))
-    group_fdr = np.ones(len(fdr))
+    qvals = np.ones_like(fdr)
     prev_idx = 0
-    for idx in range(met.shape[0]):
+    for idx in range(indices.shape[0]):
         next_idx = prev_idx + indices[idx]
         group = slice(prev_idx, next_idx)
         prev_idx = next_idx
 
         fdr_group = fdr[group]
+        # Q: Why isnt this a constant?
+        # Shouldnt all the elements in the group be the same?
+        # JSPP 2024-12-16
         n_group = num_total[group]
         curr_fdr = fdr_group[np.argmax(n_group)]
         if curr_fdr < min_q:
             min_q = curr_fdr
 
-        group_fdr[group] = curr_fdr
         qvals[group] = min_q
 
     return qvals
+
+
+# Experimental for now ... will remove from the PR if needed.
+if os.environ.get("MOKAPOT_QVALUES_USE_NUMPY", False):
+    import warnings
+
+    warnings.warn(
+        "Using numpy implementation of q-value computation. "
+        "This is not recommended for production use."
+        "Set the environment variable MOKAPOT_QVALUES_USE_NUMPY=0 to disable."
+    )
+
+    def _fdr2qvalue(fdr, num_total, indices):
+        return np.minimum.accumulate(fdr)
 
 
 @typechecked

@@ -208,8 +208,6 @@ def psms_ondisk() -> OnDiskPsmDataset:
         usecols=["ScanNr", "ExpMass", "Label"],
     )
     # Q: why is the exp mass in the spectra dataframe?
-    with open(filename) as perc:
-        columns = perc.readline().rstrip().split("\t")
     psms = OnDiskPsmDataset(
         filename,
         target_column="Label",
@@ -251,7 +249,6 @@ def psms_ondisk() -> OnDiskPsmDataset:
         filename_column=None,
         specId_column="SpecId",
         spectra_dataframe=df_spectra,
-        columns=columns,
     )
     return psms
 
@@ -264,7 +261,6 @@ def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
         filename, columns=["ScanNr", "ExpMass", "Label"]
     ).to_pandas()
     df_spectra = convert_targets_column(df_spectra, "Label")
-    columns = pq.ParquetFile(filename).schema.names
     psms = OnDiskPsmDataset(
         filename,
         target_column="Label",
@@ -309,7 +305,6 @@ def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
         filename_column=None,
         specId_column="SpecId",
         spectra_dataframe=df_spectra,
-        columns=columns,
     )
     return psms
 

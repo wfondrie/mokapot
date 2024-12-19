@@ -25,6 +25,7 @@ from mokapot.dataset import (
 )
 from mokapot.model import PercolatorModel, Model
 from mokapot.parsers.pin import parse_in_chunks
+from mokapot.utils import strictzip
 
 LOGGER = logging.getLogger(__name__)
 
@@ -103,12 +104,15 @@ def brew(
         model = PercolatorModel()
 
     try:
+        # Q: what is this doing? Why does the randon number
+        # generater get set only if the model has an estimator?
+        # Shouldn't it assign it to all the models if they are passed?
         model.estimator
         model.rng = rng
     except AttributeError:
         pass
 
-        # Check that all of the datasets have the same features:
+    # Check that all of the datasets have the same features:
     feat_set = set(datasets[0].feature_columns)
     if not all([
         set(dataset.feature_columns) == feat_set for dataset in datasets
@@ -292,6 +296,8 @@ def brew(
 
     # Reverse all scores for which desc is False (this way, we don't have to
     # return `descs` from this function
+    # Q: why dont we just return a class that denotes if its descending?
+    #    JSPP 2024-12-15
     for idx, desc in enumerate(descs):
         if not desc:
             scores[idx] = -scores[idx]
@@ -299,6 +305,11 @@ def brew(
 
     # Coherces the tuple to a list
     models = list(models)
+
+    LOGGER.info("Assigning scores to PSMs...")
+    for score, dataset in strictzip(scores, datasets):
+        dataset.scores = score
+
     return list(models), scores
 
 
@@ -498,7 +509,9 @@ def _predict(
 
 @typechecked
 def _predict_with_ensemble(
-    dataset: PsmDataset, models: Iterable[Model], max_workers
+    dataset: PsmDataset,
+    models: Iterable[Model],
+    max_workers: int,
 ):
     """
     Return the new scores for the dataset using ensemble of all trained models

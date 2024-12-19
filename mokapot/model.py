@@ -224,6 +224,8 @@ class Model:
         numpy.ndarray
             A :py:class:`numpy.ndarray` containing the score for each PSM.
         """
+        # Q: we should rename this methid to "score_dataset" ...
+        # ... or just remove it ... since it is redundant with `predict`
         if not self.is_trained:
             raise NotFittedError("This model is untrained. Run fit() first.")
 
@@ -558,10 +560,19 @@ def _get_starting_labels(dataset: LinearPsmDataset, model):
     feat_pass : int
         The number of passing PSMs with the best feature.
     """
+
+    # Note: This function does sooo much more than getting the starting
+    # labels, we should at least rename it to something more descriptive.
+    # JSPP 2024-12-14
     LOGGER.debug("Finding initial direction...")
     if model.direction is None and not model.is_trained:
-        feat_res = dataset._find_best_feature(model.train_fdr)
-        best_feat, feat_pass, start_labels, desc = feat_res
+        feat_res = dataset.find_best_feature(model.train_fdr)
+        best_feat, feat_pass, start_labels, desc = (
+            feat_res.feature.name,
+            feat_res.feature.positives,
+            feat_res.new_labels,
+            feat_res.feature.descending,
+        )
         LOGGER.info(
             "\t- Selected feature %s with %i PSMs at q<=%g.",
             best_feat,
@@ -656,7 +667,7 @@ def _find_hyperparameters(model, features, labels):
     return new_est
 
 
-def _get_weights(model, features):
+def _get_weights(model, features) -> list[str] | None:
     """
     If the model is a linear model, parse the weights to a list of strings.
 
@@ -680,6 +691,7 @@ def _get_weights(model, features):
         assert len(intercept) == 1
         weights = list(weights.flatten())
     except (AttributeError, AssertionError):
+        LOGGER.debug("No coefficients in the current model.")
         return None
 
     col_width = max([len(f) for f in features]) + 2

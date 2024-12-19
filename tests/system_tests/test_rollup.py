@@ -235,7 +235,7 @@ def test_streaming(tmp_path, percolator_extended_file_big):
 
     df_base = read_tsv("base.targets.psms.csv")
 
-    qvc = "q-value"
+    qvc = "mokapot_qvalue"
     pvc = "posterior_error_prob"
     pd.testing.assert_frame_equal(
         df_streamed.drop(columns=[qvc, pvc]), df_base.drop(columns=[qvc, pvc])
