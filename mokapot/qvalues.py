@@ -141,35 +141,7 @@ def tdc(
         unique_metric = np.flip(unique_metric)
         indices = np.flip(indices)
 
-    # import time
-
-    # t0 = time.time()
     qvals = _fdr2qvalue(fdr, num_total, indices)
-    # et = (time.time() - t0) * 1000
-    # print(f"Base Time: {et}")
-    # t0 = time.time()
-    # qvals_np = np.minimum.accumulate(fdr)
-    # et = (time.time() - t0) * 1000
-    # print(f"Numpy Time: {et}")
-
-    # CARE = False
-    # if CARE and not np.allclose(qvals, qvals_np):
-    #     rmse = np.sqrt(np.mean((qvals - qvals_np) ** 2))
-    #     print(f"RMSE: {rmse}")
-    #     from matplotlib import pyplot as plt
-
-    #     diff_window = (qvals > 0.6) & (qvals < 0.75)
-    #     print(f"Diff Qvals: {qvals[diff_window]}")
-    #     print(f"Diff Qvals_np: {qvals[diff_window]}")
-    #     print(f"Diff Qvals_fdr: {qvals[diff_window]}")
-
-    #     plt.scatter(x=qvals, y=qvals_np, alpha=0.3)
-    #     plt.xlabel("Qvals")
-    #     plt.ylabel("Qvals Numpy")
-    #     plt.show()
-    #     # if rmse > 1e-3:
-    #     #     raise RuntimeError("Numpy implementation is not close.")
-
     qvals = np.flip(qvals)
     qvals = qvals[np.argsort(srt_idx)]
 
