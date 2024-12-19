@@ -350,6 +350,11 @@ def qvalues_from_counts(
     qvalues_sorted = monotonize_simple(fdr_sorted, ascending=True, reverse=True)
 
     # Extract unique scores and take qvalue from the last of them
+    # (for each unique score we need the unique qvalue, the extra return values
+    # are needed to get the correct one and to map them back later to the full
+    # array. See np.unique and do the math ;)
+    # Note: if all scores are uniq this step could be skipped and maybe some
+    # cpu cycles saved.
     scores_uniq, idx_uniq, rev_uniq, cnt_uniq = np.unique(
         scores_sorted,
         return_index=True,
@@ -357,7 +362,10 @@ def qvalues_from_counts(
         return_inverse=True,
     )
     qvalues_uniq = qvalues_sorted[idx_uniq + cnt_uniq - 1]
-    qvalues = qvalues_uniq[rev_uniq]
+
+    # Map unique values back, but in original order
+    qvalues = np.zeros_like(qvalues_sorted)
+    qvalues[ind] = qvalues_uniq[rev_uniq]
 
     return np.clip(qvalues, 0.0, 1.0)
 

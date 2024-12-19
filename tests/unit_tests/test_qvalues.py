@@ -2,16 +2,16 @@
 These tests verify that our q-value calculations are correct.
 """
 
-import pytest
 import numpy as np
-from mokapot.peps import TDHistData, hist_data_from_scores
+import pytest
 from scipy import stats
 
+from mokapot.peps import hist_data_from_scores, TDHistData
 from mokapot.qvalues import (
-    tdc,
-    qvalues_from_peps,
     qvalues_from_counts,
+    qvalues_from_peps,
     qvalues_func_from_hist,
+    tdc,
 )
 
 
@@ -135,7 +135,14 @@ def rand_scores():
         np.full(len(target_scores), True),
         np.full(len(decoy_scores), False),
     ))
+    # Generate a permutation of indices and apply the permutation to both arrays
+    permutation = np.random.permutation(len(all_scores))
+    return [all_scores[permutation], is_target[permutation]]
 
+
+@pytest.fixture
+def rand_scores_sorted(rand_scores):
+    [all_scores, is_target] = rand_scores
     sortIdx = np.argsort(-all_scores)
     return [all_scores[sortIdx], is_target[sortIdx]]
 
