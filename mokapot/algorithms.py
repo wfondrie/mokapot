@@ -47,7 +47,7 @@ class StoreyPi0Algorithm(Pi0EstAlgorithm):
 
     def estimate(self, scores, targets):
         pvals = qvalues_storey.empirical_pvalues(
-            scores[targets], scores[~targets], mode="best"
+            scores[targets], scores[~targets], mode="conservative"
         )
         pi0est = qvalues_storey.estimate_pi0(
             pvals,

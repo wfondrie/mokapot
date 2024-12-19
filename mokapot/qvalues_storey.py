@@ -26,14 +26,17 @@ def empirical_pvalues(
         against which the data values `s` are to be compared.
 
     mode : str
-        Can be one of "standard", "best", or "storey". Default is "best".
-        "standard" is to use $r/n$ as estimator where $r$ is the rank of the
-        data value in the array of simulated samples. This is unbiased when
-        the data value is a concrete value, and not sampled.
-        $best$ means $(r+1)/(n+1)$ which is unbiased and conservative when the
-        data values are sampled from the null distribution.
-        $storey$ is similar to "standard" but includes the "hack" for $r=0$
-        found in the implementation of the `qvalue` package.
+        Can be one of "unbiased", "conservative", or "storey". Default is
+        "conservative".
+        "unbiased" means to use $r/n$ as an estimator, where $r$ is the rank of
+        the data value in the array of simulated samples. This is an unbiased
+        and good when the data value is a concrete value, and not sampled.
+        $conservative$ means $(r+1)/(n+1)$ which is a slightly biased, but
+        conservative when the data values are sampled from the null
+        distribution, in which case it is to be preferred.
+        $storey$ is similar to "unbiased" but includes the "hack" for $r=0$
+        found in the implementation of the `qvalue` package. It is neither
+        completely unbiased nor convervative.
 
     Returns
     -------
@@ -51,15 +54,15 @@ def empirical_pvalues(
     emp_null = sp.stats.ecdf(s0)
     p = emp_null.sf.evaluate(s)
     mode = mode.lower()
-    if mode == "standard":
+    if mode == "unbiased":
         return p
     elif mode == "storey":
         return np.maximum(p, 1.0 / N)
-    elif mode == "best":
+    elif mode == "conservative":
         return (p * N + 1) / (N + 1)
     else:
         raise ValueError(
-            f"Unknown mode {mode}. Must be either 'best', 'standard' or 'storey'."
+            f"Unknown mode {mode}. Must be either 'conservative', 'unbiased' or 'storey'."
         )
 
 

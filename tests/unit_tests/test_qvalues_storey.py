@@ -31,11 +31,11 @@ def test_empirical_pvalues():
     s0 = np.arange(-99, 101)
     N = len(s0)
     p = np.clip(0.5 - s / N, 0, 1)
-    np.testing.assert_almost_equal(empirical_pvalues(s, s0, mode="standard"), p)
+    np.testing.assert_almost_equal(empirical_pvalues(s, s0, mode="unbiased"), p)
     p = np.clip(0.5 - s / N, 1.0 / N, 1)
     np.testing.assert_almost_equal(empirical_pvalues(s, s0, mode="storey"), p)
     p = np.clip((101 - s) / (1 + N), 1.0 / (N + 1), 1)
-    np.testing.assert_almost_equal(empirical_pvalues(s, s0, mode="best"), p)
+    np.testing.assert_almost_equal(empirical_pvalues(s, s0, mode="conservative"), p)
 
 
 def test_estimate_pi0_from_R():
