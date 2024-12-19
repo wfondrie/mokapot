@@ -8,13 +8,18 @@ independently.
 The following classes store the confidence estimates for a dataset based on the
 provided score. They provide utilities to access, save, and plot these
 estimates for the various relevant levels (i.e. PSMs, peptides, and proteins).
-The :py:func:`Confidence` class is appropriate for most data-dependent
-acquisition proteomics datasets.
+The :py:class:`Confidence` class is the primary interface for handling confidence
+estimates in data-dependent acquisition proteomics datasets.
 
-We recommend using the :py:func:`~mokapot.brew()` function to obtain these
-confidence estimates, rather than initializing the classes below directly.
+The module provides:
+- Confidence estimation at PSM, peptide, and protein levels
+- Streaming processing for large datasets
+- Visualization utilities for confidence estimates
+- Export capabilities in various formats
 
-TODO: update this docstring.
+We recommend using the :py:func:`~mokapot.brew()` followed by the `assign_confidence`
+function to obtain these confidence estimates, rather than initializing the
+classes below directly.
 """
 
 from __future__ import annotations
@@ -184,7 +189,7 @@ class Confidence:
 
     def _assign_confidence(
         self,
-        levels: list[str],  # why is this passed if its a property of self?
+        levels: list[str],
         level_path_map: dict[str, Path],
         out_writers_map: dict[str, Sequence[TabularDataWriter]],
         write_decoys: bool = False,
@@ -195,19 +200,36 @@ class Confidence:
         score_stats: OnlineStatistics | None = None,
         eval_fdr: float = 0.01,
     ):
-        """
-        Assign confidence to PSMs and peptides.
+        """Assign confidence estimates to PSMs and peptides.
+
+        This method processes the dataset to assign confidence estimates (q-values and PEPs)
+        at different levels (PSMs, peptides) using the specified algorithms. It can optionally
+        stream the confidence calculations for large datasets.
 
         Parameters
         ----------
-        level_path_map : List(Path)
-            Files with unique psms and unique peptides.
-        levels : List(str)
-            the levels at which confidence estimation was performed
-        out_paths : List(Path)
-            The output files where the results will be written
+        levels : list[str]
+            The levels at which to compute confidence estimates (e.g., ['psms', 'peptides']).
+        level_path_map : dict[str, Path]
+            Mapping of confidence levels to their corresponding file paths for intermediate data.
+        out_writers_map : dict[str, Sequence[TabularDataWriter]]
+            Mapping of confidence levels to their output writers for results.
         write_decoys : bool, optional
-            Save decoys confidence estimates as well?
+            Whether to include decoy results in the output, by default False.
+        peps_error : bool, optional
+            Whether to raise an error if PEP calculation fails, by default False.
+        peps_algorithm : str, optional
+            Algorithm to use for posterior error probability calculation.
+            Currently supports "qvality" (default).
+        qvalue_algorithm : str, optional
+            Algorithm to use for q-value calculation.
+            Currently supports "tdc" (default).
+        stream_confidence : bool, optional
+            Whether to stream confidence calculations for large datasets, by default False.
+        score_stats : OnlineStatistics | None, optional
+            Pre-computed score statistics if streaming is enabled, by default None.
+        eval_fdr : float, optional
+            FDR threshold for evaluation metrics, by default 0.01.
         """
         if stream_confidence:
             if score_stats is None:
@@ -250,7 +272,10 @@ class Confidence:
             level_path.unlink(missing_ok=True)
 
     def _write_protein_level_data(
-        self, level_paths: dict[str, Path], proteins: Proteins, rng
+        self,
+        level_paths: dict[str, Path],
+        proteins: Proteins,
+        rng: int | np.random.Generator,
     ):
         psms = TabularDataReader.from_path(level_paths["psms"]).read()
         proteins_df = picked_protein(
@@ -346,51 +371,60 @@ def assign_confidence(
     append_to_output_file: bool = False,
     rng: int | np.random.Generator = 0,
     peps_error: bool = False,
-    peps_algorithm="qvality",  # TODO make this an enum (2024-12-17)
-    qvalue_algorithm="tdc",  # TODO make this an enum (2024-12-17)
+    peps_algorithm="qvality",
+    qvalue_algorithm="tdc",
     sqlite_path: Path | None = None,
     stream_confidence: bool = False,
-) -> list[Confidence]:
-    """Assign confidence to PSMs peptides, and optionally, proteins.
+):
+    """Assign confidence to PSMs, peptides, and optionally proteins.
 
     Parameters
     ----------
-    max_workers
-    datasets : list[OnDiskPsmDataset]
+    datasets : list[PsmDataset]
         A collection of PSMs.
-    scores_list : list[numpy.ndarray]
+    scores_list : list[numpy.ndarray[float]] | None, optional
         The scores by which to rank the PSMs. Usually derived from
-        `mokapot.brew`
-    rng : int or np.random.Generator, optional
-        A seed or generator used for cross-validation split creation and to
-        break ties, or ``None`` to use the default random number generator
-        state.
-    eval_fdr : float
-        The FDR threshold at which to report and evaluate performance. If
-        `scores` is not :code:`None`, this parameter has no affect on the
-        analysis itself, but does affect logging messages and the FDR
-        threshold applied for some output formats, such as FlashLFQ.
-    dest_dir : Path or None, optional
-        The directory in which to save the files. :code:`None` will use the
-        current working directory.
-    prefixes : [str] or None
+        `mokapot.brew`, by default None.
+    max_workers : int, optional
+        Number of parallel workers to use for processing, by default 1.
+    eval_fdr : float, optional
+        The FDR threshold at which to report and evaluate performance, by default 0.01.
+        This affects logging messages and the FDR threshold applied for some output formats.
+    dest_dir : Path | None, optional
+        The directory in which to save the files. None will use the
+        current working directory, by default None.
+    file_root : str, optional
+        Base name prefix for output files, by default "".
+    prefixes : list[str | None] | None, optional
         The prefixes added to all output file names.
-        If None, a single concatenated file will be created.
+        If None, a single concatenated file will be created, by default None.
     write_decoys : bool, optional
-        Save decoys confidence estimates as well?
-    deduplication: bool
-        Are we performing deduplication on the psm level?
-    do_rollup: bool
-        do we apply rollup on peptides, modified peptides etc.?
-    proteins: Proteins, optional
-        collection of proteins
-    append_to_output_file: bool
-        do we append results to file ?
-    sqlite_path: Path to the sqlite database to write mokapot results
+        Save decoy confidence estimates as well?, by default False.
+    deduplication : bool, optional
+        Whether to perform deduplication on the PSM level, by default True.
+    do_rollup : bool, optional
+        Whether to apply rollup on peptides, modified peptides etc., by default True.
+    proteins : Proteins | None, optional
+        Collection of proteins for protein inference, by default None.
+    append_to_output_file : bool, optional
+        Whether to append results to existing file, by default False.
+    rng : int | np.random.Generator, optional
+        Random number generator or seed for reproducibility, by default 0.
+    peps_error : bool, optional
+        Whether to raise error on PEP calculation failure, by default False.
+    peps_algorithm : {'qvality', 'qvality_bin', 'kde_nnls', 'hist_nnls'}, optional
+        Algorithm for posterior error probability calculation, by default "qvality".
+    qvalue_algorithm : {'tdc', 'hist'}, optional
+        Algorithm for q-value calculation, by default "tdc".
+    sqlite_path : Path | None, optional
+        Path to the SQLite database to write mokapot results, by default None.
+    stream_confidence : bool, optional
+        Whether to stream confidence calculations for large datasets, by default False.
 
     Returns
     -------
     list[Confidence]
+        A list of Confidence objects containing the confidence estimates for each dataset.
     """
 
     # Note: I am really not a big fan of how large this function is ...
