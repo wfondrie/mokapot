@@ -38,6 +38,23 @@ def test_empirical_pvalues():
     np.testing.assert_almost_equal(empirical_pvalues(s, s0, mode="conservative"), p)
 
 
+def test_empirical_pvalues_repetitions():
+    # Test that pvalues are correct for repeated values (i.e. repeated stats
+    # get the same pvalue)
+    np.random.seed(42)
+    N = 1000
+    s = np.round(np.random.rand(N) * 60)
+    s0 = np.round(np.random.rand(N) * 20 + 20)
+    assert np.sum(s == 25) > 1 and np.sum(s0 == 25) > 1  # make sure test is meaningfull
+
+    p = empirical_pvalues(s, s0, mode="conservative")
+    assert np.all(np.diff(p[s == 25]) == 0)
+    p = empirical_pvalues(s, s0, mode="unbiased")
+    assert np.all(np.diff(p[s == 25]) == 0)
+    p = empirical_pvalues(s, s0, mode="storey")
+    assert np.all(np.diff(p[s == 25]) == 0)
+
+
 def test_estimate_pi0_from_R():
     # with open("data/samples.json", "r") as file:
     with open("data/hedenfalk.json", "r") as file:
