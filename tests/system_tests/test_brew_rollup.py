@@ -149,8 +149,13 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
     df0 = TabularDataReader.from_path(file0).read()
     df1 = TabularDataReader.from_path(file1).read()
 
-    qval_column = "q-value"
+    qval_column = "mokapot_qvalue"
     assert_series_equal(df0[qval_column], df1[qval_column], atol=0.02)
+
+    # Q: What is this meant to test?
+    #    Why is the score expected to be "correlated" with the difference
+    #    in q-values between the streaming and non-streaming implementations?
+    # JSPP 2024-12-16
     assert (
         estimate_abs_int(df0.score, df1[qval_column] - df0[qval_column])
         < 0.002

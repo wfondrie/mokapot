@@ -71,9 +71,7 @@ def test_compare_to_percolator(tmp_path):
             )
             pd.set_option("display.max_columns", None)
 
-        assert (
-            merged["q-value_mokapot"].corr(merged["q-value_percolator"]) > 0.99
-        )
+        assert merged["mokapot_qvalue"].corr(merged["q-value"]) > 0.99
         assert (
             merged["posterior_error_prob_mokapot"].corr(
                 merged["posterior_error_prob_percolator"]

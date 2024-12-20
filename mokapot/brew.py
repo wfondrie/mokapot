@@ -1,10 +1,11 @@
 """
 Defines a function to run the Percolator algorithm.
 """
+
 import copy
 import logging
 from operator import itemgetter
-from typing import Iterable
+from typing import Iterable, Generator
 
 import numpy as np
 import pandas as pd
@@ -20,10 +21,11 @@ from mokapot.dataset import (
     LinearPsmDataset,
     calibrate_scores,
     update_labels,
-    OnDiskPsmDataset,
+    PsmDataset,
 )
 from mokapot.model import PercolatorModel, Model
 from mokapot.parsers.pin import parse_in_chunks
+from mokapot.utils import strictzip
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,15 +33,15 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 @typechecked
 def brew(
-    datasets: list[OnDiskPsmDataset],
-    model=None,
+    datasets: list[PsmDataset],
+    model: None | Model | list[Model] = None,
     test_fdr: float = 0.01,
     folds: int = 3,
     max_workers: int = 1,
     rng=None,
     subset_max_train: int | None = None,
     ensemble: bool = False,
-):
+) -> tuple[list[Model], list[np.ndarray[np.float64]]]:
     """
     Re-score one or more collection of PSMs.
 
@@ -102,12 +104,15 @@ def brew(
         model = PercolatorModel()
 
     try:
+        # Q: what is this doing? Why does the randon number
+        # generater get set only if the model has an estimator?
+        # Shouldn't it assign it to all the models if they are passed?
         model.estimator
         model.rng = rng
     except AttributeError:
         pass
 
-        # Check that all of the datasets have the same features:
+    # Check that all of the datasets have the same features:
     feat_set = set(datasets[0].feature_columns)
     if not all([
         set(dataset.feature_columns) == feat_set for dataset in datasets
@@ -134,7 +139,16 @@ def brew(
     test_folds_idx = [dataset._split(folds, rng) for dataset in datasets]
 
     # If trained models are provided, use them as-is.
-    try:
+    # If the model is not iterable, it means that a single model is pased, thus
+    # It is more of a template for training. (or was generated within this
+    # code, thus "None" was passed)
+    is_mod_iterable = hasattr(model, "__iter__")
+    if is_mod_iterable:
+        # Q: Is this branch ever used?
+        # JSPP 2024-12-06 I think it makes sense to split this function
+        # To remve the trained case ... which adds a lot of clutter.
+        # Furthermore, that function can fall back to this one if its
+        # Not actually trained.
         fitted = [[m, False] for m in model if m.is_trained]
 
         if len(model) != folds:
@@ -148,7 +162,7 @@ def brew(
                 "One or more of the provided models was not previously trained"
             )
 
-    except TypeError:
+    else:
         train_sets = list(
             make_train_sets(
                 test_idx=test_folds_idx,
@@ -243,9 +257,8 @@ def brew(
 
     preds = [
         update_labels(
-            dataset.reader,
+            dataset,
             score,
-            dataset.target_column,
             test_fdr,
         )
         for dataset, score in zip(datasets, scores)
@@ -283,16 +296,27 @@ def brew(
 
     # Reverse all scores for which desc is False (this way, we don't have to
     # return `descs` from this function
+    # Q: why dont we just return a class that denotes if its descending?
+    #    JSPP 2024-12-15
     for idx, desc in enumerate(descs):
         if not desc:
             scores[idx] = -scores[idx]
             descs[idx] = not descs[idx]
 
-    return models, scores
+    # Coherces the tuple to a list
+    models = list(models)
+
+    LOGGER.info("Assigning scores to PSMs...")
+    for score, dataset in strictzip(scores, datasets):
+        dataset.scores = score
+
+    return list(models), scores
 
 
 # Utility Functions -----------------------------------------------------------
-def make_train_sets(test_idx, subset_max_train, data_size, rng):
+def make_train_sets(
+    test_idx, subset_max_train, data_size, rng
+) -> Generator[list[list[int]], None, None]:
     """
     Parameters
     ----------
@@ -305,8 +329,8 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
 
     Yields
     ------
-    PsmDataset
-        The training set.
+    list of list of int
+        The training set. Each element is a list of ints.
     """
     subset_max_train_per_file = []
     if subset_max_train is not None:
@@ -344,13 +368,13 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
                 if current_subset_max_train < train_idx_size:
                     train_idx[i] = rng.choice(
                         train_idx[i], current_subset_max_train, replace=False
-                    )
+                    ).tolist()
         yield train_idx
 
 
 @typechecked
 def _create_linear_dataset(
-    dataset: OnDiskPsmDataset, psms: pd.DataFrame, enforce_checks: bool = True
+    dataset: PsmDataset, psms: pd.DataFrame, enforce_checks: bool = True
 ):
     utils.convert_targets_column(
         data=psms, target_column=dataset.target_column
@@ -381,7 +405,10 @@ def get_index_values(df, col_name, val, orig_idx):
 
 @typechecked
 def predict_fold(
-    model: Model, fold: int, dataset: LinearPsmDataset, scores: list
+    model: Model,
+    fold: int,
+    dataset: LinearPsmDataset,
+    scores: list,
 ):
     scores[fold].append(model.predict(dataset))
 
@@ -389,7 +416,7 @@ def predict_fold(
 @typechecked
 def _predict(
     models_idx: list,
-    datasets: Iterable[OnDiskPsmDataset],
+    datasets: Iterable[PsmDataset],
     models: Iterable[Model],
     test_fdr: float,
     max_workers: int,
@@ -435,7 +462,9 @@ def _predict(
             ]
             dataset_slices = [
                 _create_linear_dataset(
-                    dataset, psm_slice, enforce_checks=False
+                    dataset,
+                    psm_slice,
+                    enforce_checks=False,
                 )
                 for psm_slice in psms_slices
             ]
@@ -480,7 +509,9 @@ def _predict(
 
 @typechecked
 def _predict_with_ensemble(
-    dataset: OnDiskPsmDataset, models: Iterable[Model], max_workers
+    dataset: PsmDataset,
+    models: Iterable[Model],
+    max_workers: int,
 ):
     """
     Return the new scores for the dataset using ensemble of all trained models

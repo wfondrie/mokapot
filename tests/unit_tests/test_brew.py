@@ -4,7 +4,7 @@ import copy
 
 import numpy as np
 import pytest
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 import mokapot
 from mokapot import PercolatorModel, Model
@@ -27,15 +27,19 @@ def test_brew_simple(psms_ondisk, svm):
 
 def test_brew_simple_parquet(psms_ondisk_from_parquet, svm):
     """Test with mostly default parameters of brew"""
-    models, scores = mokapot.brew([psms_ondisk_from_parquet], svm, test_fdr=0.05)
+    models, scores = mokapot.brew(
+        [psms_ondisk_from_parquet], svm, test_fdr=0.05
+    )
     assert len(models) == 3
     assert isinstance(models[0], PercolatorModel)
 
 
-def test_brew_random_forest(psms_ondisk):
+def test_brew_decision_tree(psms_ondisk):
     """Verify there are no dependencies on the SVM."""
     rfm = Model(
-        RandomForestClassifier(),
+        # Changed from RF bc it is faster to run. 2024-12-06
+        # RandomForestClassifier(),
+        DecisionTreeClassifier(min_samples_leaf=10, min_samples_split=20),
         train_fdr=0.1,
     )
     models, scores = mokapot.brew([psms_ondisk], model=rfm, test_fdr=0.1)
@@ -86,15 +90,17 @@ def test_brew_seed(psms_ondisk, svm):
     )
     assert len(models_b) == folds
 
-    assert np.array_equal(scores_a[0], scores_b[0]), "Results differed with same seed"
+    assert np.array_equal(scores_a[0], scores_b[0]), (
+        "Results differed with same seed"
+    )
 
     models_c, scores_c = mokapot.brew(
         [psms_ondisk_c], svm, test_fdr=0.05, folds=folds, rng=seed + 2
     )
     assert len(models_c) == folds
-    assert not (
-        np.array_equal(scores_a[0], scores_c[0])
-    ), "Results were identical with different seed!"
+    assert not (np.array_equal(scores_a[0], scores_c[0])), (
+        "Results were identical with different seed!"
+    )
 
 
 def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
@@ -121,7 +127,9 @@ def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
     )
     assert len(models_b) == folds
 
-    assert np.array_equal(scores_a[0], scores_b[0]), "Results differed with same seed"
+    assert np.array_equal(scores_a[0], scores_b[0]), (
+        "Results differed with same seed"
+    )
 
     models_c, scores_c = mokapot.brew(
         [psms_ondisk_c],
@@ -131,9 +139,9 @@ def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
         rng=seed + 2,
     )
     assert len(models_c) == folds
-    assert not (
-        np.array_equal(scores_a[0], scores_c[0])
-    ), "Results were identical with different seed!"
+    assert not (np.array_equal(scores_a[0], scores_c[0])), (
+        "Results were identical with different seed!"
+    )
 
 
 def test_brew_test_fdr_error(psms_ondisk, svm):
@@ -221,7 +229,10 @@ def test_brew_using_non_trained_models_error(psms_ondisk, svm):
     svm.is_trained = False
     with pytest.raises(RuntimeError) as err:
         mokapot.brew([psms_ondisk], [svm, svm, svm], test_fdr=0.05)
-    assert "One or more of the provided models was not previously trained" in str(err)
+    assert (
+        "One or more of the provided models was not previously trained"
+        in str(err)
+    )
 
 
 def assert_not_close(x, y):
