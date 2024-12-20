@@ -62,8 +62,7 @@ def empirical_pvalues(
         return (p * N + 1) / (N + 1)
     else:
         raise ValueError(
-            f"Unknown mode {mode}. Must be either 'conservative', 'unbiased' or "
-            "'storey'."
+            f"Unknown mode {mode}. Must be either 'conservative', 'unbiased' or 'storey'."
         )
 
 
