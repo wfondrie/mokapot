@@ -40,11 +40,61 @@ def count_lines(path: Path, *args):
     return len(lines)
 
 
-class FileCheck:
+class TestOutcome:
+    """
+    Represents the outcome of a test, including whether it passed and an
+    optional message for context.
+
+    This class is used to encapsulate the results of testing operations,
+    associating a boolean state with an explanatory message. It provides
+    utility methods for constructing success or failure outcomes and
+    allows intuitive usage patterns through its special methods.
+
+    Attributes
+    ----------
+    passed : bool
+        Indicates whether the test was successful.
+    message : str or None
+        Optional message providing additional context about the test
+        result.
+
+    Examples
+    --------
+    >>> def greater_than_two(x):
+    >>>     return TestOutcome(x > 2, "Must be greater than 2")
+    >>>
+    >>> assert greater_than_two(3) # passes
+    >>> assert greater_than_two(2) # fails with message "Must be greater than 2"
+    """
+
+    __test__ = False
+
+    def __init__(self, passed, message):
+        self.passed = passed
+        self.message = message
+
+    def __bool__(self):
+        return self.passed
+
+    def __str__(self):
+        return self.message
+
+    def __repr__(self):
+        return self.message
+
+    @staticmethod
+    def fail(message):
+        return TestOutcome(False, message)
+
+    @staticmethod
+    def success():
+        return TestOutcome(True, None)
+
+
+class FileCheck(TestOutcome):
     def __init__(self, dir_path: Path, ext_path, min, max):
-        self.passed, self.message = FileCheck._check(
-            dir_path, ext_path, min, max
-        )
+        passed, message = FileCheck._check(dir_path, ext_path, min, max)
+        super().__init__(passed, message)
 
     @staticmethod
     def _check(dir_path, ext_path, min, max):
@@ -99,19 +149,8 @@ class FileCheck:
 
         return True, f"File `{ext_path}` exists and is ok."
 
-    def __bool__(self):
-        return self.passed
 
-    def __repr__(self):
-        return self.message
-
-    def __str__(self):
-        return self.message
-
-
-def file_check(
-    file_path, ext_path, expected_lines=None, min=None, max=None, diff=100
-):
+def file_check(file_path, ext_path, expected_lines=None, min=None, max=None, diff=100):
     if expected_lines is not None:
         min, max = expected_lines - diff, expected_lines + diff
         if min < 1 and expected_lines > 0:
