@@ -47,6 +47,7 @@ def test_brew_decision_tree(psms_ondisk):
     assert isinstance(models[0], Model)
 
 
+@pytest.mark.slow
 def test_brew_joint(psms_ondisk, svm):
     """Test that the multiple input PSM collections yield multiple out"""
     collections = [psms_ondisk, copy.copy(psms_ondisk), copy.copy(psms_ondisk)]
@@ -74,6 +75,7 @@ def test_brew_folds(psms_ondisk, svm):
     assert len(models) == 4
 
 
+@pytest.mark.slow
 def test_brew_seed(psms_ondisk, svm):
     """Test that (not) changing the split selection seed works"""
     folds = 3

@@ -38,7 +38,7 @@ from typeguard import typechecked
 
 from mokapot.column_defs import get_standard_column_name, Q_VALUE_COL_NAME
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
-from mokapot.dataset import PsmDataset, OptionalColumns
+from mokapot.dataset import PsmDataset
 from mokapot.peps import (
     peps_from_scores,
     TDHistData,
@@ -139,7 +139,6 @@ class Confidence:
         self.dataset = dataset
         self._score_column = "score"
         self._target_column = dataset.target_column
-        self._metadata_column = dataset.metadata_columns
         self._peptide_column = "peptide"
 
         self.eval_fdr = eval_fdr
@@ -303,9 +302,6 @@ class Confidence:
         protein_writer.write(proteins_df)
         LOGGER.info("\t- Found %i unique protein groups.", len(proteins_df))
 
-    def get_optional_columns(self) -> OptionalColumns:
-        return self.dataset.get_optional_columns()
-
     def read(self, level: str) -> pd.DataFrame:
         """Read the results for a given level."""
         if level not in self.levels:
@@ -374,6 +370,7 @@ def assign_confidence(
     deduplication: bool = True,
     do_rollup: bool = True,
     proteins: Proteins | None = None,
+    protein_column: str | None = None,
     append_to_output_file: bool = False,
     rng: int | np.random.Generator = 0,
     peps_error: bool = False,
@@ -460,12 +457,14 @@ def assign_confidence(
     level_manager = LevelManager.from_dataset(
         dataset=curr_dataset,
         do_rollup=do_rollup,
-        use_proteins=True if proteins else False,
         dest_dir=dest_dir,
         file_root=file_root,
+        protein_column=protein_column,
+        disable_proteins=proteins is None,
     )
 
     output_writers_factory = OutputWriterFactory(
+        spectra_columns=curr_dataset.spectrum_columns,
         extra_output_columns=level_manager.extra_output_columns,
         sqlite_path=sqlite_path,
         append_to_output_file=append_to_output_file,
@@ -728,15 +727,15 @@ class LevelManager:
         default_extension: str,
         spectrum_columns: list[str],
         do_rollup: bool,
-        use_proteins: bool,
         dest_dir: Path,
         file_root: str,
         protein_column: str | None,
+        use_proteins: bool,
     ):
         self.level_columns = level_columns
         self.default_extension = default_extension
         self.spectrum_columns = spectrum_columns
-        self.use_proteins = use_proteins
+        self.use_proteins = protein_column is not None
         self.dest_dir = dest_dir
         self.file_root = file_root
         self.do_rollup = do_rollup
@@ -753,23 +752,23 @@ class LevelManager:
         *,
         dataset: PsmDataset,
         do_rollup: bool,
-        use_proteins: bool,
         dest_dir: Path,
         file_root: str,
+        protein_column: str | None,
+        disable_proteins: bool = False,
     ):
-        level_columns = dataset.level_columns
+        level_columns = dataset.confidence_level_columns
         default_extension = dataset.get_default_extension()
         spectrum_columns = dataset.spectrum_columns
-        protein_column = dataset.protein_column
         return LevelManager(
             level_columns=level_columns,
             default_extension=default_extension,
             spectrum_columns=spectrum_columns,
             do_rollup=do_rollup,
-            use_proteins=use_proteins,
+            protein_column=protein_column,
             dest_dir=dest_dir,
             file_root=file_root,
-            protein_column=protein_column,
+            use_proteins=not disable_proteins,
         )
 
     def __repr__(self) -> str:
@@ -799,7 +798,6 @@ class LevelManager:
     def _setup_hash_columns(self) -> None:
         """Setup hash columns for each level."""
 
-        # Q: wouldnt the right thing here be to use spectrum_cols + peptide?
         self.level_hash_columns = {"psms": self.spectrum_columns}
         for level in self.levels[1:]:
             if level != "proteins":
@@ -844,11 +842,20 @@ class LevelManager:
         self.extra_output_columns = extra_output_columns
 
     def build_output_col_mapping(self, dataset: PsmDataset) -> dict:
-        # Q: what would be the requirement here?
-        #    Could we use the spectrum columns? since multiple
-        #    columns can be used to identify a spectrum.
+        # Note: we could in theory add here the checks for the output
+        # column names, so constraints like it being sql-safe or
+        # something like that could be enforced in the future.
+
+        # if self.protein_column is not None:
+        #     if self.protein_column not in dataset.get_column_names():
+        #         raise ValueError(
+        #             f"Protein column {self.protein_column}"
+        #             " not found in dataset"
+        #         )
+
+        # TODO: fix, this is broken RN
         level_column_names = [
-            "PSMId",
+            *dataset.spectrum_columns,
             dataset.target_column,
             "peptide",
             *self.extra_output_columns,
@@ -856,11 +863,11 @@ class LevelManager:
             "score",
         ]
         level_input_column_names = [
-            dataset.specId_column,
+            *dataset.spectrum_columns,
             dataset.target_column,
             dataset.peptide_column,
             *self.extra_output_columns,
-            dataset.protein_column,
+            self.protein_column,
             "score",
         ]
 
@@ -882,6 +889,7 @@ class OutputWriterFactory:
     def __init__(
         self,
         *,
+        spectra_columns: list[str] | tuple[str, ...],
         extra_output_columns: list[str],
         append_to_output_file: bool,
         write_decoys: bool,
@@ -894,7 +902,7 @@ class OutputWriterFactory:
         self.extra_output_columns = extra_output_columns
         self.append_to_output_file = append_to_output_file
         self.output_column_names = [
-            "PSMId",
+            *spectra_columns,
             "peptide",
             *extra_output_columns,
             # Q: should we prefix these with "mokapot"?
@@ -905,6 +913,7 @@ class OutputWriterFactory:
         ]
 
         self.output_column_names_proteins = [
+            *spectra_columns,
             "mokapot protein group",
             "best peptide",
             "stripped sequence",
@@ -1035,7 +1044,7 @@ def create_sorted_file_reader(
     score_reader: TabularDataReader,
     dest_dir: Path,
     file_prefix: str,
-    deduplication_columns: list[str] | None,
+    deduplication_columns: list[str] | tuple[str, ...] | None,
     max_workers: int,
     input_output_column_mapping,
 ):
@@ -1047,6 +1056,9 @@ def create_sorted_file_reader(
         ColumnMappedReader(dataset.reader, input_output_column_mapping),
         score_reader,
     ])
+
+    # Q: Why is it reading all non-feature columns instead of just reading the
+    #    spectrum columns?
     input_columns = list(dataset.metadata_columns) + ["score"]
     output_columns = [
         input_output_column_mapping.get(name, name) for name in input_columns
@@ -1139,11 +1151,15 @@ def compute_and_write_confidence(
     qvalue_algorithm: str,
     peps_algorithm: str,
     stream_confidence: bool,
-    score_stats: OnlineStatistics,
+    score_stats: OnlineStatistics | None,
     peps_error: bool,
     level: str,
     eval_fdr: float,
 ):
+    # Note: the score stats are only used for the confidence estimation
+    #       if the streaming mode is used.
+    # TODO: split this function into two, one for streaming and one for
+    #       non-streaming.
     qvals_column = get_standard_column_name("q-value")
     peps_column = get_standard_column_name("posterior_error_prob")
 
@@ -1236,7 +1252,7 @@ def create_score_target_iterator(chunked_iterator: Iterator):
         yield scores, targets
 
 
-def plot_qvalues(qvalues, threshold=0.1, ax=None, **kwargs):
+def plot_qvalues(qvalues: np.ndarray[float], threshold=0.1, ax=None, **kwargs):
     """
     Plot the cumulative number of discoveries over range of q-values.
 

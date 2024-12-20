@@ -4,7 +4,11 @@ DOCKER_IMAGE_NAME=wfondrie/mokapot
 DOCKER_IMAGE_TAG=latest
 
 test:
-	uv run --all-extras pytest --durations=0
+	uv run --all-extras pytest --durations=0 --slow-last
+
+testff:
+	# Test btut fails fast
+	uv run --all-extras pytest --durations=0 --slow-last --last-failed -xs
 
 unit-test:
 	uv run --all-extras pytest --durations=0 ./tests/unit_tests

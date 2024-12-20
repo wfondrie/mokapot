@@ -382,16 +382,16 @@ def _create_linear_dataset(
     return LinearPsmDataset(
         psms=psms,
         target_column=dataset.target_column,
-        spectrum_columns=dataset.spectrum_columns,
         peptide_column=dataset.peptide_column,
-        protein_column=dataset.protein_column,
-        feature_columns=dataset.feature_columns,
-        filename_column=dataset.filename_column,
-        scan_column=dataset.scan_column,
-        calcmass_column=dataset.calcmass_column,
-        expmass_column=dataset.expmass_column,
-        rt_column=dataset.rt_column,
-        charge_column=dataset.charge_column,
+        spectrum_columns=list(dataset.spectrum_columns),
+        feature_columns=list(dataset.feature_columns),
+        # protein_column=dataset.protein_column,
+        # filename_column=dataset.filename_column,
+        # scan_column=dataset.scan_column,
+        # calcmass_column=dataset.calcmass_column,
+        # expmass_column=dataset.expmass_column,
+        # rt_column=dataset.rt_column,
+        # charge_column=dataset.charge_column,
         copy_data=False,
         enforce_checks=enforce_checks,
     )
@@ -448,8 +448,9 @@ def _predict(
         fold_scores = [[] for _ in range(n_folds)]
         targets = [[] for _ in range(n_folds)]
         orig_idx = [[] for _ in range(n_folds)]
-        file_iterator = dataset.read_data(
-            columns=dataset.columns, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
+        file_iterator = dataset.read_data_chunked(
+            columns=dataset.columns,
+            chunk_size=CHUNK_SIZE_ROWS_PREDICTION,
         )
         model_test_idx = utils.create_chunks(
             data=mod_idx, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
@@ -526,7 +527,7 @@ def _predict_with_ensemble(
         was reset or not.
     """
     scores = [[] for _ in range(len(models))]
-    file_iterator = dataset.read_data(
+    file_iterator = dataset.read_data_chunked(
         columns=dataset.columns, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
     )
     for psms_chunk in file_iterator:

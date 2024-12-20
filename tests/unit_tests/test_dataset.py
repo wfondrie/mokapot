@@ -14,9 +14,8 @@ def test_linear_init(psm_df_6):
     dset = LinearPsmDataset(
         psms=dat,
         target_column="target",
-        spectrum_columns="spectrum",
+        spectrum_columns=["spectrum"],
         peptide_column="peptide",
-        protein_column="protein",
         feature_columns=None,
         copy_data=True,
     )
@@ -56,7 +55,6 @@ def test_update_labels(psm_df_6):
         target_column="target",
         spectrum_columns="spectrum",
         peptide_column="peptide",
-        protein_column="protein",
         feature_columns=None,
         copy_data=True,
     )

@@ -9,7 +9,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from triqler.qvality import getQvaluesFromScores
@@ -17,6 +16,29 @@ from triqler.qvality import getQvaluesFromScores
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from mokapot.qvalues import tdc
 from mokapot.utils import convert_targets_column
+from mokapot.parsers.columns import ColumnGroups, OptionalColumns
+
+
+## This section just adds the sorting of the tests, makes the tests marked
+## with the slow marker run last.
+
+# I am assigning slow to tests that take more than 10 seconds to run for now.
+
+
+def by_slow_marker(item):
+    return 0 if item.get_closest_marker("slow") is None else 1
+
+
+def pytest_collection_modifyitems(session, config, items):
+    if config.getoption("--slow-last"):
+        items.sort(key=by_slow_marker, reverse=False)
+
+
+def pytest_addoption(parser, pluginmanager):
+    parser.addoption("--slow-last", action="store_true", default=False)
+
+
+## End of section (slow makrker)
 
 
 @pytest.fixture(autouse=True)
@@ -42,6 +64,7 @@ def psm_df_6() -> pd.DataFrame:
 @dataclass
 class MockPsmDataframe:
     df: pd.DataFrame
+    columns: ColumnGroups
     rng: np.random.Generator
     score_cols: list[str]
     fasta_string: str
@@ -101,6 +124,9 @@ def _psm_df_rand(
         targets["spectrum"] = np.arange(ntargets)
         decoys["spectrum"] = np.arange(ndecoys)
         decoys["scannr"] = targets["scannr"]
+        spec_cols = ["spectrum", "scannr", "specid"]
+    else:
+        spec_cols = ["scannr", "specid"]
 
     df = pd.concat([targets, decoys])
     target_peptides = targets["peptide"].to_list()
@@ -110,8 +136,25 @@ def _psm_df_rand(
         + _make_fasta(100, decoy_peptides, 10, rng, "decoy")
     )
     assert len(df) == (ntargets + ndecoys)
+    columns = ColumnGroups(
+        columns=list(df.columns),
+        target_column="target",
+        peptide_column="peptide",
+        spectrum_columns=spec_cols,
+        feature_columns=score_cols,
+        extra_confidence_level_columns=[],
+        optional_columns=OptionalColumns(
+            filename="filename",
+            scan="scannr",
+            calcmass="calcmass",
+            expmass="expmass",
+            rt="ret_time",
+            charge="charge",
+        ),
+    )
     return MockPsmDataframe(
         df=df,
+        columns=columns,
         rng=rng,
         score_cols=score_cols,
         fasta_string=fasta_data,
@@ -184,15 +227,9 @@ def psms_dataset(psm_df_1000) -> LinearPsmDataset:
     psms = LinearPsmDataset(
         psms=data.df,
         target_column="target",
-        spectrum_columns="spectrum",
+        spectrum_columns=data.columns.spectrum_columns,
         peptide_column="peptide",
         feature_columns=data.score_cols,
-        filename_column="filename",
-        scan_column="spectrum",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
         copy_data=True,
     )
     return psms
@@ -213,12 +250,6 @@ def psms_ondisk() -> OnDiskPsmDataset:
         target_column="Label",
         spectrum_columns=["ScanNr", "ExpMass"],
         peptide_column="Peptide",
-        scan_column="ScanNr",
-        calcmass_column="CalcMass",
-        expmass_column="ExpMass",
-        rt_column=None,
-        charge_column=None,
-        protein_column=None,
         feature_columns=[
             "CalcMass",
             "lnrSp",
@@ -237,17 +268,7 @@ def psms_ondisk() -> OnDiskPsmDataset:
             "dM",
             "absdM",
         ],
-        metadata_columns=[
-            "SpecId",
-            "ScanNr",
-            "Peptide",
-            "Proteins",
-            "Label",
-        ],
-        metadata_column_types=["int", "int", "int", "string", "int"],
-        level_columns=["Peptide"],
-        filename_column=None,
-        specId_column="SpecId",
+        extra_confidence_level_columns=[],
         spectra_dataframe=df_spectra,
     )
     return psms
@@ -266,12 +287,6 @@ def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
         target_column="Label",
         spectrum_columns=["ScanNr", "ExpMass"],
         peptide_column="Peptide",
-        scan_column="ScanNr",
-        calcmass_column=None,
-        expmass_column="ExpMass",
-        rt_column=None,
-        charge_column=None,
-        protein_column="Proteins",
         feature_columns=[
             "Mass",
             "MS8_feature_5",
@@ -286,24 +301,7 @@ def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
             "MS8_feature_30",
             "MS8_feature_32",
         ],
-        metadata_columns=[
-            "SpecId",
-            "Label",
-            "ScanNr",
-            "Peptide",
-            "Proteins",
-            "ExpMass",
-        ],
-        metadata_column_types=[
-            pa.int64(),
-            pa.int64(),
-            pa.int64(),
-            pa.string(),
-            pa.int64(),
-        ],
-        level_columns=["Peptide"],
-        filename_column=None,
-        specId_column="SpecId",
+        extra_confidence_level_columns=[],
         spectra_dataframe=df_spectra,
     )
     return psms

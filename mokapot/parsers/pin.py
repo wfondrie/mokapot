@@ -167,7 +167,6 @@ def read_percolator(
     LOGGER.info("Reading %s...", perc_file)
     reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
-    col_types = reader.get_column_types()
 
     # Find all the necessary columns, case-insensitive:
     specid = find_required_column("specid", columns)
@@ -183,7 +182,9 @@ def read_percolator(
     modifiedpeptides = find_columns("modifiedpeptide", columns)
     precursors = find_columns("precursor", columns)
     peptidegroups = find_columns("peptidegroup", columns)
-    level_columns = [peptides] + modifiedpeptides + precursors + peptidegroups
+    extra_confidence_level_columns = (
+        modifiedpeptides + precursors + peptidegroups
+    )
     nonfeat += modifiedpeptides + precursors + peptidegroups
 
     # Optional columns
@@ -193,6 +194,9 @@ def read_percolator(
     ret_time = find_optional_column(rt_column, columns, "ret_time")
     charge = find_optional_column(charge_column, columns, "charge_column")
     # Q: Why isnt `specid` used here?
+    # A: Bc the specid is more accurately a PSM id, since multiple can occur
+    #    for a single scan, thus should not beused to separate the "elements"
+    #    that compete with each other.
     spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
 
     # Only add charge to features if there aren't other charge columns:
@@ -205,7 +209,6 @@ def read_percolator(
             nonfeat.append(col)
 
     features = [c for c in columns if c not in nonfeat]
-    nonfeat_types = [col_types[columns.index(col)] for col in nonfeat]
 
     # Check for errors:
     if not all(spectra):
@@ -244,9 +247,9 @@ def read_percolator(
             LOGGER.warning("  - %s", col)
 
         LOGGER.warning("Dropping features with missing values...")
-    _feature_columns = tuple([
+    _feature_columns = [
         feature for feature in features if feature not in features_to_drop
-    ])
+    ]
 
     LOGGER.info("Using %i features:", len(_feature_columns))
     for i, feat in enumerate(_feature_columns):
@@ -257,18 +260,9 @@ def read_percolator(
         target_column=labels,
         spectrum_columns=spectra,
         peptide_column=peptides,
-        protein_column=proteins,
         feature_columns=_feature_columns,
-        metadata_columns=nonfeat,
-        metadata_column_types=nonfeat_types,
-        level_columns=level_columns,
-        filename_column=filename,
-        scan_column=scan,
-        specId_column=specid,
-        calcmass_column=calcmass,
-        expmass_column=expmass,
-        rt_column=ret_time,
-        charge_column=charge,
+        extra_confidence_level_columns=extra_confidence_level_columns,
+        # protein_column=proteins,
         spectra_dataframe=df_spectra,
     )
 

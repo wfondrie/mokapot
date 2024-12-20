@@ -33,14 +33,16 @@ def test_basic_cli(tmp_path, scope_files):
     """Test that basic cli works."""
     params = [scope_files[0], "--dest_dir", tmp_path, "--verbosity", 3]
     run_mokapot_cli(params)
-    assert file_approx_len(tmp_path, "targets.psms.csv", 5487)
+
     assert file_approx_len(tmp_path, "targets.peptides.csv", 5183)
+    assert file_approx_len(tmp_path, "targets.psms.csv", 5487)
 
     targets_psms_df = pd.read_csv(
         Path(tmp_path, "targets.psms.csv"), sep="\t", index_col=None
     )
     assert targets_psms_df.columns.values.tolist() == [
-        "PSMId",
+        "ScanNr",
+        "ExpMass",
         "peptide",
         "score",
         "mokapot_qvalue",
@@ -49,10 +51,15 @@ def test_basic_cli(tmp_path, scope_files):
     ]
     assert len(targets_psms_df.index) >= 5000
 
-    assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
-    assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
+    # assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
+    # Now this ID is not propagated. So now the first column is
+    # the scan number.
+    assert targets_psms_df.iloc[0, 0] == 11040
+    # assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
+    assert targets_psms_df["proteinIds"].iloc[0] == "sp|P10809|CH60_HUMAN"
 
 
+@pytest.mark.slow
 def test_cli_options(tmp_path, scope_files):
     """Test non-defaults"""
     files_use = scope_files[0:2]

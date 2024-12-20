@@ -109,6 +109,7 @@ def rollup_src_dirs(tmp_path_factory):
         shutil.rmtree(dest_dir)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "suffix",
     [".csv", ".parquet"],

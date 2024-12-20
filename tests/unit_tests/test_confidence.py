@@ -31,15 +31,9 @@ def inmem_psms_ds(psm_df_builder):
     psms = LinearPsmDataset(
         psms=data.df,
         target_column="target",
-        spectrum_columns="specid",
+        spectrum_columns=["specid"],
         peptide_column="peptide",
         feature_columns=list(data.score_cols),
-        filename_column="filename",
-        scan_column="specid",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
         copy_data=True,
     )
     return psms
@@ -73,40 +67,18 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
 
     pin_file, df, _, score_cols = psm_df_1000
     df_spectra = pd.read_csv(
-        pin_file, sep="\t", usecols=["scannr", "expmass", "target"]
+        pin_file,
+        sep="\t",
+        usecols=["scannr", "expmass", "target"],
     )
     score = df[score_cols[0]].values
     psms_disk = OnDiskPsmDataset(
         pin_file,
         target_column="target",
-        spectrum_columns=["scannr", "expmass"],
+        spectrum_columns=["scannr", "specid", "expmass", "filename"],
         peptide_column="peptide",
         feature_columns=[],
-        filename_column="filename",
-        scan_column="scannr",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
-        protein_column="proteins",
-        metadata_columns=[
-            "specid",
-            "scannr",
-            "expmass",
-            "peptide",
-            "proteins",
-            "target",
-        ],
-        metadata_column_types=[
-            "int",
-            "int",
-            "float",
-            "string",
-            "string",
-            "int",
-        ],
-        level_columns=["peptide"],
-        specId_column="specid",
+        extra_confidence_level_columns=[],
         spectra_dataframe=df_spectra,
     )
     with run_with_chunk_size(100):
@@ -127,7 +99,7 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
     assert len(df_results_group) > 490
     assert len(df_results_group) < 510
     assert df_results_group.columns.tolist() == [
-        "PSMId",
+        *psms_disk.spectrum_columns,
         "peptide",
         "score",
         "mokapot_qvalue",
@@ -143,8 +115,10 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
 
     # Test the sorting of the file and the values based on the distribution of
     # the scores (see the fixture definition)
-    assert np.all(df_head["PSMId"] < 500), (
+    assert np.all(df_head["specid"] < 500), (
         "Psms with ID > 500 should not be present (decoys)"
+        # The fixture that generates the data assigns spec ids < 500 to targets
+        # and > 500 to decoys.
     )
     # assert df["score"].tolist() == approx([5.767435, 5.572517, 5.531904])
     assert np.all(df_head["score"] > 5.0), (
@@ -192,34 +166,10 @@ def test_assign_confidence_parquet(
     psms_disk = OnDiskPsmDataset(
         parquet_file,
         target_column="target",
-        spectrum_columns=["scannr", "expmass"],
+        spectrum_columns=["specid", "scannr", "expmass"],
         peptide_column="peptide",
         feature_columns=[],
-        filename_column="filename",
-        scan_column="scannr",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
-        protein_column="proteins",
-        metadata_columns=[
-            "specid",
-            "scannr",
-            "expmass",
-            "peptide",
-            "proteins",
-            "target",
-        ],
-        metadata_column_types=[
-            np.dtype("int64"),
-            np.dtype("int64"),
-            np.dtype("float64"),
-            np.dtype("O"),
-            np.dtype("O"),
-            np.dtype("int64"),
-        ],
-        level_columns=["peptide"],
-        specId_column="specid",
+        extra_confidence_level_columns=[],
         spectra_dataframe=df_spectra,
     )
     with run_with_chunk_size(100):
