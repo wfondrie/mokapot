@@ -91,3 +91,7 @@ select = ["E", "F", "T20"]  # T20 is for print() statements.
 [tool.ruff.format]
 docstring-code-format = true
 preview = true
+
+[tool.black]
+preview = true
+enable_unstable_feature = ["hug_parens_with_braces_and_square_brackets"]
