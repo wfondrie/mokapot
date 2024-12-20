@@ -39,6 +39,7 @@ class SqliteWriter(TabularDataWriter, ABC):
 
     def initialize(self):
         # Nothing to do here, we expect the table(s) to already exist
+        # Q: What are "the tables" ? And why arent they checked here?
         pass
 
     def finalize(self):

@@ -129,16 +129,16 @@ class Confidence:
         do_rollup: bool = True,
         proteins: Proteins | None = None,
         peps_error: bool = False,
-        rng=0,
+        rng: int | np.random.Generator = 0,
         peps_algorithm: str = "qvality",
         qvalue_algorithm: str = "tdc",
         stream_confidence: bool = False,
-        score_stats=None,
+        score_stats: OnlineStatistics | None = None,
     ):
+        # As far as I can tell, the dataset is only used to export to flashlfq
         self.dataset = dataset
         self._score_column = "score"
         self._target_column = dataset.target_column
-        self._protein_column = "proteinIds"
         self._metadata_column = dataset.metadata_columns
         self._peptide_column = "peptide"
 
@@ -437,9 +437,12 @@ def assign_confidence(
         each dataset.
     """
 
-    # Note: I am really not a big fan of how large this function is ...
+    # Note: I think we can do better on this API ... it feels wrong that
+    # half of the arguments dont matter anymore if an sqlite path is passed.
+    # At least we should check for mutually exclusive sets of arguments.
     # JSPP 2024-12-05
-    is_sqlite = sqlite_path is not None
+
+    # _is_sqlite = sqlite_path is not None
 
     if dest_dir is None:
         dest_dir = Path()
@@ -464,7 +467,7 @@ def assign_confidence(
 
     output_writers_factory = OutputWriterFactory(
         extra_output_columns=level_manager.extra_output_columns,
-        is_sqlite=is_sqlite,
+        sqlite_path=sqlite_path,
         append_to_output_file=append_to_output_file,
         write_decoys=write_decoys,
     )
@@ -880,12 +883,13 @@ class OutputWriterFactory:
         self,
         *,
         extra_output_columns: list[str],
-        is_sqlite: bool,
         append_to_output_file: bool,
         write_decoys: bool,
+        sqlite_path: Path | None,
     ):
         # Q: are we deleting the sqlite ops?
-        self.is_sqlite = is_sqlite
+        self.is_sqlite = sqlite_path is not None
+        self.sqlite_path = sqlite_path
         self.write_decoys = write_decoys
         self.extra_output_columns = extra_output_columns
         self.append_to_output_file = append_to_output_file
@@ -913,14 +917,19 @@ class OutputWriterFactory:
         formatted_dict = pformat(self.__dict__)
         return f"{self.__class__!s}({formatted_dict})"
 
-    def create_writer(
+    def _create_writer(
         self,
         *,
-        path: Path,
+        path: Path | None,
         level: str,
         initialize: bool,
     ) -> TabularDataWriter | ConfidenceSqliteWriter:
-        """Create appropriate writer based on output type and level."""
+        """Create appropriate writer based on output type and level.
+
+        Meant to be used internally. (see `build_writers`)
+        """
+        # JSPP 2024-12-20 The same pattern happens here; where passing sqlite
+        # Just ignores all other arguments ...
         output_columns = (
             self.output_column_names_proteins
             if level == "proteins"
@@ -928,8 +937,12 @@ class OutputWriterFactory:
         )
 
         if self.is_sqlite:
+            if path is not None:
+                LOGGER.warning(
+                    "The path argument is ignored when using sqlite output."
+                )
             return ConfidenceSqliteWriter(
-                path,
+                self.sqlite_path,
                 columns=output_columns,
                 column_types=[],
                 level=level,
@@ -989,7 +1002,7 @@ class OutputWriterFactory:
             outfile_targets = level_manager.dest_dir / "".join(name)
 
             output_writers[level].append(
-                self.create_writer(
+                self._create_writer(
                     path=outfile_targets,
                     level=level,
                     initialize=not self.append_to_output_file,
@@ -1005,7 +1018,7 @@ class OutputWriterFactory:
                 ]
                 outfile_decoys = level_manager.dest_dir / "".join(decoy_name)
                 output_writers[level].append(
-                    self.create_writer(
+                    self._create_writer(
                         path=outfile_decoys,
                         level=level,
                         initialize=not self.append_to_output_file,
