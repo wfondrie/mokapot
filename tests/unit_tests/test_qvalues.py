@@ -10,9 +10,11 @@ from mokapot.peps import hist_data_from_scores, TDHistData
 from mokapot.qvalues import (
     qvalues_from_counts,
     qvalues_from_peps,
+    qvalues_from_storeys_algo,
     qvalues_func_from_hist,
     tdc,
 )
+from ..helpers.utils import TestOutcome
 
 
 @pytest.fixture
@@ -65,6 +67,31 @@ def asc_scores():
         1,
     ])
     return scores, target, qvals
+
+
+def qvalues_are_valid(qvalues, scores=None):
+    """Helper function for tests on qvalues"""
+    if not np.all(qvalues >= 0):
+        return TestOutcome.fail("'qvalues must be >= 0'")
+    if not np.all(qvalues <= 1):
+        return TestOutcome.fail("'qvalues must be <= 1'")
+
+    if scores is not None:
+        ind = np.argsort(scores)
+        diff_qvals = np.diff(qvalues[ind])
+        diff_scores = np.diff(scores[ind])
+        if not np.all(diff_qvals * diff_scores <= 0):
+            return TestOutcome.fail(
+                "'qvalues are monotonically decreasing with higher scores'"
+            )
+
+        if not np.all((diff_scores != 0) | (diff_qvals == 0)):
+            # Note that "!A | B" is the same as the implication "A => B"
+            # When two scores are equal they must have the same qvalue, but if
+            # they are different the may have the same qvalue
+            return TestOutcome.fail("'equal scores must have equal qvalues'")
+
+    return TestOutcome.success()
 
 
 @pytest.mark.parametrize("dtype", [np.float64, np.uint8, np.int8, np.float32])
@@ -140,8 +167,19 @@ def rand_scores():
     return [all_scores[permutation], is_target[permutation]]
 
 
+def all_sorted(arrays, desc=True):
+    sortIdx = np.argsort(-arrays[0] if desc else arrays[0])
+    return (arr[sortIdx] for arr in arrays)
+
+
+def rounded(arrays, decimals=1):
+    scores, is_target = arrays
+    scores = np.round(scores, decimals=decimals)
+    return scores, is_target
+
+
 @pytest.fixture
-def rand_scores_sorted(rand_scores):
+def rand_scores_rounded(rand_scores):
     [all_scores, is_target] = rand_scores
     sortIdx = np.argsort(-all_scores)
     return [all_scores[sortIdx], is_target[sortIdx]]
@@ -154,18 +192,30 @@ def test_qvalues_from_peps(rand_scores, is_tdc):
     #   and also against shuffeling of the target/decoy sequences.
     scores, targets = rand_scores
     qvalues = qvalues_from_peps(scores, targets, is_tdc)
-    assert np.all(qvalues >= 0)
-    assert np.all(qvalues <= 1)
-    assert np.all(np.diff(qvalues) * np.diff(scores) <= 0)
+    assert qvalues_are_valid(qvalues, scores)
 
 
 @pytest.mark.parametrize("is_tdc", [True, False])
 def test_qvalues_from_counts(rand_scores, is_tdc):
     scores, targets = rand_scores
     qvalues = qvalues_from_counts(scores, targets, is_tdc)
-    assert np.all(qvalues >= 0)
-    assert np.all(qvalues <= 1)
-    assert np.all(np.diff(qvalues) * np.diff(scores) <= 0)
+    assert qvalues_are_valid(qvalues, scores)
+
+
+def test_qvalues_from_storey(rand_scores):
+    scores, targets = rand_scores
+    qvalues = qvalues_from_storeys_algo(scores, targets, decoy_qvals_by_interp=True)
+    assert qvalues_are_valid(qvalues, scores)
+
+    # Test with rounded scores, so that there are scores
+    scores, targets = rounded(rand_scores, decimals=0)
+    qvalues = qvalues_from_storeys_algo(scores, targets, decoy_qvals_by_interp=True)
+    assert qvalues_are_valid(qvalues, scores)
+
+    # Test with separate target/decoy qvalue evaluation (qvalues not globally sorted)
+    qvalues = qvalues_from_storeys_algo(scores, targets, decoy_qvals_by_interp=False)
+    assert qvalues_are_valid(qvalues[targets], scores[targets])
+    assert qvalues_are_valid(qvalues[~targets], scores[~targets])
 
 
 def test_qvalues_from_counts_descending(desc_scores):

@@ -97,6 +97,7 @@ class TDCQvalueAlgorithm(QvalueAlgorithm):
         return "mokapot tdc algorithm"
 
 
+@typechecked
 class StoreyQvalueAlgorithm(QvalueAlgorithm):
     def __init__(self, *, pvalue_method="best"):
         super().__init__()
@@ -104,17 +105,7 @@ class StoreyQvalueAlgorithm(QvalueAlgorithm):
 
     def qvalues(self, scores, targets, desc):
         pi0 = Pi0EstAlgorithm.pi0_algo.estimate(scores, targets)
-
-        stat1 = scores[targets]
-        stat0 = scores[~targets]
-
-        pvals1 = qvalues_storey.empirical_pvalues(stat1, stat0, mode=self.pvalue_method)
-        qvals1 = qvalues_storey.qvalues(pvals1, pi0=pi0, small_p_correction=False)
-
-        qvals0 = np.interp(stat0, stat1, qvals1)
-        qvals = np.zeros_like(scores)
-        qvals[targets] = qvals1
-        qvals[~targets] = qvals0
+        qvals = qvalues.qvalues_from_storeys_algo(scores, targets, pi0)
         return qvals
 
     def long_desc(self):

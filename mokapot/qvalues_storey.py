@@ -244,6 +244,8 @@ def qvalues(
     if small_p_correction:
         fdr_sorted /= 1 - (1 - pvals) ** N
 
+    # Note that the monotonization takes also correctly care of repeated pvalues
+    # so that they always get the same qvalue
     qvalues_sorted = monotonize_simple(fdr_sorted, ascending=True, reverse=True)
 
     qvalues = np.zeros_like(qvalues_sorted)

@@ -420,3 +420,72 @@ def qvalues_func_from_hist(
     eval_scores = hist_data.targets.bin_edges
 
     return lambda scores: np.interp(scores, eval_scores, qvalues)
+
+
+@typechecked
+def qvalues_from_storeys_algo(
+    scores: np.ndarray[float],
+    targets: np.ndarray[bool],
+    pi0: float | None = None,
+    decoy_qvals_by_interp: bool = True,
+    pvalue_method: str = "conservative",
+):
+    """
+    Calculates q-values for a set of scores using Storey's algorithm.
+
+    The function computes empirical p-values, estimates the proportion of
+    null hypotheses (`pi0`), and subsequently calculates the q-values,
+    which are adjusted p-values used in multiple hypothesis testing.
+
+    Parameters
+    ----------
+    scores : np.ndarray[float]
+        Array of scores for which q-values are computed. Must be of
+        type float.
+    targets : np.ndarray[bool]
+        Binary array indicating whether a score is a target (`True`) or
+        a decoy (`False`). Must have the same shape as `scores`.
+    pi0 : float, optional
+        Proportion of null hypotheses in the dataset. If not provided,
+        it is estimated from the p-values using the "smoother" method
+        with evaluation at lambda = 0.5.
+    decoy_qvals_by_interp : bool, optional
+        Whether to calculate q-values for decoys by interpolating from
+        target q-values (`True`) or calculate decoy q-values independently
+        as 1:1 p-values (`False`). Defaults to `True`.
+    pvalue_method : str, optional
+        Method to calculate empirical p-values. Acceptable values are
+        mode-based methods such as "conservative". Defaults to
+        "conservative".
+
+    Returns
+    -------
+    np.ndarray[float]
+        An array of q-values corresponding to the input `scores`, where
+        lower scores generally indicate a higher likelihood of being a
+        target. The q-values are adjusted for multiple hypothesis testing.
+    """
+    import mokapot.qvalues_storey as qvalues_storey
+
+    stat1 = scores[targets]
+    stat0 = scores[~targets]
+
+    pvals1 = qvalues_storey.empirical_pvalues(stat1, stat0, mode=pvalue_method)
+
+    if pi0 is None:
+        pi0est = qvalues_storey.estimate_pi0(pvals1, method="smoother", eval_lambda=0.5)
+        pi0 = pi0est.pi0
+
+    qvals1 = qvalues_storey.qvalues(pvals1, pi0=pi0, small_p_correction=False)
+
+    if decoy_qvals_by_interp:
+        ind = np.argsort(stat1)
+        qvals0 = np.interp(stat0, stat1[ind], qvals1[ind])
+    else:
+        pvals0 = qvalues_storey.empirical_pvalues(stat0, stat0, mode=pvalue_method)
+        qvals0 = qvalues_storey.qvalues(pvals0, pi0=1)
+
+    qvals = np.zeros_like(scores)
+    qvals[targets] = qvals1
+    qvals[~targets] = qvals0
+    return qvals
