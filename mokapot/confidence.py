@@ -454,6 +454,9 @@ def assign_confidence(
                 f"and dataset {di + 2} has columns {dataset.columns}"
             )
 
+    if protein_column is None:
+        protein_column = curr_dataset.column_groups.optional_columns.protein
+
     level_manager = LevelManager.from_dataset(
         dataset=curr_dataset,
         do_rollup=do_rollup,
@@ -723,9 +726,9 @@ class LevelManager:
     def __init__(
         self,
         *,
-        level_columns: list[str],
+        level_columns: list[str] | tuple[str, ...],
         default_extension: str,
-        spectrum_columns: list[str],
+        spectrum_columns: list[str] | tuple[str, ...],
         do_rollup: bool,
         dest_dir: Path,
         file_root: str,
@@ -735,7 +738,7 @@ class LevelManager:
         self.level_columns = level_columns
         self.default_extension = default_extension
         self.spectrum_columns = spectrum_columns
-        self.use_proteins = protein_column is not None
+        self.use_proteins = (protein_column is not None) and use_proteins
         self.dest_dir = dest_dir
         self.file_root = file_root
         self.do_rollup = do_rollup
@@ -846,14 +849,13 @@ class LevelManager:
         # column names, so constraints like it being sql-safe or
         # something like that could be enforced in the future.
 
-        # if self.protein_column is not None:
-        #     if self.protein_column not in dataset.get_column_names():
-        #         raise ValueError(
-        #             f"Protein column {self.protein_column}"
-        #             " not found in dataset"
-        #         )
+        if self.protein_column is not None:
+            if self.protein_column not in dataset.get_column_names():
+                raise ValueError(
+                    f"Protein column {self.protein_column}"
+                    " not found in dataset"
+                )
 
-        # TODO: fix, this is broken RN
         level_column_names = [
             *dataset.spectrum_columns,
             dataset.target_column,

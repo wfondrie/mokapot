@@ -381,17 +381,7 @@ def _create_linear_dataset(
     )
     return LinearPsmDataset(
         psms=psms,
-        target_column=dataset.target_column,
-        peptide_column=dataset.peptide_column,
-        spectrum_columns=list(dataset.spectrum_columns),
-        feature_columns=list(dataset.feature_columns),
-        # protein_column=dataset.protein_column,
-        # filename_column=dataset.filename_column,
-        # scan_column=dataset.scan_column,
-        # calcmass_column=dataset.calcmass_column,
-        # expmass_column=dataset.expmass_column,
-        # rt_column=dataset.rt_column,
-        # charge_column=dataset.charge_column,
+        column_groups=dataset.column_groups,
         copy_data=False,
         enforce_checks=enforce_checks,
     )

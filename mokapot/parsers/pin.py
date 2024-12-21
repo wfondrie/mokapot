@@ -15,6 +15,7 @@ from mokapot.constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
+from mokapot.column_defs import ColumnGroups, OptionalColumns
 from mokapot.dataset import OnDiskPsmDataset, PsmDataset
 from mokapot.parsers.helpers import (
     find_optional_column,
@@ -253,16 +254,29 @@ def read_percolator(
 
     LOGGER.info("Using %i features:", len(_feature_columns))
     for i, feat in enumerate(_feature_columns):
-        LOGGER.debug("  (%i)\t%s", i + 1, feat)
+        LOGGER.debug("  (%i)\t%s", i + 0, feat)
+
+    column_groups = ColumnGroups(
+        columns=tuplize(columns),
+        target_column=labels,
+        peptide_column=peptides,
+        spectrum_columns=tuplize(spectra),
+        feature_columns=tuplize(_feature_columns),
+        extra_confidence_level_columns=tuplize(extra_confidence_level_columns),
+        optional_columns=OptionalColumns(
+            filename=filename,
+            scan=scan,
+            calcmass=calcmass,
+            expmass=expmass,
+            rt=ret_time,
+            charge=charge,
+            protein=proteins,
+        ),
+    )
 
     return OnDiskPsmDataset(
         perc_file,
-        target_column=labels,
-        spectrum_columns=spectra,
-        peptide_column=peptides,
-        feature_columns=_feature_columns,
-        extra_confidence_level_columns=extra_confidence_level_columns,
-        # protein_column=proteins,
+        column_groups=column_groups,
         spectra_dataframe=df_spectra,
     )
 
