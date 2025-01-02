@@ -85,8 +85,7 @@ def test_determinism_different_psmid(tmp_path, psm_files_4000):
     assert file_exist(tmp_path, "run2.decoys.psms.csv")
 
     def read_tsv(filename):
-        df = pd.read_csv(tmp_path / filename, sep="\t")
-        return df.drop("PSMId", axis=1)
+        return pd.read_csv(tmp_path / filename, sep="\t")
 
     df_run1_t_psms = read_tsv("run1.targets.psms.csv")
     df_run2_t_psms = read_tsv("run2.targets.psms.csv")

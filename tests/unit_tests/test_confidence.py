@@ -6,11 +6,11 @@ import copy
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
+import pytest
 from pandas.testing import assert_frame_equal
 
 import mokapot
-from mokapot import OnDiskPsmDataset, assign_confidence, LinearPsmDataset
-import pytest
+from mokapot import LinearPsmDataset, OnDiskPsmDataset, assign_confidence
 
 
 @contextlib.contextmanager
@@ -41,8 +41,7 @@ def inmem_psms_ds(psm_df_builder):
 
 @pytest.mark.parametrize("deduplication", [True, False])
 def test_assign_unscored_confidence(inmem_psms_ds, tmp_path, deduplication):
-    if deduplication:
-        pytest.skip("Deduplication is not working")
+    orig_df = inmem_psms_ds.data.copy()
     _foo = assign_confidence(
         [inmem_psms_ds],
         scores_list=None,
@@ -51,6 +50,23 @@ def test_assign_unscored_confidence(inmem_psms_ds, tmp_path, deduplication):
         max_workers=4,
         deduplication=False,
     )
+    out_specid_peps = (
+        _foo[0]
+        .out_writers["psms"][0]
+        .read()[["specid", "peptide"]]
+        .sort_values("specid")
+        .reset_index(drop=True)
+    )
+    orig_specid_peps = orig_df.loc[:, ["specid", "peptide"]].sort_values(
+        "specid"
+    )
+    orig_specid_peps = orig_specid_peps[
+        orig_specid_peps["specid"].isin(out_specid_peps["specid"])
+    ].reset_index(drop=True)
+
+    # Here I am making sure the spec ids and peptides are not getting shuffled.
+    pd.testing.assert_frame_equal(out_specid_peps, orig_specid_peps)
+
     # TODO actually add assertions here ...
 
 

@@ -4,8 +4,8 @@ Details about the format can be found here:
 https://github.com/smith-chem-wisc/FlashLFQ/wiki/Identification-Input-Formats#generic
 """
 
-from pathlib import Path
 import logging
+from pathlib import Path
 
 import pandas as pd
 
@@ -70,11 +70,8 @@ def _format_flashlfq(conf):
     # Do some error checking for the required columns:
     required = ["filename", "calcmass", "rt", "charge"]
 
-    opt_cols = {
-        k: v
-        for k, v in conf.get_optional_columns().as_dict().items()
-        if v is not None
-    }
+    opt_cols_dict = conf.dataset.column_groups.optional_columns.as_dict()
+    opt_cols = {k: v for k, v in opt_cols_dict.items()}
     missing = [c for c in required if opt_cols[c] is None]
     if missing:
         missing = ", ".join([c + "_column" for c in missing])
@@ -83,6 +80,10 @@ def _format_flashlfq(conf):
             "collection of PSMs in order to save them in FlashLFQ format: "
             f"{missing}"
         )
+
+    join_cols = list(conf.dataset.spectrum_columns)
+    join_cols += [conf.dataset.peptide_column]
+    cols_pull = {k: v for k, v in opt_cols.items() if v is not None}
 
     # TODO: make this work again ...
     # if conf._has_proteins:
@@ -100,21 +101,16 @@ def _format_flashlfq(conf):
 
     # OLD: passing = peptides["mokapot q-value"] <= eval_fdr
     eval_fdr = conf.eval_fdr
-    passing = pd.read_csv(conf.out_writers["peptides"][0].file_name, sep="\t")
+    passing = conf.out_writers["peptides"][0].read()
     passing = passing[passing["mokapot_qvalue"] <= eval_fdr]
 
-    cols_pull = opt_cols
-    cols_pull["PSMId"] = conf.dataset.specId_column
-    bar = conf.dataset.read_data(columns=list(cols_pull.values()))
-
-    # Rename the columns rn it should have:
-    # ['filename', 'scan', 'calcmass', 'expmass', 'rt', 'charge', 'PSMId']
-    bar = bar.rename(columns={v: k for k, v in cols_pull.items()})
+    cols_read = list(set(list(cols_pull.values()) + join_cols))
+    tmp_df = conf.dataset.read_data(columns=cols_read)
 
     # Join on the PSMId + col
     passing = passing.merge(
-        bar,
-        on="PSMId",
+        tmp_df,
+        on=join_cols,
         how="inner",
         validate="one_to_one",
         suffixes=("", "_right"),
@@ -122,12 +118,10 @@ def _format_flashlfq(conf):
 
     ## Build the output file
     out_df = pd.DataFrame()
-    out_df["File Name"] = passing["filename"].apply(lambda x: Path(x).name)
-
-    try:
-        seq = passing["peptide"]
-    except KeyError:
-        breakpoint()
+    out_df["File Name"] = passing[cols_pull["filename"]].apply(
+        lambda x: Path(x).name
+    )
+    seq = passing[conf.dataset.peptide_column]
 
     base_seq = (
         seq.str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
@@ -137,9 +131,9 @@ def _format_flashlfq(conf):
 
     out_df["Base Sequence"] = base_seq
     out_df["Full Sequence"] = seq
-    out_df["Peptide Monoisotopic Mass"] = passing["calcmass"]
-    out_df["Scan Retention Time"] = passing["rt"]
-    out_df["Precursor Charge"] = passing["charge"]
+    out_df["Peptide Monoisotopic Mass"] = passing[cols_pull["calcmass"]]
+    out_df["Scan Retention Time"] = passing[cols_pull["rt"]]
+    out_df["Precursor Charge"] = passing[cols_pull["charge"]]
 
     if isinstance(proteins, str):
         # TODO: Add delimiter sniffing.

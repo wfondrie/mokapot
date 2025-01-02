@@ -1,6 +1,7 @@
 import sqlite3
 
 import pandas as pd
+
 from mokapot.tabular_data import ConfidenceSqliteWriter
 
 

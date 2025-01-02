@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TypeVar, Callable, Iterator
+from typing import Callable, Iterator, TypeVar
 
 import numpy as np
 import scipy.stats as stats

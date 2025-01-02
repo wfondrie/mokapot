@@ -25,42 +25,43 @@ rather than initializing the classes below directly.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 from pprint import pformat
-from typing import Sequence, Iterator
+from typing import Iterator, Sequence
 
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
-
-from mokapot.column_defs import get_standard_column_name, Q_VALUE_COL_NAME
+from mokapot.column_defs import Q_VALUE_COL_NAME, get_standard_column_name
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import PsmDataset
 from mokapot.peps import (
-    peps_from_scores,
-    TDHistData,
-    peps_func_from_hist_nnls,
     PepsConvergenceError,
+    TDHistData,
+    peps_from_scores,
+    peps_func_from_hist_nnls,
 )
-from mokapot.proteins import Proteins
 from mokapot.picked_protein import picked_protein
+from mokapot.proteins import Proteins
 from mokapot.qvalues import qvalues_from_scores, qvalues_func_from_hist
-from mokapot.statistics import OnlineStatistics, HistData
+from mokapot.statistics import HistData, OnlineStatistics
 from mokapot.tabular_data import (
     BufferType,
     ColumnMappedReader,
     ComputedTabularDataReader,
     ConfidenceSqliteWriter,
-    join_readers,
     MergedTabularDataReader,
+    TabularDataReader,
+    TabularDataWriter,
+    join_readers,
 )
-from mokapot.tabular_data import TabularDataReader, TabularDataWriter
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 from mokapot.utils import (
-    convert_targets_column,
+    make_bool_trarget,
     strictzip,
 )
 from mokapot.writers.flashlfq import to_flashlfq
@@ -467,6 +468,7 @@ def assign_confidence(
     )
 
     output_writers_factory = OutputWriterFactory(
+        id_column=curr_dataset.column_groups.optional_columns.id,
         spectra_columns=curr_dataset.spectrum_columns,
         extra_output_columns=level_manager.extra_output_columns,
         sqlite_path=sqlite_path,
@@ -612,7 +614,7 @@ class LevelWriterCollection:
             writer.initialize()
 
         self.score_stats = OnlineStatistics()
-        self.psm_count = 0
+        self.per_level_counts = defaultdict(int)
 
     def __repr__(self):
         pretty_dict = pformat(self.__dict__)
@@ -648,16 +650,13 @@ class LevelWriterCollection:
 
     def sink_iterator(self, sorted_file_iterator):
         for data_row in sorted_file_iterator:
-            self.psm_count += 1
+            self.per_level_counts["total"] += 1
             for level in self.levels:
                 if level != "psms" or self.deduplication:
                     psm_hash = self.hash_data_row(data_row, level=level)
                     if psm_hash in self.seen_level_entities[level]:
-                        if level == "psms":
-                            # If we are on the psms level, we can skip
-                            # checking the other levels
-                            break
                         continue
+                    self.per_level_counts[level] += 1
                     self.seen_level_entities[level].add(psm_hash)
                 out_row = {
                     col: data_row[col]
@@ -676,7 +675,8 @@ class LevelWriterCollection:
                 if self.deduplication:
                     LOGGER.info(f"\t- Found {count} PSMs from unique spectra.")
                 else:
-                    LOGGER.info(f"\t- Found {self.psm_count} PSMs.")
+                    psm_count = self.per_level_counts["psms"]
+                    LOGGER.info(f"\t- Found {psm_count} PSMs.")
                 LOGGER.info(
                     f"\t- The average score was {self.score_stats.mean:.3f} "
                     f"with standard deviation {self.score_stats.sd:.3f}."
@@ -734,19 +734,21 @@ class LevelManager:
         file_root: str,
         protein_column: str | None,
         use_proteins: bool,
+        id_column: str | None,
     ):
         self.level_columns = level_columns
         self.default_extension = default_extension
         self.spectrum_columns = spectrum_columns
+        self.id_column = id_column
         self.use_proteins = (protein_column is not None) and use_proteins
         self.dest_dir = dest_dir
         self.file_root = file_root
         self.do_rollup = do_rollup
         self.protein_column = protein_column
 
-        self._initialize_levels()
-        self._setup_level_paths()
-        self._setup_hash_columns()
+        self.levels = self._initialize_levels()
+        self.level_data_paths = self._setup_level_paths()
+        self.level_hash_columns = self._setup_hash_columns()
         self._setup_protein_levels()
         self._setup_extra_output_columns()
 
@@ -763,6 +765,7 @@ class LevelManager:
         level_columns = dataset.confidence_level_columns
         default_extension = dataset.get_default_extension()
         spectrum_columns = dataset.spectrum_columns
+        id_col = dataset.column_groups.optional_columns.id
         return LevelManager(
             level_columns=level_columns,
             default_extension=default_extension,
@@ -772,6 +775,7 @@ class LevelManager:
             dest_dir=dest_dir,
             file_root=file_root,
             use_proteins=not disable_proteins,
+            id_column=id_col,
         )
 
     def __repr__(self) -> str:
@@ -785,28 +789,36 @@ class LevelManager:
             level_columns = self.level_columns
             levels.extend(col.lower() + "s" for col in level_columns)
 
-        self.levels = levels
+        return levels
 
     def _setup_level_paths(
         self,
-    ) -> None:
+    ) -> dict[str, Path]:
         """Setup paths for each processing level."""
-        self.level_data_paths = {}
+        level_data_paths = {}
         file_ext = self.default_extension
         for level in self.levels:
-            self.level_data_paths[level] = (
+            level_data_paths[level] = (
                 self.dest_dir / f"{self.file_root}{level}{file_ext}"
             )
 
-    def _setup_hash_columns(self) -> None:
-        """Setup hash columns for each level."""
+        return level_data_paths
 
-        self.level_hash_columns = {"psms": self.spectrum_columns}
+    def _setup_hash_columns(self) -> dict[str, list[str]]:
+        """Setup hash columns for each level."""
+        # Note: we do not use the id col as part of the hash columns, since by
+        #       definition it will never be duplicated.
+        # base_cols = [self.id_column] if self.id_column is not None else []
+        # base_cols += self.spectrum_columns
+
+        base_cols = list(self.spectrum_columns)
+
+        level_hash_columns = {"psms": base_cols}
         for level in self.levels[1:]:
             if level != "proteins":
-                self.level_hash_columns[level] = [
-                    level.rstrip("s").capitalize()
-                ]
+                level_hash_columns[level] = [level.rstrip("s").capitalize()]
+
+        return level_hash_columns
 
     def _setup_protein_levels(self) -> None:
         levels_or_proteins = self.levels
@@ -856,7 +868,11 @@ class LevelManager:
                     " not found in dataset"
                 )
 
+        id_col = dataset.column_groups.optional_columns.id
+        id_col = [id_col] if id_col is not None else []
+
         level_column_names = [
+            *id_col,
             *dataset.spectrum_columns,
             dataset.target_column,
             "peptide",
@@ -865,6 +881,7 @@ class LevelManager:
             "score",
         ]
         level_input_column_names = [
+            *id_col,
             *dataset.spectrum_columns,
             dataset.target_column,
             dataset.peptide_column,
@@ -891,6 +908,7 @@ class OutputWriterFactory:
     def __init__(
         self,
         *,
+        id_column: str | None,
         spectra_columns: list[str] | tuple[str, ...],
         extra_output_columns: list[str],
         append_to_output_file: bool,
@@ -903,7 +921,9 @@ class OutputWriterFactory:
         self.write_decoys = write_decoys
         self.extra_output_columns = extra_output_columns
         self.append_to_output_file = append_to_output_file
+        id_col = [id_column] if id_column is not None else []
         self.output_column_names = [
+            *id_col,
             *spectra_columns,
             "peptide",
             *extra_output_columns,
@@ -915,6 +935,7 @@ class OutputWriterFactory:
         ]
 
         self.output_column_names_proteins = [
+            *id_col,
             *spectra_columns,
             "mokapot protein group",
             "best peptide",
@@ -1119,10 +1140,12 @@ def _save_sorted_metadata_chunks(
     target_column,
     deduplication_columns,
 ):
-    chunk_metadata = convert_targets_column(
-        data=chunk_metadata,
-        target_column=target_column,
-    )
+    tmp = make_bool_trarget(chunk_metadata.loc[:, target_column])
+    # Setting the temporaty column and deleting the original
+    # column solves a deprecation warning that mentions "assiging
+    # column with incompatible dtype"
+    del chunk_metadata[target_column]
+    chunk_metadata.loc[:, target_column] = tmp
     chunk_metadata.sort_values(by="score", ascending=False, inplace=True)
 
     if deduplication_columns is not None:

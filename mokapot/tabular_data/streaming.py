@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import warnings
 from pprint import pformat
-from typing import Generator, Callable, Iterator
+from typing import Callable, Generator, Iterator
 
 import numpy as np
 import pandas as pd

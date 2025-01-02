@@ -12,9 +12,9 @@ import numpy as np
 
 from mokapot import __version__
 from mokapot.cli_helper import (
-    setup_logging,
-    output_start_message,
     output_end_message,
+    output_start_message,
+    setup_logging,
 )
 from mokapot.rollup import do_rollup
 

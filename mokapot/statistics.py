@@ -1,9 +1,9 @@
 import math
 from collections import namedtuple
+from dataclasses import dataclass
 
 import numpy as np
 from typeguard import typechecked
-from dataclasses import dataclass
 
 SummaryStatistics = namedtuple(
     "SummaryStatistics", ("n", "min", "max", "sum", "mean", "var", "sd")

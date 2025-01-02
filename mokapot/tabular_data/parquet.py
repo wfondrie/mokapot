@@ -7,7 +7,7 @@ import pyarrow as pa
 from pyarrow import parquet as pq
 from typeguard import typechecked
 
-from mokapot.tabular_data import TabularDataWriter, TabularDataReader
+from mokapot.tabular_data import TabularDataReader, TabularDataWriter
 
 
 @typechecked

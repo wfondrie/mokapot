@@ -283,7 +283,8 @@ class TabularDataWriter(ABC):
 
     def check_valid_data(self, data: pd.DataFrame):
         columns = data.columns.tolist()
-        if not columns == self.get_column_names():
+
+        if not set(columns) == set(self.get_column_names()):
             raise ValueError(
                 f"Column names {columns} do not "
                 f"match {self.get_column_names()}"

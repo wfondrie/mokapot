@@ -1,6 +1,6 @@
+import warnings
 from pathlib import Path
 from typing import Generator
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -111,6 +111,8 @@ class CSVFileWriter(TabularDataWriter):
 
     def append_data(self, data: pd.DataFrame):
         self.check_valid_data(data)
+        # Reorder columns if needed
+        data = data.loc[:, self.columns]
         data.to_csv(self.file_name, mode="a", header=False, **self.stdargs)
 
     def get_associated_reader(self):

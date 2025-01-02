@@ -2,8 +2,8 @@
 This module contains a parser for PepXML files.
 """
 
-import logging
 import itertools
+import logging
 from functools import partial
 
 import numpy as np

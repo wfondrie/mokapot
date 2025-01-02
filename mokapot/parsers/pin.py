@@ -5,29 +5,29 @@ This module contains the parsers for reading in PSMs
 import logging
 import warnings
 from pathlib import Path
-from typing import List, Iterable
+from typing import Iterable, List
 
 import pandas as pd
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
+from mokapot.column_defs import ColumnGroups, OptionalColumns
 from mokapot.constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
-from mokapot.column_defs import ColumnGroups, OptionalColumns
 from mokapot.dataset import OnDiskPsmDataset, PsmDataset
 from mokapot.parsers.helpers import (
-    find_optional_column,
     find_columns,
+    find_optional_column,
     find_required_column,
 )
 from mokapot.tabular_data import TabularDataReader
 from mokapot.utils import (
-    tuplize,
     create_chunks,
-    convert_targets_column,
     flatten,
+    make_bool_trarget,
+    tuplize,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -170,7 +170,14 @@ def read_percolator(
     columns = reader.get_column_names()
 
     # Find all the necessary columns, case-insensitive:
-    specid = find_required_column("specid", columns)
+    if "id" in columns[0].lower():
+        # If the first column has 'id' it will be used as an identifier.
+        # Since both PSMid (percolator docs) and SpecId (sage) are valid
+        # options.
+        specid = columns[0]
+    else:
+        specid = find_required_column("specid", columns)
+
     peptides = find_required_column("peptide", columns)
     proteins = find_required_column("proteins", columns)
     labels = find_required_column("label", columns)
@@ -236,9 +243,13 @@ def read_percolator(
         )
         for c in feat_slices
     )
-    df_spectra = convert_targets_column(
-        pd.concat(df_spectra_list), target_column=labels
-    )
+
+    df_spectra = pd.concat(df_spectra_list)
+    tmp_labels = make_bool_trarget(df_spectra.loc[:, labels])
+    # Deleting the column solves a deprecation warning that mentions
+    # "assiging column with incompatible dtype"
+    del df_spectra[labels]
+    df_spectra.loc[:, labels] = tmp_labels
 
     features_to_drop = [drop for drop in features_to_drop if drop]
     features_to_drop = flatten(features_to_drop)
@@ -254,7 +265,7 @@ def read_percolator(
 
     LOGGER.info("Using %i features:", len(_feature_columns))
     for i, feat in enumerate(_feature_columns):
-        LOGGER.debug("  (%i)\t%s", i + 0, feat)
+        LOGGER.info("  (%i)\t%s", i + 0, feat)
 
     column_groups = ColumnGroups(
         columns=tuplize(columns),
@@ -264,6 +275,7 @@ def read_percolator(
         feature_columns=tuplize(_feature_columns),
         extra_confidence_level_columns=tuplize(extra_confidence_level_columns),
         optional_columns=OptionalColumns(
+            id=specid,
             filename=filename,
             scan=scan,
             calcmass=calcmass,
@@ -273,6 +285,8 @@ def read_percolator(
             protein=proteins,
         ),
     )
+
+    LOGGER.info(f"Infered column grouping: {column_groups}")
 
     return OnDiskPsmDataset(
         perc_file,
@@ -293,7 +307,9 @@ def drop_missing_values_and_fill_spectra_dataframe(
         chunk_size=CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS, columns=column
     )
     for i, feature in enumerate(file_iterator):
-        if set(spectra) <= set(column):
+        if set(spectra) <= set(
+            column
+        ):  # Isnt this a constant within the function?
             df_spectra_list.append(feature[spectra])
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -338,10 +354,11 @@ def get_rows_from_dataframe(
     None
         The function modifies the `train_psms` list in place.
     """
-    chunk = convert_targets_column(
-        data=chunk,
-        target_column=target_column,
-    )
+    tmp = make_bool_trarget(chunk.loc[:, target_column])
+    # Deleting the column solves a deprecation warning that
+    # mentions "assiging column with incompatible dtype"
+    del chunk[target_column]
+    chunk.loc[:, target_column] = tmp
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
         train_psms[file_idx][k].append(chunk.loc[idx_])

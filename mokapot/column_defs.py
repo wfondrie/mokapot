@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+
+from .utils import tuplize
 
 Q_VALUE_COL_NAME = "mokapot_qvalue"
 STANDARD_COLUMN_NAME_MAP = {
@@ -30,6 +34,7 @@ class OptionalColumns:
     the scoring process.
     """
 
+    id: str | None
     filename: str | None
     scan: str | None
     calcmass: str | None
@@ -40,6 +45,7 @@ class OptionalColumns:
 
     def as_dict(self):
         return {
+            "id": self.id,
             "filename": self.filename,
             "scan": self.scan,
             "calcmass": self.calcmass,
@@ -89,3 +95,73 @@ class ColumnGroups:
             raise ValueError(
                 f"Duplicate columns found in all columns: {dupes}, {self}"
             )
+
+    def update(
+        self,
+        *,
+        target_column: str | None = None,
+        peptide_column: str | None = None,
+        spectrum_columns: tuple[str, ...] | list[str] | None = None,
+        feature_columns: tuple[str, ...] | list[str] | None = None,
+        extra_confidence_level_columns: tuple[str, ...]
+        | list[str]
+        | None = None,
+        id_column: str | None = None,
+        filename_column: str | None = None,
+        scan_column: str | None = None,
+        calcmass_column: str | None = None,
+        expmass_column: str | None = None,
+        rt_column: str | None = None,
+        charge_column: str | None = None,
+        protein_column: str | None = None,
+    ):
+        if spectrum_columns is not None:
+            spectrum_columns = tuplize(spectrum_columns)
+        else:
+            spectrum_columns = self.spectrum_columns
+
+        if feature_columns is not None:
+            feature_columns = tuplize(feature_columns)
+        else:
+            feature_columns = self.feature_columns
+
+        if extra_confidence_level_columns is not None:
+            extra_conf_level_columns = tuplize(extra_confidence_level_columns)
+        else:
+            extra_conf_level_columns = self.extra_confidence_level_columns
+
+        return ColumnGroups(
+            columns=self.columns,
+            target_column=target_column or self.target_column,
+            peptide_column=peptide_column or self.peptide_column,
+            spectrum_columns=spectrum_columns,
+            feature_columns=feature_columns,
+            extra_confidence_level_columns=extra_conf_level_columns,
+            optional_columns=OptionalColumns(
+                id=id_column or self.optional_columns.id,
+                filename=filename_column or self.optional_columns.filename,
+                scan=scan_column or self.optional_columns.scan,
+                calcmass=calcmass_column or self.optional_columns.calcmass,
+                expmass=expmass_column or self.optional_columns.expmass,
+                rt=rt_column or self.optional_columns.rt,
+                charge=charge_column or self.optional_columns.charge,
+                protein=protein_column or self.optional_columns.protein,
+            ),
+        )
+
+    def update_with(self, other: ColumnGroups):
+        return self.update(
+            target_column=other.target_column,
+            peptide_column=other.peptide_column,
+            spectrum_columns=other.spectrum_columns,
+            feature_columns=other.feature_columns,
+            extra_confidence_level_columns=other.extra_confidence_level_columns,
+            id_column=other.optional_columns.id,
+            filename_column=other.optional_columns.filename,
+            scan_column=other.optional_columns.scan,
+            calcmass_column=other.optional_columns.calcmass,
+            expmass_column=other.optional_columns.expmass,
+            rt_column=other.optional_columns.rt,
+            charge_column=other.optional_columns.charge,
+            protein_column=other.optional_columns.protein,
+        )

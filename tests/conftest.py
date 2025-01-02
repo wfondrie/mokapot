@@ -14,15 +14,18 @@ import pytest
 from triqler.qvality import getQvaluesFromScores
 
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
+from mokapot.column_defs import ColumnGroups, OptionalColumns
 from mokapot.qvalues import tdc
-from mokapot.utils import convert_targets_column
-from mokapot.parsers.columns import ColumnGroups, OptionalColumns
-
+from mokapot.utils import make_bool_trarget, tuplize
 
 ## This section just adds the sorting of the tests, makes the tests marked
 ## with the slow marker run last.
 
 # I am assigning slow to tests that take more than 10 seconds to run for now.
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: mark test to run last")
 
 
 def by_slow_marker(item):
@@ -84,6 +87,7 @@ def _psm_df_rand(
     nonreal = ntargets - nreal
     max_scan = ntargets + ndecoys
     targets = {
+        "PSMId": np.arange(ntargets),
         "specid": np.arange(ntargets),
         "target": [True] * ntargets,
         "scannr": rng.integers(0, max_scan, ntargets),
@@ -103,6 +107,7 @@ def _psm_df_rand(
         ])
 
     decoys = {
+        "PSMId": np.arange(ntargets, ntargets + ndecoys),
         "specid": np.arange(ntargets, ntargets + ndecoys),
         "target": [False] * ndecoys,
         "scannr": rng.integers(0, max_scan, ndecoys),
@@ -137,19 +142,21 @@ def _psm_df_rand(
     )
     assert len(df) == (ntargets + ndecoys)
     columns = ColumnGroups(
-        columns=list(df.columns),
+        columns=tuplize(df.columns),
         target_column="target",
         peptide_column="peptide",
-        spectrum_columns=spec_cols,
-        feature_columns=score_cols,
-        extra_confidence_level_columns=[],
+        spectrum_columns=tuplize(spec_cols),
+        feature_columns=tuplize(score_cols),
+        extra_confidence_level_columns=tuplize([]),
         optional_columns=OptionalColumns(
+            id="PSMId",
             filename="filename",
             scan="scannr",
             calcmass="calcmass",
             expmass="expmass",
             rt="ret_time",
             charge="charge",
+            protein="proteins",
         ),
     )
     return MockPsmDataframe(
@@ -281,7 +288,7 @@ def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
     df_spectra = pq.read_table(
         filename, columns=["ScanNr", "ExpMass", "Label"]
     ).to_pandas()
-    df_spectra = convert_targets_column(df_spectra, "Label")
+    df_spectra["Label"] = make_bool_trarget(df_spectra["Label"])
     psms = OnDiskPsmDataset(
         filename,
         target_column="Label",

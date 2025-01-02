@@ -5,7 +5,7 @@ Utility functions
 import gzip
 import itertools
 from pathlib import Path
-from typing import Union, Iterator, Any, NewType, Dict
+from typing import Any, Dict, Iterator, NewType, Union
 
 import numpy as np
 import pandas as pd
@@ -122,42 +122,38 @@ def get_next_row(
 
 
 @typechecked
-def convert_targets_column(
-    data: pd.DataFrame, target_column: str
-) -> pd.DataFrame:
-    """Converts target column values to boolean
-    (True if value is 1, False otherwise).
+def make_bool_trarget(target_column: pd.Series):
+    """Convert target column to boolean if possible.
 
-    Parameters
-    ----------
-    data : pd.DataFrame
-        The DataFrame containing the target column to be converted (will be
-        modified in-place).
-    target_column : str
-        The name of the target column in the DataFrame.
-
-    Returns
-    -------
-    pd.DataFrame
-        The DataFrame with the target column converted to boolean.
-
-    Raises
-    ------
-    ValueError
-        If the target column contains values other than -1, 0, or 1.
+    1. If its a 0-1 col convert to bool
+    2. If its a -1,1 values > 0 becomes True, rest False
     """
-    if data[target_column].dtype == bool:
-        return data
+    if target_column.dtype == bool:
+        return target_column
 
-    labels = data[target_column].astype(int)
-    if any(labels < -1) or any(labels > 1):
-        raise ValueError(
-            f"Invalid target column '{target_column}' "
-            "contains values not in {-1, 0, 1}"
-        )
+    if target_column.dtype == int or target_column.dtype == float:
+        # Check if all values are 0 or 1
+        uniq_vals = target_column.unique().tolist()
+        uniq_vals.sort()
+        if uniq_vals == [0, 1]:
+            # If so, we can just cast to bool
+            return target_column.astype(bool)
+        elif uniq_vals == [-1, 1]:
+            return target_column > 0
+        else:
+            raise ValueError(
+                f"Target column "
+                "has values that are not boolean or 0/1 or -1/1."
+                f"Please check and fix. (found {uniq_vals})"
+            )
 
-    data[target_column] = labels == 1
-    return data
+    # If not raise an error ... most likely the cast will be
+    # Something the user does not want.
+    raise ValueError(
+        "Target column "
+        "has values that are not boolean, 0/1 or -1/1,"
+        f" please check and fix. ({target_column})"
+    )
 
 
 @typechecked

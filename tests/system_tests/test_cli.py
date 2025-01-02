@@ -7,12 +7,12 @@ output, just that the expect outputs are created.
 
 from pathlib import Path
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
 
 from ..helpers.cli import run_mokapot_cli
-from ..helpers.utils import file_approx_len, file_missing, file_exist
+from ..helpers.utils import file_approx_len, file_exist, file_missing
 
 
 @pytest.fixture
@@ -41,6 +41,7 @@ def test_basic_cli(tmp_path, scope_files):
         Path(tmp_path, "targets.psms.csv"), sep="\t", index_col=None
     )
     assert targets_psms_df.columns.values.tolist() == [
+        "SpecId",
         "ScanNr",
         "ExpMass",
         "peptide",
@@ -51,10 +52,7 @@ def test_basic_cli(tmp_path, scope_files):
     ]
     assert len(targets_psms_df.index) >= 5000
 
-    # assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
-    # Now this ID is not propagated. So now the first column is
-    # the scan number.
-    assert targets_psms_df.iloc[0, 0] == 11040
+    assert targets_psms_df.iloc[0, 0] == "target_0_11040_3_-1"
     # assert targets_psms_df.iloc[0, 5] == "sp|P10809|CH60_HUMAN"
     assert targets_psms_df["proteinIds"].iloc[0] == "sp|P10809|CH60_HUMAN"
 
@@ -230,7 +228,7 @@ def test_negative_features(tmp_path, psm_df_1000):
         df["Label"] = targets * 1  # Q: what does the *1 do ?
         df["feat"] = scores * (1 if desc else -1)
 
-        # Why is this re-shuffled?
+        # Q: Why is this re-shuffled?
         # df["scannr"] = np.random.randint(0, 1000, 1000)
         file = tmp_path / filename
         df.to_csv(file, sep="\t", index=False)
@@ -292,20 +290,25 @@ def test_negative_features(tmp_path, psm_df_1000):
 
     # Q: isnt the right behavior to have the scaled version of the data
     # instead of just the negated feature??
-    sorted_df1b = df1b[df1b.Label == 1].sort_values(by="specid")
+
+    sorted_df1b = df1b[df1b.Label == 1].sort_values(by="scannr")
     feature_col1 = sorted_df1b.feat
-    sorted_psms_df1b = psms_df1b.sort_values(by="PSMId")
+    sorted_psms_df1b = psms_df1b.sort_values(by="scannr")
     score_col1 = sorted_psms_df1b.score
+
     np.testing.assert_equal(
         # Note, stable was introduced in v2.0.0
         np.argsort(feature_col1.to_numpy()),  # , stable=True),
         np.argsort(score_col1.to_numpy()),  # , stable=True)
     )
+    # Q: is this meant to be the behavior? shouldnt the score be a
+    #    scaled/calibrated version of the feature? thus not equal
+    #    to the feature?
     pd.testing.assert_series_equal(
         score_col1, feature_col1, check_index=False, check_names=False
     )
 
-    feature_col2 = df2b[df2b.Label == 1].sort_values(by="specid").feat
+    feature_col2 = df2b[df2b.Label == 1].sort_values(by="PSMId").feat
     score_col2 = psms_df2b.sort_values(by="PSMId").score
     pd.testing.assert_series_equal(
         score_col2, -feature_col2, check_index=False, check_names=False

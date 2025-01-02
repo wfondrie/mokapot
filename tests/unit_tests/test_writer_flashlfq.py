@@ -1,11 +1,11 @@
 """Test that FlashLFQ export is working"""
 
-import pytest
-import mokapot
 import pandas as pd
+import pytest
+
+import mokapot
+from mokapot import LinearPsmDataset, read_pin
 from mokapot.writers.flashlfq import _format_flashlfq
-from mokapot import LinearPsmDataset
-from mokapot import read_pin
 
 EXPECTED_COLS = {
     "File Name",
@@ -110,28 +110,26 @@ def flashlfq_psms_ds_ondisk(psm_df_builder, tmp_path):
 
 @pytest.mark.parametrize("deduplication", [True, False])
 def test_internal_flashlfq_ondisk(flashlfq_psms_ds_ondisk, deduplication):
-    if deduplication:
-        pytest.skip("Deduplication is not working")
-
     mods, scores = mokapot.brew([flashlfq_psms_ds_ondisk], test_fdr=0.1)
     conf = mokapot.assign_confidence(
         [flashlfq_psms_ds_ondisk],
         scores_list=scores,
         eval_fdr=0.1,
-        deduplication=deduplication,  # RN fails with deduplication = True
+        deduplication=deduplication,
     )
     _tmp = _format_flashlfq(conf[0])
     for col in EXPECTED_COLS:
         assert col in _tmp.columns, f"Column {col} not found in output"
 
 
-def test_internal_flashlfq(flashlfq_psms_ds):
+@pytest.mark.parametrize("deduplication", [True, False])
+def test_internal_flashlfq(flashlfq_psms_ds, deduplication):
     mods, scores = mokapot.brew([flashlfq_psms_ds], test_fdr=0.1)
     conf = mokapot.assign_confidence(
         [flashlfq_psms_ds],
         scores_list=scores,
         eval_fdr=0.1,
-        deduplication=False,  # RN fails with deduplication = True
+        deduplication=deduplication,
     )
     _tmp = _format_flashlfq(conf[0])
 

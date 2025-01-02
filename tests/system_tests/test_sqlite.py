@@ -6,10 +6,12 @@ output, just that the expect outputs are created.
 """
 
 import sqlite3
-import pytest
 from pathlib import Path
 
+import pytest
+
 from mokapot.tabular_data import CSVFileReader
+
 from ..helpers.cli import run_mokapot_cli
 
 

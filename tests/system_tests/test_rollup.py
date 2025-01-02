@@ -12,8 +12,9 @@ import pandas as pd
 import pytest
 
 import mokapot
+
 from ..helpers.cli import run_mokapot_cli
-from ..helpers.utils import file_exist, file_approx_len, count_lines
+from ..helpers.utils import count_lines, file_approx_len, file_exist
 
 
 @contextlib.contextmanager

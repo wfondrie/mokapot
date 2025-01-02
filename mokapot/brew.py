@@ -5,7 +5,7 @@ Defines a function to run the Percolator algorithm.
 import copy
 import logging
 from operator import itemgetter
-from typing import Iterable, Generator
+from typing import Generator, Iterable
 
 import numpy as np
 import pandas as pd
@@ -14,16 +14,16 @@ from typeguard import typechecked
 
 from mokapot import utils
 from mokapot.constants import (
-    CHUNK_SIZE_ROWS_PREDICTION,
     CHUNK_SIZE_READ_ALL_DATA,
+    CHUNK_SIZE_ROWS_PREDICTION,
 )
 from mokapot.dataset import (
     LinearPsmDataset,
+    PsmDataset,
     calibrate_scores,
     update_labels,
-    PsmDataset,
 )
-from mokapot.model import PercolatorModel, Model
+from mokapot.model import Model, PercolatorModel
 from mokapot.parsers.pin import parse_in_chunks
 from mokapot.utils import strictzip
 
@@ -122,14 +122,15 @@ def brew(
     data_size = [len(datasets.spectra_dataframe) for datasets in datasets]
     if sum(data_size) > 1:
         LOGGER.info("Found %i total PSMs.", sum(data_size))
-        num_targets = sum([
-            (dataset.spectra_dataframe[dataset.target_column]).sum()
-            for dataset in datasets
-        ])
-        num_decoys = sum([
-            (~dataset.spectra_dataframe[dataset.target_column]).sum()
-            for dataset in datasets
-        ])
+        num_targets = 0
+        num_decoys = 0
+        for dataset in datasets:
+            trg = dataset.target_values
+            local_ntargets = trg.sum()
+            local_ndecoys = len(trg) - local_ntargets
+            num_targets += local_ntargets
+            num_decoys += local_ndecoys
+
         LOGGER.info(
             "  - %i target PSMs and %i decoy PSMs detected.",
             num_targets,
@@ -243,7 +244,12 @@ def brew(
                 )
             )
     else:
-        logging.info("Model training failed. Setting scores to zero.")
+        num_passed = sum([m.is_trained for m in models])
+        num_failed = len(models) - num_passed
+        LOGGER.warning(
+            f"Model training failed on {num_failed}/{len(models)}."
+            " Setting scores to zero."
+        )
         scores = [np.zeros(x) for x in data_size]
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
@@ -257,9 +263,9 @@ def brew(
 
     preds = [
         update_labels(
-            dataset,
-            score,
-            test_fdr,
+            scores=score,
+            targets=dataset.target_values,
+            eval_fdr=test_fdr,
         )
         for dataset, score in zip(datasets, scores)
     ]
@@ -302,9 +308,6 @@ def brew(
         if not desc:
             scores[idx] = -scores[idx]
             descs[idx] = not descs[idx]
-
-    # Coherces the tuple to a list
-    models = list(models)
 
     LOGGER.info("Assigning scores to PSMs...")
     for score, dataset in strictzip(scores, datasets):
@@ -376,8 +379,8 @@ def make_train_sets(
 def _create_linear_dataset(
     dataset: PsmDataset, psms: pd.DataFrame, enforce_checks: bool = True
 ):
-    utils.convert_targets_column(
-        data=psms, target_column=dataset.target_column
+    psms[dataset.target_column] = utils.make_bool_trarget(
+        psms.loc[:, dataset.target_column]
     )
     return LinearPsmDataset(
         psms=psms,
@@ -474,9 +477,9 @@ def _predict(
             del psms_slices, dataset_slices
         del file_iterator
         del model_test_idx
+        # What is this iteration doing?
         for mod in models:
             try:
-                mod.estimator.decision_function
                 scores.append(
                     calibrate_scores(
                         np.hstack(fold_scores.pop(0)),
@@ -528,12 +531,12 @@ def _predict_with_ensemble(
             delayed(model.predict)(dataset=linear_dataset) for model in models
         )
         [score.append(fs) for score, fs in zip(scores, fold_scores)]
-    del fold_scores
+        del fold_scores
     scores = [np.hstack(score) for score in scores]
     return np.mean(scores, axis=0)
 
 
-def _fit_model(train_set, psms, model, fold):
+def _fit_model(train_set, psms, model: Model, fold):
     """
     Fit the estimator using the training data.
 
@@ -541,7 +544,7 @@ def _fit_model(train_set, psms, model, fold):
     ----------
     train_set : PsmDataset
         A PsmDataset that specifies the training data
-    model : tuple of Model
+    model : a mokapot.model.Model
         A Classifier to train.
     fold : int
         The fold number. Only used for logging.

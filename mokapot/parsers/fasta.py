@@ -1,14 +1,14 @@
 """The code for parsing FASTA files"""
 
-import re
 import logging
-from textwrap import wrap
+import re
 from collections import defaultdict
+from textwrap import wrap
 
 import numpy as np
 
-from mokapot.utils import tuplize
 from mokapot.proteins import Proteins
+from mokapot.utils import tuplize
 
 LOGGER = logging.getLogger(__name__)
 

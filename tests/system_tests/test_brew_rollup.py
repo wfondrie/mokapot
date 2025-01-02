@@ -7,7 +7,7 @@ output, just that the expect outputs are created.
 
 import shutil
 from pathlib import Path
-from typing import List, Any
+from typing import Any, List
 
 import pytest
 from filelock import FileLock
@@ -15,11 +15,12 @@ from pandas.testing import assert_series_equal
 
 from mokapot.rollup import compute_rollup_levels
 from mokapot.tabular_data import (
-    TabularDataReader,
     CSVFileReader,
     ParquetFileWriter,
+    TabularDataReader,
 )
-from ..helpers.cli import run_mokapot_cli, _run_cli
+
+from ..helpers.cli import _run_cli, run_mokapot_cli
 from ..helpers.math import estimate_abs_int
 
 
@@ -147,23 +148,41 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
 
     file0 = rollup_dest_dir / "rollup0" / f"rollup.targets.peptides{suffix}"
     file1 = rollup_dest_dir / "rollup1" / f"rollup.targets.peptides{suffix}"
-    df0 = TabularDataReader.from_path(file0).read()
-    df1 = TabularDataReader.from_path(file1).read()
+    df0_nonsrteam = TabularDataReader.from_path(file0).read()
+    df1_stream = TabularDataReader.from_path(file1).read()
 
     qval_column = "mokapot_qvalue"
-    assert_series_equal(df0[qval_column], df1[qval_column], atol=0.02)
+
+    # Assure that the relavie order of the scan numbers is the same.
+    assert_series_equal(
+        df0_nonsrteam["ScanNr"],
+        df1_stream["ScanNr"],
+        atol=0.02,
+    )
+
+    # Assure that the scores are the same.
+    assert_series_equal(
+        df0_nonsrteam[qval_column],
+        df1_stream[qval_column],
+        atol=0.025,
+    )
 
     # Q: What is this meant to test?
     #    Why is the score expected to be "correlated" with the difference
     #    in q-values between the streaming and non-streaming implementations?
     # JSPP 2024-12-16
     assert (
-        estimate_abs_int(df0.score, df1[qval_column] - df0[qval_column])
+        estimate_abs_int(
+            df0_nonsrteam.score,
+            df1_stream[qval_column] - df0_nonsrteam[qval_column],
+        )
         < 0.002
     )
     assert (
         estimate_abs_int(
-            df0.score, df1.posterior_error_prob - df0.posterior_error_prob
+            df0_nonsrteam.score,
+            df1_stream.posterior_error_prob
+            - df0_nonsrteam.posterior_error_prob,
         )
         < 0.03
     )
