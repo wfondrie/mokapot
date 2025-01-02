@@ -1220,7 +1220,7 @@ wheels = [
 
 [[package]]
 name = "mokapot"
-version = "0.10.1.dev50+g614971f.d20250101"
+version = "0.10.1.dev51+g1ec39df.d20250102"
 source = { editable = "." }
 dependencies = [
     { name = "importlib-metadata" },

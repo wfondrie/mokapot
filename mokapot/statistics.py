@@ -105,19 +105,17 @@ class OnlineStatistics:
 
 
 @typechecked
+@dataclass(slots=True)
 class HistData:
     bin_edges: np.ndarray[float]
     counts: np.ndarray[int]
 
-    def __init__(self, bin_edges: np.ndarray[float], counts: np.ndarray[int]):
-        if len(bin_edges) != len(counts) + 1:
+    def __post_init__(self):
+        if len(self.bin_edges) != len(self.counts) + 1:
             raise ValueError(
                 "`bin_edges` must have one more element than `counts` "
-                f"({len(bin_edges)=}, {len(counts)=})"
+                f"({len(self.bin_edges)=}, {len(self.counts)=})"
             )
-
-        self.bin_edges = bin_edges
-        self.counts = counts
 
     @property
     def bin_centers(self) -> np.ndarray[float]:

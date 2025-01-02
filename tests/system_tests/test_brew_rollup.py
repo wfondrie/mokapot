@@ -158,13 +158,38 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
         df0_nonsrteam["ScanNr"],
         df1_stream["ScanNr"],
         atol=0.02,
+        obj="Scan numbers",
     )
 
+    ########
+
+    # from matplotlib import pyplot as plt
+
+    # plt.scatter(
+    #     x=df1_stream[qval_column],
+    #     y=df0_nonsrteam[qval_column],
+    # )
+    # plt.xlabel("Streaming q-values")
+    # plt.ylabel("Non-streaming q-values")
+    # plt.legend()
+    # plt.show()
+
+    ########
+
     # Assure that the scores are the same.
+    # Assure the number of significant PSMs is the same.
+    nsig_steam = sum(df1_stream[qval_column] < 0.05)
+    nsig_nonstream = sum(df0_nonsrteam[qval_column] < 0.05)
+    assert nsig_steam == nsig_nonstream, (
+        "Number of significant PSMs is different:"
+        f" {nsig_steam} vs {nsig_nonstream}"
+    )
+
     assert_series_equal(
         df0_nonsrteam[qval_column],
         df1_stream[qval_column],
         atol=0.025,
+        obj="q-values",
     )
 
     # Q: What is this meant to test?

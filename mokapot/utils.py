@@ -131,6 +131,14 @@ def make_bool_trarget(target_column: pd.Series):
     if target_column.dtype == bool:
         return target_column
 
+    if target_column.dtype == object:
+        try:
+            target_column = target_column.astype(int)
+        except ValueError as e:
+            raise ValueError(
+                "The target column is not convertible to integers."
+            ) from e
+
     if target_column.dtype == int or target_column.dtype == float:
         # Check if all values are 0 or 1
         uniq_vals = target_column.unique().tolist()
@@ -153,7 +161,35 @@ def make_bool_trarget(target_column: pd.Series):
         "Target column "
         "has values that are not boolean, 0/1 or -1/1,"
         f" please check and fix. ({target_column})"
+        f" of dtype {target_column.dtype}"
     )
+
+
+def convert_targets_column(
+    data: pd.DataFrame, target_column: str
+) -> pd.DataFrame:
+    """Converts target column to boolean.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        The DataFrame containing the target column to be converted (will be
+        modified in-place).
+    target_column : str
+        The name of the target column in the DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame with the target column converted to boolean.
+
+    Raises
+    ------
+    ValueError
+        If the target column contains values other than -1, 0, or 1.
+    """
+    data[target_column] = make_bool_trarget(data[target_column])
+    return data
 
 
 @typechecked
