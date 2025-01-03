@@ -98,6 +98,21 @@ class TDCQvalueAlgorithm(QvalueAlgorithm):
 
 
 @typechecked
+class CountsQvalueAlgorithm(QvalueAlgorithm):
+    def __init__(self, tdc: bool):
+        self.tdc = tdc
+
+    def qvalues(self, scores, targets, desc):
+        if not desc:
+            scores = -scores
+        qvals = qvalues.qvalues_from_counts(scores, targets, is_tdc=self.tdc)
+        return qvals
+
+    def long_desc(self):
+        return "mokapot tdc algorithm"
+
+
+@typechecked
 class StoreyQvalueAlgorithm(QvalueAlgorithm):
     def __init__(self, *, pvalue_method="best"):
         super().__init__()
@@ -135,7 +150,9 @@ def configure_algorithms(config):
         case ("storey_bootstrap", _):
             pi0_algorithm = StoreyPi0Algorithm("bootstrap", config.pi0_eval_lambda)
         case ("storey_smoother", _):
-            pi0_algorithm = StoreyPi0Algorithm("bootstrap", config.pi0_eval_lambda)
+            pi0_algorithm = StoreyPi0Algorithm("smoother", config.pi0_eval_lambda)
+        case ("slope", _):
+            pi0_algorithm = SlopePi0Algorithm()
         case _:
             raise NotImplementedError
     Pi0EstAlgorithm.set_algorithm(pi0_algorithm)
@@ -149,6 +166,8 @@ def configure_algorithms(config):
             qvalue_algorithm = TDCQvalueAlgorithm()
         case ("default", False) | ("storey", _):
             qvalue_algorithm = StoreyQvalueAlgorithm()
+        case ("from_counts", _):
+            qvalue_algorithm = CountsQvalueAlgorithm(tdc)
         case _:
             raise NotImplementedError
     QvalueAlgorithm.set_algorithm(qvalue_algorithm)
@@ -156,11 +175,24 @@ def configure_algorithms(config):
 
 QvalueAlgorithm.set_algorithm(TDCQvalueAlgorithm())
 
-# config.peps_algorithm
-# config.peps_error
-# config.qvalue_algorithm
-# config.tdc
-# config.stream_confidence
 
-# config.pi0_algorithm
-# config.pi0_eval_lambda
+"""
+Problems with Mokapot <> Storey:
+ 
+* pi0 estimation is instable for ordinal scores (could be fixed with linear 
+  regression instead of division)
+* pvalue calculation is horribly wrong for scores that are one-hot encoded, 
+   resulting in horribly wrong pi0 values (hard to circumvent, probably needs 
+   sanitization of features to some degree)
+* if mokapot is forced to use the same feature as the initial direction with 
+  storey as it normally uses with tdc, then training succeeds and looks similar 
+  to tdc, but fails right after the training is done (some code is being called 
+  that should not be called)
+
+todo: 
+ * try slope method for pi0 estimation on pvalues
+ * check and improve pvalue computation for discrete distributions 
+ * check pi0 estimation with ratios for tdc/storey
+ * implement storey with bootstrap
+ * fix this shit with the number of columns  
+"""

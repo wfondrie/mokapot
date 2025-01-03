@@ -354,7 +354,10 @@ def _parser():
     parser.add_argument(
         "--pi0_eval_lambda",
         default=0.5,
-        help=("Specify the lambda in Storey's pi0 estimation for evaluation. "),
+        help=(
+            "Specify the lambda in Storey's pi0 estimation for evaluation "
+            "(works currently only with storey_* pi0 algorithms."
+        ),
     )
 
     parser.add_argument(

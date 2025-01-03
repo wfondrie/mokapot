@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from ..helpers.cli import run_mokapot_cli
-from ..helpers.utils import file_approx_len, file_missing, file_exist
+from ..helpers.utils import file_approx_len, file_exist, file_missing
 
 
 @pytest.fixture
@@ -75,23 +75,15 @@ def test_cli_options(tmp_path, scope_files):
     filebase = ["blah." + f.name.split(".")[0] for f in scope_files[0:2]]
 
     assert file_approx_len(tmp_path, f"{filebase[0]}.targets.psms.csv", 5490)
-    assert file_approx_len(
-        tmp_path, f"{filebase[0]}.targets.peptides.csv", 5194
-    )
+    assert file_approx_len(tmp_path, f"{filebase[0]}.targets.peptides.csv", 5194)
     assert file_approx_len(tmp_path, f"{filebase[1]}.targets.psms.csv", 4659)
-    assert file_approx_len(
-        tmp_path, f"{filebase[1]}.targets.peptides.csv", 4406
-    )
+    assert file_approx_len(tmp_path, f"{filebase[1]}.targets.peptides.csv", 4406)
 
     # Test keep_decoys:
     assert file_approx_len(tmp_path, f"{filebase[0]}.decoys.psms.csv", 2090)
-    assert file_approx_len(
-        tmp_path, f"{filebase[0]}.decoys.peptides.csv", 2037
-    )
+    assert file_approx_len(tmp_path, f"{filebase[0]}.decoys.peptides.csv", 2037)
     assert file_approx_len(tmp_path, f"{filebase[1]}.decoys.psms.csv", 1806)
-    assert file_approx_len(
-        tmp_path, f"{filebase[1]}.decoys.peptides.csv", 1755
-    )
+    assert file_approx_len(tmp_path, f"{filebase[1]}.decoys.peptides.csv", 1755)
 
 
 def test_cli_aggregate(tmp_path, scope_files):
@@ -292,3 +284,52 @@ def test_negative_features(tmp_path, psm_df_1000):
     assert mean_scores("test2")[2]
     assert mean_scores("test1b")[2]
     assert mean_scores("test2b")[2]  # This one is the most likely to fail
+
+
+def test_cli_algo_options(tmp_path, scope_files):
+    """Test that algorithm options work."""
+
+    def read_psms(root):
+        file = Path(tmp_path, f"{root}.targets.psms.csv")
+        if not file.exists():
+            raise FileNotFoundError(f"File {file} does not exist")
+        return pd.read_csv(file, sep="\t", index_col=None)
+
+    params = [scope_files[0], "--dest_dir", tmp_path, "--verbosity", 3]
+
+    def run_with_options(
+        tdc, qvalue_algorithm, root="test", pi0algo="default", pi0lambda=None
+    ):
+        call_params = params + [
+            "--tdc" if tdc else "--no-tdc",
+            ("--qvalue_algorithm", qvalue_algorithm),
+            ("--pi0_algorithm", pi0algo),
+            ("--file_root", root),
+        ]
+        if pi0lambda is not None:
+            call_params += [("--pi0_lambda", pi0lambda)]
+        run_mokapot_cli(call_params, capture_output=True)
+        return read_psms(root)
+
+    # with pytest.raises(SystemExit):
+    #     # todo: capture stderr
+    #     run_mokapot_cli(params + ["--qvalue_algorithm", "xyz"])
+    #
+    # with pytest.raises(Exception):
+    #     run_mokapot_cli(params + ["--no-tdc", "--qvalue_algorithm", "tdc"])
+
+    # tdc
+    # targets_psms_df1 = run_with_options(True, "default")
+    # targets_psms_df2 = run_with_options(True, "tdc")
+    # pd.testing.assert_frame_equal(targets_psms_df1, targets_psms_df2)
+
+    # targets_psms_df3 = run_with_options(True, "from_counts")
+
+    targets_psms_df3 = run_with_options(True, "storey", pi0algo="storey_fixed")
+    # targets_psms_df3 = run_with_options(False, "storey")
+    # targets_psms_df3 = run_with_options(False, "storey", pi0algo="slope")
+    # targets_psms_df3 = run_with_options(False, "storey", pi0algo="storey_smoother")
+
+    # no-tdc
+
+    # run_with_options(True, "storey", "test1")

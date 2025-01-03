@@ -5,10 +5,10 @@ This module contains the parsers for reading in PSMs
 import logging
 import warnings
 from pathlib import Path
-from typing import List, Iterable
+from typing import Iterable, List
 
 import pandas as pd
-from joblib import Parallel, delayed
+from joblib import delayed, Parallel
 from typeguard import typechecked
 
 from mokapot.constants import (
@@ -17,17 +17,13 @@ from mokapot.constants import (
 )
 from mokapot.dataset import OnDiskPsmDataset
 from mokapot.parsers.helpers import (
-    find_optional_column,
     find_columns,
+    find_optional_column,
     find_required_column,
 )
 from mokapot.tabular_data import TabularDataReader
-from mokapot.utils import (
-    tuplize,
-    create_chunks,
-    convert_targets_column,
-    flatten,
-)
+from mokapot.utils import convert_targets_column, create_chunks, flatten, \
+    tuplize
 
 LOGGER = logging.getLogger(__name__)
 
@@ -230,6 +226,8 @@ def read_percolator(
         )
         for c in feat_slices
     )
+
+    logging.info(f"Spectra list {df_spectra_list}")
     df_spectra = convert_targets_column(
         pd.concat(df_spectra_list), target_column=labels
     )
@@ -242,9 +240,9 @@ def read_percolator(
             LOGGER.warning("  - %s", col)
 
         LOGGER.warning("Dropping features with missing values...")
-    _feature_columns = tuple([
-        feature for feature in features if feature not in features_to_drop
-    ])
+    _feature_columns = tuple(
+        [feature for feature in features if feature not in features_to_drop]
+    )
 
     LOGGER.info("Using %i features:", len(_feature_columns))
     for i, feat in enumerate(_feature_columns):
@@ -373,20 +371,14 @@ def parse_in_chunks(
         list of dataframes
     """
 
-    train_psms = [
-        [[] for _ in range(len(train_idx))] for _ in range(len(datasets))
-    ]
-    for dataset, idx, file_idx in zip(
-        datasets, zip(*train_idx), range(len(datasets))
-    ):
+    train_psms = [[[] for _ in range(len(train_idx))] for _ in range(len(datasets))]
+    for dataset, idx, file_idx in zip(datasets, zip(*train_idx), range(len(datasets))):
         reader = dataset.reader
         file_iterator = reader.get_chunked_data_iterator(
             chunk_size=chunk_size, columns=dataset.columns
         )
         Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(get_rows_from_dataframe)(
-                idx, chunk, train_psms, dataset, file_idx
-            )
+            delayed(get_rows_from_dataframe)(idx, chunk, train_psms, dataset, file_idx)
             for chunk in file_iterator
         )
     train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(

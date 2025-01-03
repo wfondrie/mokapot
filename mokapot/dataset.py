@@ -713,8 +713,18 @@ def _update_labels(
     if isinstance(targets, pd.Series):
         targets = targets.values.astype(bool)
 
+    import mokapot.qvalues as qvalues
+
     qvals = QvalueAlgorithm.eval(scores, targets=targets, desc=desc)
+    qvals_old = qvalues.tdc(scores, targets, desc=desc)
     unlabeled = np.logical_and(qvals > eval_fdr, targets)
+
+    # import matplotlib.pyplot as plt
+    #
+    # plt.hist([qvals, qvals_old], bins=20)
+    # plt.legend(["storey", "tdc"])
+    # plt.show()
+    qvals = qvals_old
     new_labels = np.ones(len(qvals))
     new_labels[~targets] = -1
     new_labels[unlabeled] = 0
