@@ -54,7 +54,6 @@ def test_pin_wo_dir():
     mokapot.read_pin(Path("data", "scope2_FP97AA.pin"), max_workers=4)
 
 
-@pytest.mark.xfail()
 def test_read_percolator():
     reader = TabularDataReader.from_path(Path("data", "scope2_FP97AA.pin"))
     mokapot.read_percolator(reader)
@@ -68,7 +67,6 @@ def test_read_percolator():
     mokapot.read_percolator(subset_reader)
 
 
-@pytest.mark.xfail()
 def test_create_chunks_with_identifier():
     identifier = ["ScanNr", "ExpMass", "Label"]
     features = ["lnrSp", "deltLCn", "deltCn", "Sp", "IonFrac"]

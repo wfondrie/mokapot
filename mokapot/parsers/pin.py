@@ -116,27 +116,31 @@ def read_pin(
     return datasets
 
 
-def create_chunks_with_identifier(data, identifier_column, chunk_size):
+def create_chunks_with_identifier(feature_columns, identifier_columns, chunk_size):
     """
-    This function will split data into chunks but will make sure that
+    This function will split columns into chunks but will make sure that
     identifier_columns is never split
 
     Parameters
     ----------
-    data: the data you want to split in chunks (1d list)
-    identifier_column: columns that should never be splitted.
-        Must be of length 2.
+    feature_columns: the data you want to split in chunks (1d list)
+    identifier_columns: columns that should never be split.
     chunk_size: the chunk size
 
     Returns
     -------
 
     """
-    if (len(data) + len(identifier_column)) % chunk_size != 1:
-        data_copy = data + identifier_column
-        return create_chunks(data_copy, chunk_size)
+    N_feature = len(feature_columns)
+    N_identifier = len(identifier_columns)
+    unique = set(feature_columns + identifier_columns)
+    if len(unique) != N_feature + N_identifier:
+        raise ValueError("Feature and identifier columns must be unique and disjoint.")
+
+    if N_identifier > chunk_size:
+        return [identifier_columns] + create_chunks(feature_columns, chunk_size)
     else:
-        return create_chunks(data, chunk_size) + [identifier_column]
+        return create_chunks(identifier_columns + feature_columns, chunk_size)
 
 
 def read_percolator(
@@ -211,8 +215,8 @@ def read_percolator(
 
     # Check that features don't have missing values:
     feat_slices = create_chunks_with_identifier(
-        data=features,
-        identifier_column=spectra + [labels],
+        feature_columns=features,
+        identifier_columns=spectra + [labels],
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
