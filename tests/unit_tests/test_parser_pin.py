@@ -2,10 +2,13 @@
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
 import mokapot
+from mokapot.parsers.pin import create_chunks_with_identifier
+from mokapot.tabular_data import ColumnSelectReader, TabularDataReader
 
 
 @pytest.fixture
@@ -49,3 +52,27 @@ def test_pin_parsing(std_pin):
 def test_pin_wo_dir():
     """Test a PIN file without a DefaultDirection line"""
     mokapot.read_pin(Path("data", "scope2_FP97AA.pin"), max_workers=4)
+
+
+def test_read_percolator():
+    reader = TabularDataReader.from_path(Path("data", "scope2_FP97AA.pin"))
+    mokapot.read_percolator(reader)
+
+    all_cols = reader.get_column_names()
+
+    all_cols.remove("Charge3")
+    all_cols.remove("Charge4")
+    all_cols.remove("Charge5")
+    subset_reader = ColumnSelectReader(reader, selected_columns=all_cols)
+    mokapot.read_percolator(subset_reader)
+
+
+def test_create_chunks_with_identifier():
+    identifier = ["ScanNr", "ExpMass", "Label"]
+    features = ["lnrSp", "deltLCn", "deltCn", "Sp", "IonFrac"]
+    features += ["RefactoredXCorr", "NegLog10PValue", "NegLog10ResEvPValue"]
+    N_identifier = len(identifier)
+    for cs in range(3, 11):
+        chunks = create_chunks_with_identifier(features, identifier, cs)
+        lens = np.array([len(set(chunk).intersection(identifier)) for chunk in chunks])
+        assert sum(lens) == N_identifier and all(lens % N_identifier == 0)

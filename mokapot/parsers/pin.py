@@ -4,8 +4,7 @@ This module contains the parsers for reading in PSMs
 
 import logging
 import warnings
-from pathlib import Path
-from typing import Iterable, List
+from typing import Any, Iterable, List
 
 import pandas as pd
 from joblib import delayed, Parallel
@@ -97,9 +96,14 @@ def read_pin(
         containing the PSMs from all of the PIN files.
     """
     logging.info("Parsing PSMs...")
-    return [
-        read_percolator(
-            pin_file,
+
+    datasets = []
+    for pin_file in tuplize(pin_files):
+        LOGGER.info(f"Reading {pin_file}...")
+        reader = TabularDataReader.from_path(pin_file)
+
+        dataset = read_percolator(
+            reader,
             max_workers=max_workers,
             filename_column=filename_column,
             calcmass_column=calcmass_column,
@@ -107,53 +111,54 @@ def read_pin(
             rt_column=rt_column,
             charge_column=charge_column,
         )
-        for pin_file in tuplize(pin_files)
-    ]
+        datasets.append(dataset)
+
+    return datasets
 
 
-def create_chunks_with_identifier(data, identifier_column, chunk_size):
+def create_chunks_with_identifier(feature_columns, identifier_columns, chunk_size):
     """
-    This function will split data into chunks but will make sure that
+    This function will split columns into chunks but will make sure that
     identifier_columns is never split
 
     Parameters
     ----------
-    data: the data you want to split in chunks (1d list)
-    identifier_column: columns that should never be splitted.
-        Must be of length 2.
+    feature_columns: the data you want to split in chunks (1d list)
+    identifier_columns: columns that should never be split.
     chunk_size: the chunk size
 
     Returns
     -------
 
     """
-    if (len(data) + len(identifier_column)) % chunk_size != 1:
-        data_copy = data + identifier_column
-        return create_chunks(data_copy, chunk_size)
+    N_feature = len(feature_columns)
+    N_identifier = len(identifier_columns)
+    unique = set(feature_columns + identifier_columns)
+    if len(unique) != N_feature + N_identifier:
+        raise ValueError("Feature and identifier columns must be unique and disjoint.")
+
+    if N_identifier > chunk_size:
+        return [identifier_columns] + create_chunks(feature_columns, chunk_size)
     else:
-        return create_chunks(data, chunk_size) + [identifier_column]
+        return create_chunks(identifier_columns + feature_columns, chunk_size)
 
 
 def read_percolator(
-    perc_file: Path,
-    max_workers,
-    filename_column=None,
-    calcmass_column=None,
-    expmass_column=None,
-    rt_column=None,
-    charge_column=None,
+    reader: TabularDataReader,
+    max_workers: Any = -1,
+    filename_column: str | None = None,
+    calcmass_column: str | None = None,
+    expmass_column: str | None = None,
+    rt_column: str | None = None,
+    charge_column: str | None = None,
 ):
     """
-    Read a Percolator tab-delimited file.
-
-    Percolator input format (PIN) files and the Percolator result files
-    are tab-delimited, but also have a tab-delimited protein list as the
-    final column. This function parses the file and returns a DataFrame.
+    Read a TabularDataReader containing Percolator input data.
 
     Parameters
     ----------
-    perc_file : Path
-        The file to parse.
+    reader : TabularDataReader
+        The data to parse.
 
     Returns
     -------
@@ -161,8 +166,6 @@ def read_percolator(
         A DataFrame of the parsed data.
     """
 
-    LOGGER.info("Reading %s...", perc_file)
-    reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
     col_types = reader.get_column_types()
 
@@ -212,8 +215,8 @@ def read_percolator(
 
     # Check that features don't have missing values:
     feat_slices = create_chunks_with_identifier(
-        data=features,
-        identifier_column=spectra + [labels],
+        feature_columns=features,
+        identifier_columns=spectra + [labels],
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
@@ -249,7 +252,7 @@ def read_percolator(
         LOGGER.debug("  (%i)\t%s", i + 1, feat)
 
     return OnDiskPsmDataset(
-        perc_file,
+        reader,
         columns=columns,
         target_column=labels,
         spectrum_columns=spectra,
