@@ -34,11 +34,11 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics"
 ]
 dependencies = [
-  "numpy>=1.4.0,<2.0.0",  # required for triqler https://github.com/statisticalbiotechnology/triqler/pull/34
+  "numpy>=2.0.0,<3.0.0",
   "pandas>=1.0.3",
   "scikit-learn>=0.22.1",
   "lxml>=4.6.2",
-  "triqler>=0.6.2",
+  "triqler>=0.8.0",
   "joblib>=1.1.0",
   "importlib-metadata>=5.1.0",
   "typeguard>=4.1.5",
