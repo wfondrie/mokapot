@@ -441,12 +441,10 @@ def assign_confidence(
                 writer.initialize()
 
             def hash_data_row(data_row):
-                return str(
-                    [
-                        data_row[level_input_output_column_mapping.get(col, col)]
-                        for col in level_hash_columns[level]
-                    ]
-                )
+                return str([
+                    data_row[level_input_output_column_mapping.get(col, col)]
+                    for col in level_hash_columns[level]
+                ])
 
             seen_level_entities = {level: set() for level in levels}
             score_stats = OnlineStatistics()
@@ -516,12 +514,10 @@ def create_sorted_file_reader(
 
     # Create a reader that only reads columns given in psms.metadata_columns
     # in chunks of size CONFIDENCE_CHUNK_SIZE and joins the scores to it
-    reader = join_readers(
-        [
-            ColumnMappedReader(dataset.reader, input_output_column_mapping),
-            score_reader,
-        ]
-    )
+    reader = join_readers([
+        ColumnMappedReader(dataset.reader, input_output_column_mapping),
+        score_reader,
+    ])
     input_columns = dataset.metadata_columns + ["score"]
     output_columns = [
         input_output_column_mapping.get(name, name) for name in input_columns

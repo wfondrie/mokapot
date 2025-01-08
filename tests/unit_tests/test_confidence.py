@@ -99,20 +99,16 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path):
     assert df["PSMId"].tolist() == [136, 96, 164]
     assert df["peptide"].tolist() == ["EVSSK", "HDWCK", "SYQVK"]
     assert df["score"].tolist() == approx([5.767435, 5.572517, 5.531904])
-    assert df["q-value"].tolist() == approx(
-        [
-            0.0103092780336737,
-            0.0103092780336737,
-            0.0103092780336737,
-        ]
-    )
-    assert df["posterior_error_prob"].tolist() == approx(
-        [
-            3.315389846699129e-05,
-            5.558992546200682e-05,
-            6.191049743361808e-05,
-        ]
-    )
+    assert df["q-value"].tolist() == approx([
+        0.0103092780336737,
+        0.0103092780336737,
+        0.0103092780336737,
+    ])
+    assert df["posterior_error_prob"].tolist() == approx([
+        3.315389846699129e-05,
+        5.558992546200682e-05,
+        6.191049743361808e-05,
+    ])
 
 
 def test_assign_confidence_parquet(psm_df_1000_parquet, tmp_path):

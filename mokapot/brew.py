@@ -13,8 +13,7 @@ from joblib import delayed, Parallel
 from typeguard import typechecked
 
 from mokapot import utils
-from mokapot.constants import CHUNK_SIZE_READ_ALL_DATA, \
-    CHUNK_SIZE_ROWS_PREDICTION
+from mokapot.constants import CHUNK_SIZE_READ_ALL_DATA, CHUNK_SIZE_ROWS_PREDICTION
 from mokapot.dataset import (
     calibrate_scores,
     LinearPsmDataset,
@@ -114,18 +113,14 @@ def brew(
     data_size = [len(datasets.spectra_dataframe) for datasets in datasets]
     if sum(data_size) > 1:
         LOGGER.info("Found %i total PSMs.", sum(data_size))
-        num_targets = sum(
-            [
-                (dataset.spectra_dataframe[dataset.target_column]).sum()
-                for dataset in datasets
-            ]
-        )
-        num_decoys = sum(
-            [
-                (~dataset.spectra_dataframe[dataset.target_column]).sum()
-                for dataset in datasets
-            ]
-        )
+        num_targets = sum([
+            (dataset.spectra_dataframe[dataset.target_column]).sum()
+            for dataset in datasets
+        ])
+        num_decoys = sum([
+            (~dataset.spectra_dataframe[dataset.target_column]).sum()
+            for dataset in datasets
+        ])
         LOGGER.info(
             "  - %i target PSMs and %i decoy PSMs detected.",
             num_targets,
