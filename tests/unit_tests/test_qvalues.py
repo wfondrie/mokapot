@@ -250,3 +250,21 @@ def test_compare_rand_qvalues_from_hist_vs_count(rand_scores):
     qvals_counts = qvalues_from_counts(scores, targets, is_tdc=True)
 
     np.testing.assert_allclose(qvals_hist, qvals_counts, atol=0.02)
+
+
+def test_qvalues_discrete(rand_scores):
+    scores, targets = rand_scores
+    scores = np.asarray(scores > scores.mean(), dtype=float)
+
+    qvals_tdc = tdc(scores, targets)
+
+    qvals_counts = qvalues_from_counts(scores, targets, is_tdc=True)
+    np.testing.assert_allclose(qvals_counts, qvals_tdc)
+
+    # A tolerance of 0.1 is okay in the following tests, since the methods are
+    # widely different.
+    qvals_st1 = qvalues_from_storeys_algo(scores, targets, pvalue_method="conservative")
+    np.testing.assert_allclose(qvals_st1, qvals_tdc, atol=0.1)
+
+    qvals_st2 = qvalues_from_storeys_algo(scores, targets, pvalue_method="storey")
+    np.testing.assert_allclose(qvals_st2, qvals_tdc, atol=0.1)

@@ -49,16 +49,33 @@ def empirical_pvalues(
     .. [1] B V North, D Curtis, P C Sham, A Note on the Calculation of
        Empirical P Values from Monte Carlo Procedures,  Am J Hum Genet, 2003
        Feb;72(2):498–499. doi: 10.1086/346173
+    .. [2] https://en.wikipedia.org/wiki/P-value#Definition
     """
     N = len(s0)
-    emp_null = sp.stats.ecdf(s0)
-    p = emp_null.sf.evaluate(s)
+
+    # The p-value of some test statistic is the probability this or a higher
+    # value would be attained under the null hypothesis, i.e. p=Pr(S>=s|H0) (see
+    # [2], or p=Pr(S0>=s) if we denote by S0 the sample distribution under H0.
+    # The cumulative distribution function (CDF) of S0 is given by
+    # F_{S0}(s) = Pr(S0<=s).
+    # Since the event S0<=s happens exactly when -S0>=-s, we see that
+    # p=Pr(S0>=s)=Pr(-S0<=-s)=F_{-S0}(-s).
+    # Note: some derivations out in the wild are not correct, as they don't
+    # consider discrete or mixed distributions and compute the p-value via the
+    # survival function SF_{S0}(s)=Pr(S0>s), which is okay for continuous
+    # distributions, but problematic otherwise, if the distribution has
+    # non-zero probability mass at s.
+    emp_null = sp.stats.ecdf(-s0)
+    p = emp_null.cdf.evaluate(-s)
+
     mode = mode.lower()
     if mode == "unbiased":
         return p
     elif mode == "storey":
+        # Apply Storey's correction for 0 p-values
         return np.maximum(p, 1.0 / N)
     elif mode == "conservative":
+        # Make p-values slightly biased, but conservative (see [1])
         return (p * N + 1) / (N + 1)
     else:
         raise ValueError(
