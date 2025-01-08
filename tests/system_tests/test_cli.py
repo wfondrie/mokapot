@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from ..helpers.cli import run_mokapot_cli
-from ..helpers.utils import file_approx_len, file_missing, file_exist
+from ..helpers.utils import file_approx_len, file_exist, file_missing
 
 
 @pytest.fixture
@@ -75,23 +75,15 @@ def test_cli_options(tmp_path, scope_files):
     filebase = ["blah." + f.name.split(".")[0] for f in scope_files[0:2]]
 
     assert file_approx_len(tmp_path, f"{filebase[0]}.targets.psms.csv", 5490)
-    assert file_approx_len(
-        tmp_path, f"{filebase[0]}.targets.peptides.csv", 5194
-    )
+    assert file_approx_len(tmp_path, f"{filebase[0]}.targets.peptides.csv", 5194)
     assert file_approx_len(tmp_path, f"{filebase[1]}.targets.psms.csv", 4659)
-    assert file_approx_len(
-        tmp_path, f"{filebase[1]}.targets.peptides.csv", 4406
-    )
+    assert file_approx_len(tmp_path, f"{filebase[1]}.targets.peptides.csv", 4406)
 
     # Test keep_decoys:
     assert file_approx_len(tmp_path, f"{filebase[0]}.decoys.psms.csv", 2090)
-    assert file_approx_len(
-        tmp_path, f"{filebase[0]}.decoys.peptides.csv", 2037
-    )
+    assert file_approx_len(tmp_path, f"{filebase[0]}.decoys.peptides.csv", 2037)
     assert file_approx_len(tmp_path, f"{filebase[1]}.decoys.psms.csv", 1806)
-    assert file_approx_len(
-        tmp_path, f"{filebase[1]}.decoys.peptides.csv", 1755
-    )
+    assert file_approx_len(tmp_path, f"{filebase[1]}.decoys.peptides.csv", 1755)
 
 
 def test_cli_aggregate(tmp_path, scope_files):
@@ -292,3 +284,19 @@ def test_negative_features(tmp_path, psm_df_1000):
     assert mean_scores("test2")[2]
     assert mean_scores("test1b")[2]
     assert mean_scores("test2b")[2]  # This one is the most likely to fail
+
+
+def test_cli_help():
+    """Test that help works"""
+
+    # Triggering help should raise a SystemExit
+    with pytest.raises(SystemExit):
+        run_mokapot_cli(["-h"], run_in_subprocess=False)
+
+    # This is caught, when run in a subprocess, and we can verify
+    # stdout (only some contents to make sure it makes sense)
+    res = run_mokapot_cli(["--help"], run_in_subprocess=True, capture_output=True)
+    stdout = res["stdout"]
+    assert "usage: mokapot" in stdout
+    assert "Written by" in stdout
+    assert "--enzyme" in stdout

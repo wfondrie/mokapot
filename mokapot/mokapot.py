@@ -15,7 +15,7 @@ from . import __version__
 from .brew import brew
 from .confidence import assign_confidence
 from .config import Config
-from .model import PercolatorModel, load_model
+from .model import load_model, PercolatorModel
 from .parsers.fasta import read_fasta
 from .parsers.pin import read_pin
 
@@ -25,8 +25,7 @@ def main(main_args=None):
     start = time.time()
 
     # Get command line arguments
-    parser = Config().parser
-    config = Config(parser, main_args=main_args)
+    config = Config(args=main_args)
 
     # Setup logging
     verbosity_dict = {
@@ -42,7 +41,7 @@ def main(main_args=None):
         level=verbosity_dict[config.verbosity],
     )
     logging.captureWarnings(True)
-    numba_logger = logging.getLogger('numba')
+    numba_logger = logging.getLogger("numba")
     numba_logger.setLevel(logging.WARNING)
 
     # Suppress warning if asked for
@@ -52,9 +51,7 @@ def main(main_args=None):
     # Write header
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
-    logging.info(
-        "Department of Genome Sciences at the University of Washington."
-    )
+    logging.info("Department of Genome Sciences at the University of Washington.")
 
     # Check config parameter validity
     if config.stream_confidence and config.peps_algorithm != "hist_nnls":

@@ -15,37 +15,20 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
 
     def _fill_text(self, text, width, indent):
         text_list = text.splitlines(keepends=True)
-        return "\n".join(
-            _process_line(line, width, indent) for line in text_list
-        )
+        return "\n".join(_process_line(line, width, indent) for line in text_list)
 
 
-class Config:
+class Config(argparse.Namespace):
     """
     The mokapot configuration options.
 
     Options can be specified as command-line arguments.
     """
 
-    def __init__(self, parser=None, main_args=None) -> None:
+    def __init__(self, args=None) -> None:
         """Initialize configuration values."""
-        self._namespace = None
-        if parser is None:
-            self.parser = _parser()
-        else:
-            self.parser = parser
-        self.main_args = main_args
-
-    @property
-    def args(self):
-        """Collect args lazily."""
-        if self._namespace is None:
-            self._namespace = vars(self.parser.parse_args(self.main_args))
-
-        return self._namespace
-
-    def __getattr__(self, option):
-        return self.args[option]
+        parser = _parser()
+        parser.parse_args(args, namespace=self)
 
 
 def _parser():
@@ -66,10 +49,7 @@ def _parser():
         "psm_files",
         type=Path,
         nargs="+",
-        help=(
-            "A collection of PSMs in the Percolator tab-delimited or PepXML "
-            "format."
-        ),
+        help=("A collection of PSMs in the Percolator tab-delimited or PepXML format."),
     )
 
     parser.add_argument(
@@ -151,10 +131,7 @@ def _parser():
         "--clip_nterm_methionine",
         default=False,
         action="store_true",
-        help=(
-            "Remove methionine residues that occur"
-            " at the protein N-terminus.",
-        ),
+        help=("Remove methionine residues that occur at the protein N-terminus."),
     )
 
     parser.add_argument(
@@ -259,10 +236,7 @@ def _parser():
         "--override",
         default=False,
         action="store_true",
-        help=(
-            "Use the learned model even if it performs worse "
-            "than the best feature."
-        ),
+        help=("Use the learned model even if it performs worse than the best feature."),
     )
 
     parser.add_argument(
