@@ -325,7 +325,8 @@ def test_cli_algo_options(tmp_path, scope_files):
 
     # targets_psms_df3 = run_with_options(True, "from_counts")
 
-    targets_psms_df3 = run_with_options(True, "storey", pi0algo="storey_fixed")
+    # targets_psms_df3 = 1
+    run_with_options(True, "storey", pi0algo="storey_fixed")
     # targets_psms_df3 = run_with_options(False, "storey")
     # targets_psms_df3 = run_with_options(False, "storey", pi0algo="slope")
     # targets_psms_df3 = run_with_options(False, "storey", pi0algo="storey_smoother")
