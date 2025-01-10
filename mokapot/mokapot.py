@@ -14,7 +14,7 @@ import numpy as np
 from . import __version__
 from .brew import brew
 from .confidence import assign_confidence
-from .config import Config
+from .config import create_config_parser
 from .model import load_model, PercolatorModel
 from .parsers.fasta import read_fasta
 from .parsers.pin import read_pin
@@ -25,7 +25,8 @@ def main(main_args=None):
     start = time.time()
 
     # Get command line arguments
-    config = Config(args=main_args)
+    parser = create_config_parser()
+    config = parser.parse_args(args=main_args)
 
     # Setup logging
     verbosity_dict = {

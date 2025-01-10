@@ -18,20 +18,7 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
         return "\n".join(_process_line(line, width, indent) for line in text_list)
 
 
-class Config(argparse.Namespace):
-    """
-    The mokapot configuration options.
-
-    Options can be specified as command-line arguments.
-    """
-
-    def __init__(self, args=None) -> None:
-        """Initialize configuration values."""
-        parser = _parser()
-        parser.parse_args(args, namespace=self)
-
-
-def _parser():
+def create_config_parser():
     """The parser"""
     desc = (
         f"mokapot version {__version__}.\n"
