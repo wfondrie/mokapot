@@ -109,9 +109,11 @@ class ColumnSelectReader(TabularDataReader):
     def __init__(self, reader, selected_columns: list[str]):
         # NB: I removed the annotation on the reader argument, since Python
         # will have two instances of class TabularDataReader in memory (namely
-        # tabular_data.base.TabularDataReader and
+        # tabular_data.base.TabularDataReader, the type used here, and
         # mokapot.tabular_data.base.TabularDataReader) which are treated as not
-        # being the same, which will result
+        # being the same, which will result in type exceptions when you try to
+        # instantiate a ColumnSelectReader with a TabularDataReader instantiated
+        # elsewhere.
 
         self.reader = reader
         self.selected_columns = selected_columns
