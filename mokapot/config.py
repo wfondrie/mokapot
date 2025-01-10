@@ -18,35 +18,7 @@ class MokapotHelpFormatter(argparse.HelpFormatter):
         return "\n".join(_process_line(line, width, indent) for line in text_list)
 
 
-class Config:
-    """
-    The mokapot configuration options.
-
-    Options can be specified as command-line arguments.
-    """
-
-    def __init__(self, parser=None, main_args=None) -> None:
-        """Initialize configuration values."""
-        self._namespace = None
-        if parser is None:
-            self.parser = _parser()
-        else:
-            self.parser = parser
-        self.main_args = main_args
-
-    @property
-    def args(self):
-        """Collect args lazily."""
-        if self._namespace is None:
-            self._namespace = vars(self.parser.parse_args(self.main_args))
-
-        return self._namespace
-
-    def __getattr__(self, option):
-        return self.args[option]
-
-
-def _parser():
+def create_config_parser():
     """The parser"""
     desc = (
         f"mokapot version {__version__}.\n"
@@ -146,7 +118,7 @@ def _parser():
         "--clip_nterm_methionine",
         default=False,
         action="store_true",
-        help=("Remove methionine residues that occur at the protein N-terminus.",),
+        help=("Remove methionine residues that occur at the protein N-terminus."),
     )
 
     parser.add_argument(

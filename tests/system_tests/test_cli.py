@@ -286,6 +286,22 @@ def test_negative_features(tmp_path, psm_df_1000):
     assert mean_scores("test2b")[2]  # This one is the most likely to fail
 
 
+def test_cli_help():
+    """Test that help works"""
+
+    # Triggering help should raise a SystemExit
+    with pytest.raises(SystemExit):
+        run_mokapot_cli(["-h"], run_in_subprocess=False)
+
+    # This is caught, when run in a subprocess, and we can verify
+    # stdout (only some contents to make sure it makes sense)
+    res = run_mokapot_cli(["--help"], run_in_subprocess=True, capture_output=True)
+    stdout = res["stdout"]
+    assert "usage: mokapot" in stdout
+    assert "Written by" in stdout
+    assert "--enzyme" in stdout
+
+
 def test_cli_algo_options(tmp_path, scope_files):
     """Test that algorithm options work."""
 
