@@ -50,13 +50,13 @@ def main(main_args=None):
     if config.suppress_warnings:
         warnings.filterwarnings("ignore")
 
-    # Configure confidence algorithms
-    configure_algorithms(config)
-
     # Write header
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
     logging.info("Department of Genome Sciences at the University of Washington.")
+
+    # Configure confidence algorithms
+    configure_algorithms(config)
 
     # Check config parameter validity
     if config.stream_confidence and config.peps_algorithm != "hist_nnls":

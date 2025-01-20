@@ -10,6 +10,7 @@ maybe by some algorithm registry.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -18,6 +19,8 @@ from typeguard import typechecked
 import mokapot.peps as peps
 import mokapot.qvalues as qvalues
 import mokapot.qvalues_storey as qvalues_storey
+
+LOGGER = logging.getLogger(__name__)
 
 
 ## Algorithms for pi0 estimation
@@ -33,11 +36,25 @@ class Pi0EstAlgorithm(ABC):
     def set_algorithm(cls, pi0_algo: Pi0EstAlgorithm):
         cls.pi0_algo = pi0_algo
 
+    @classmethod
+    def long_desc(cls):
+        return cls.pi0_algo.long_desc()
+
 
 class TDCPi0Algorithm(Pi0EstAlgorithm):
     def estimate(self, scores, targets):
-        target_decoy_ratio = targets.sum() / (~targets).sum()
+        targets_count = targets.sum()
+        decoys_count = (~targets).sum()
+        if decoys_count == 0:
+            LOGGER.warning(
+                f"Can't estimate pi0 with zero decoys (targets={targets_count}, "
+                f"decoys={decoys_count}, total={len(targets)})"
+            )
+        target_decoy_ratio = targets_count / decoys_count
         return target_decoy_ratio
+
+    def long_desc(self):
+        return "target_decoy_ratio"
 
 
 class StoreyPi0Algorithm(Pi0EstAlgorithm):
@@ -57,13 +74,28 @@ class StoreyPi0Algorithm(Pi0EstAlgorithm):
         )
         return pi0est.pi0
 
+    def long_desc(self):
+        return f"storey_pi0(method={self.method}, lambda={self.eval_lambda})"
+
 
 class SlopePi0Algorithm(Pi0EstAlgorithm):
+    def __init__(self, hist_bins="scott", slope_threshold=0.9):
+        self.bins = hist_bins
+        self.slope_threshold = slope_threshold
+
     def estimate(self, scores, targets):
-        hist_data = peps.hist_data_from_scores(scores, targets)
+        hist_data = peps.hist_data_from_scores(scores, targets, bins=self.bins)
         hist_data.as_densities()
         _, target_density, decoy_density = hist_data.as_densities()
-        return peps.estimate_pi0_by_slope(target_density, decoy_density)
+        return peps.estimate_pi0_by_slope(
+            target_density, decoy_density, threshold=self.slope_threshold
+        )
+
+    def long_desc(self):
+        return (
+            f"pi0_by_slope(hist_bins={self.bins}, "
+            f"slope_threshold={self.slope_threshold})"
+        )
 
 
 ## Algorithms for qvalue computation
@@ -109,7 +141,7 @@ class CountsQvalueAlgorithm(QvalueAlgorithm):
         return qvals
 
     def long_desc(self):
-        return "mokapot tdc algorithm"
+        return "qvalue_by_counts"
 
 
 @typechecked
@@ -124,7 +156,7 @@ class StoreyQvalueAlgorithm(QvalueAlgorithm):
         return qvals
 
     def long_desc(self):
-        return "storey"
+        return "qvalues_by_storeys_algo"
 
 
 # Algoritms for pep computation
@@ -172,27 +204,17 @@ def configure_algorithms(config):
             raise NotImplementedError
     QvalueAlgorithm.set_algorithm(qvalue_algorithm)
 
+    LOGGER.debug(f"pi0 algorithm: {pi0_algorithm.long_desc()}")
+    LOGGER.debug(f"q-value algorithm: {qvalue_algorithm.long_desc()}")
+
 
 QvalueAlgorithm.set_algorithm(TDCQvalueAlgorithm())
 
 
 """
-Problems with Mokapot <> Storey:
- 
-* pi0 estimation is instable for ordinal scores (could be fixed with linear 
-  regression instead of division)
-* pvalue calculation is horribly wrong for scores that are one-hot encoded, 
-   resulting in horribly wrong pi0 values (hard to circumvent, probably needs 
-   sanitization of features to some degree)
-* if mokapot is forced to use the same feature as the initial direction with 
-  storey as it normally uses with tdc, then training succeeds and looks similar 
-  to tdc, but fails right after the training is done (some code is being called 
-  that should not be called)
-
-todo: 
+todo:
  * try slope method for pi0 estimation on pvalues
- * check and improve pvalue computation for discrete distributions 
+ * check and improve pvalue computation for discrete distributions
  * check pi0 estimation with ratios for tdc/storey
  * implement storey with bootstrap
- * fix this shit with the number of columns  
 """
