@@ -4,11 +4,10 @@ This module contains the parsers for reading in PSMs
 
 import logging
 import warnings
-from pathlib import Path
-from typing import List, Iterable
+from typing import Any, Iterable, List
 
 import pandas as pd
-from joblib import Parallel, delayed
+from joblib import delayed, Parallel
 from typeguard import typechecked
 
 from mokapot.constants import (
@@ -17,17 +16,12 @@ from mokapot.constants import (
 )
 from mokapot.dataset import OnDiskPsmDataset
 from mokapot.parsers.helpers import (
-    find_optional_column,
     find_columns,
+    find_optional_column,
     find_required_column,
 )
 from mokapot.tabular_data import TabularDataReader
-from mokapot.utils import (
-    tuplize,
-    create_chunks,
-    convert_targets_column,
-    flatten,
-)
+from mokapot.utils import convert_targets_column, create_chunks, flatten, tuplize
 
 LOGGER = logging.getLogger(__name__)
 
@@ -101,9 +95,14 @@ def read_pin(
         containing the PSMs from all of the PIN files.
     """
     logging.info("Parsing PSMs...")
-    return [
-        read_percolator(
-            pin_file,
+
+    datasets = []
+    for pin_file in tuplize(pin_files):
+        LOGGER.info(f"Reading {pin_file}...")
+        reader = TabularDataReader.from_path(pin_file)
+
+        dataset = read_percolator(
+            reader,
             max_workers=max_workers,
             filename_column=filename_column,
             calcmass_column=calcmass_column,
@@ -111,53 +110,57 @@ def read_pin(
             rt_column=rt_column,
             charge_column=charge_column,
         )
-        for pin_file in tuplize(pin_files)
-    ]
+        datasets.append(dataset)
+
+    return datasets
 
 
-def create_chunks_with_identifier(data, identifier_column, chunk_size):
+@typechecked
+def split_columns_into_chunks(
+    feature_columns: list[str], identifier_columns: list[str], cols_per_chunk: int
+) -> list[list[str]]:
     """
-    This function will split data into chunks but will make sure that
+    This function will split columns into chunks but will make sure that
     identifier_columns is never split
 
     Parameters
     ----------
-    data: the data you want to split in chunks (1d list)
-    identifier_column: columns that should never be splitted.
-        Must be of length 2.
-    chunk_size: the chunk size
+    feature_columns: the data you want to split in chunks (1d list)
+    identifier_columns: columns that should never be split.
+    cols_per_chunk: the chunk size
 
     Returns
     -------
 
     """
-    if (len(data) + len(identifier_column)) % chunk_size != 1:
-        data_copy = data + identifier_column
-        return create_chunks(data_copy, chunk_size)
+    N_feature = len(feature_columns)
+    N_identifier = len(identifier_columns)
+    unique = set(feature_columns + identifier_columns)
+    if len(unique) != N_feature + N_identifier:
+        raise ValueError("Feature and identifier columns must be unique and disjoint.")
+
+    if N_identifier > cols_per_chunk:
+        return [identifier_columns] + create_chunks(feature_columns, cols_per_chunk)
     else:
-        return create_chunks(data, chunk_size) + [identifier_column]
+        return create_chunks(identifier_columns + feature_columns, cols_per_chunk)
 
 
 def read_percolator(
-    perc_file: Path,
-    max_workers,
-    filename_column=None,
-    calcmass_column=None,
-    expmass_column=None,
-    rt_column=None,
-    charge_column=None,
+    reader: TabularDataReader,
+    max_workers: Any = -1,
+    filename_column: str | None = None,
+    calcmass_column: str | None = None,
+    expmass_column: str | None = None,
+    rt_column: str | None = None,
+    charge_column: str | None = None,
 ):
     """
-    Read a Percolator tab-delimited file.
-
-    Percolator input format (PIN) files and the Percolator result files
-    are tab-delimited, but also have a tab-delimited protein list as the
-    final column. This function parses the file and returns a DataFrame.
+    Read a TabularDataReader containing Percolator input data.
 
     Parameters
     ----------
-    perc_file : Path
-        The file to parse.
+    reader : TabularDataReader
+        The data to parse.
 
     Returns
     -------
@@ -165,8 +168,6 @@ def read_percolator(
         A DataFrame of the parsed data.
     """
 
-    LOGGER.info("Reading %s...", perc_file)
-    reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
     col_types = reader.get_column_types()
 
@@ -215,10 +216,10 @@ def read_percolator(
         )
 
     # Check that features don't have missing values:
-    feat_slices = create_chunks_with_identifier(
-        data=features,
-        identifier_column=spectra + [labels],
-        chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
+    feat_slices = split_columns_into_chunks(
+        feature_columns=features,
+        identifier_columns=spectra + [labels],
+        cols_per_chunk=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
     features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
@@ -251,7 +252,7 @@ def read_percolator(
         LOGGER.debug("  (%i)\t%s", i + 1, feat)
 
     return OnDiskPsmDataset(
-        perc_file,
+        reader,
         columns=columns,
         target_column=labels,
         spectrum_columns=spectra,
@@ -373,20 +374,14 @@ def parse_in_chunks(
         list of dataframes
     """
 
-    train_psms = [
-        [[] for _ in range(len(train_idx))] for _ in range(len(datasets))
-    ]
-    for dataset, idx, file_idx in zip(
-        datasets, zip(*train_idx), range(len(datasets))
-    ):
+    train_psms = [[[] for _ in range(len(train_idx))] for _ in range(len(datasets))]
+    for dataset, idx, file_idx in zip(datasets, zip(*train_idx), range(len(datasets))):
         reader = dataset.reader
         file_iterator = reader.get_chunked_data_iterator(
             chunk_size=chunk_size, columns=dataset.columns
         )
         Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(get_rows_from_dataframe)(
-                idx, chunk, train_psms, dataset, file_idx
-            )
+            delayed(get_rows_from_dataframe)(idx, chunk, train_psms, dataset, file_idx)
             for chunk in file_iterator
         )
     train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(

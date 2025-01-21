@@ -106,7 +106,15 @@ class ColumnSelectReader(TabularDataReader):
             A list that contains names of the selected columns.
     """
 
-    def __init__(self, reader: TabularDataReader, selected_columns: list[str]):
+    def __init__(self, reader, selected_columns: list[str]):
+        # NB: I removed the annotation on the reader argument, since Python
+        # will have two instances of class TabularDataReader in memory (namely
+        # tabular_data.base.TabularDataReader, the type used here, and
+        # mokapot.tabular_data.base.TabularDataReader) which are treated as not
+        # being the same, which will result in type exceptions when you try to
+        # instantiate a ColumnSelectReader with a TabularDataReader instantiated
+        # elsewhere.
+
         self.reader = reader
         self.selected_columns = selected_columns
 
@@ -136,7 +144,7 @@ class ColumnSelectReader(TabularDataReader):
     ) -> Generator[pd.DataFrame, None, None]:
         self._check_columns(columns)
         return self.reader.get_chunked_data_iterator(
-            columns=self.selected_columns or columns
+            chunk_size=chunk_size, columns=self.selected_columns or columns
         )
 
 
@@ -155,7 +163,7 @@ class ColumnMappedReader(TabularDataReader):
             column names.
     """
 
-    def __init__(self, reader: TabularDataReader, column_map: dict[str, str]):
+    def __init__(self, reader, column_map: dict[str, str]):
         self.reader = reader
         self.column_map = column_map
 
@@ -283,8 +291,7 @@ class TabularDataWriter(ABC):
         columns = data.columns.tolist()
         if not columns == self.get_column_names():
             raise ValueError(
-                f"Column names {columns} do not "
-                f"match {self.get_column_names()}"
+                f"Column names {columns} do not " f"match {self.get_column_names()}"
             )
 
         if self.column_types is not None:
