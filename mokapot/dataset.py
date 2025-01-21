@@ -708,10 +708,17 @@ def _update_labels(
         he PSM from training (probably false target). Typically, 0 is reserved
         for targets, below a specified FDR threshold.
     """
+
     if isinstance(scores, pd.Series):
         scores = scores.values.astype(float)
     if isinstance(targets, pd.Series):
-        targets = targets.values.astype(bool)
+        targets = targets.values
+
+    if targets.dtype != "bool":
+        logging.debug(
+            f"Type of targets not bool but: {targets.dtype}. Converting to bool..."
+        )
+        targets = targets == 1
 
     import mokapot.qvalues as qvalues
 
