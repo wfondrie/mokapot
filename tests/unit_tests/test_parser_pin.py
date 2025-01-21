@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import mokapot
-from mokapot.parsers.pin import create_chunks_with_identifier
+from mokapot.parsers.pin import split_columns_into_chunks
 from mokapot.tabular_data import ColumnSelectReader, TabularDataReader
 
 
@@ -67,12 +67,12 @@ def test_read_percolator():
     mokapot.read_percolator(subset_reader)
 
 
-def test_create_chunks_with_identifier():
+def test_split_columns_into_chunks():
     identifier = ["ScanNr", "ExpMass", "Label"]
     features = ["lnrSp", "deltLCn", "deltCn", "Sp", "IonFrac"]
     features += ["RefactoredXCorr", "NegLog10PValue", "NegLog10ResEvPValue"]
     N_identifier = len(identifier)
     for cs in range(3, 11):
-        chunks = create_chunks_with_identifier(features, identifier, cs)
+        chunks = split_columns_into_chunks(features, identifier, cs)
         lens = np.array([len(set(chunk).intersection(identifier)) for chunk in chunks])
         assert sum(lens) == N_identifier and all(lens % N_identifier == 0)

@@ -21,8 +21,7 @@ from mokapot.parsers.helpers import (
     find_required_column,
 )
 from mokapot.tabular_data import TabularDataReader
-from mokapot.utils import convert_targets_column, create_chunks, flatten, \
-    tuplize
+from mokapot.utils import convert_targets_column, create_chunks, flatten, tuplize
 
 LOGGER = logging.getLogger(__name__)
 
@@ -116,7 +115,10 @@ def read_pin(
     return datasets
 
 
-def create_chunks_with_identifier(feature_columns, identifier_columns, chunk_size):
+@typechecked
+def split_columns_into_chunks(
+    feature_columns: list[str], identifier_columns: list[str], cols_per_chunk: int
+) -> list[list[str]]:
     """
     This function will split columns into chunks but will make sure that
     identifier_columns is never split
@@ -125,7 +127,7 @@ def create_chunks_with_identifier(feature_columns, identifier_columns, chunk_siz
     ----------
     feature_columns: the data you want to split in chunks (1d list)
     identifier_columns: columns that should never be split.
-    chunk_size: the chunk size
+    cols_per_chunk: the chunk size
 
     Returns
     -------
@@ -137,10 +139,10 @@ def create_chunks_with_identifier(feature_columns, identifier_columns, chunk_siz
     if len(unique) != N_feature + N_identifier:
         raise ValueError("Feature and identifier columns must be unique and disjoint.")
 
-    if N_identifier > chunk_size:
-        return [identifier_columns] + create_chunks(feature_columns, chunk_size)
+    if N_identifier > cols_per_chunk:
+        return [identifier_columns] + create_chunks(feature_columns, cols_per_chunk)
     else:
-        return create_chunks(identifier_columns + feature_columns, chunk_size)
+        return create_chunks(identifier_columns + feature_columns, cols_per_chunk)
 
 
 def read_percolator(
@@ -214,10 +216,10 @@ def read_percolator(
         )
 
     # Check that features don't have missing values:
-    feat_slices = create_chunks_with_identifier(
+    feat_slices = split_columns_into_chunks(
         feature_columns=features,
         identifier_columns=spectra + [labels],
-        chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
+        cols_per_chunk=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
     features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
@@ -241,9 +243,9 @@ def read_percolator(
             LOGGER.warning("  - %s", col)
 
         LOGGER.warning("Dropping features with missing values...")
-    _feature_columns = tuple(
-        [feature for feature in features if feature not in features_to_drop]
-    )
+    _feature_columns = tuple([
+        feature for feature in features if feature not in features_to_drop
+    ])
 
     LOGGER.info("Using %i features:", len(_feature_columns))
     for i, feat in enumerate(_feature_columns):
