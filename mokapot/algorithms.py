@@ -41,8 +41,9 @@ class Pi0EstAlgorithm(ABC):
         return cls.pi0_algo.long_desc()
 
 
+@typechecked
 class TDCPi0Algorithm(Pi0EstAlgorithm):
-    def estimate(self, scores, targets):
+    def estimate(self, scores: np.ndarray[float], targets: np.ndarray[bool]) -> float:
         targets_count = targets.sum()
         decoys_count = (~targets).sum()
         if decoys_count == 0:
@@ -50,19 +51,20 @@ class TDCPi0Algorithm(Pi0EstAlgorithm):
                 f"Can't estimate pi0 with zero decoys (targets={targets_count}, "
                 f"decoys={decoys_count}, total={len(targets)})"
             )
-        target_decoy_ratio = targets_count / decoys_count
-        return target_decoy_ratio
+        decoy_target_ratio = decoys_count / targets_count
+        return decoy_target_ratio
 
     def long_desc(self):
-        return "target_decoy_ratio"
+        return "decoy_target_ratio"
 
 
+@typechecked
 class StoreyPi0Algorithm(Pi0EstAlgorithm):
-    def __init__(self, method: str, eval_lambda):
+    def __init__(self, method: str, eval_lambda: float):
         self.method = method
         self.eval_lambda = eval_lambda
 
-    def estimate(self, scores, targets):
+    def estimate(self, scores: np.ndarray[float], targets: np.ndarray[bool]) -> float:
         pvals = qvalues_storey.empirical_pvalues(
             scores[targets], scores[~targets], mode="conservative"
         )
@@ -152,6 +154,9 @@ class StoreyQvalueAlgorithm(QvalueAlgorithm):
 
     def qvalues(self, scores, targets, desc):
         pi0 = Pi0EstAlgorithm.pi0_algo.estimate(scores, targets)
+        LOGGER.debug(
+            f"pi0-estimate: pi0={pi0}, algo={Pi0EstAlgorithm.pi0_algo.long_desc()}"
+        )
         qvals = qvalues.qvalues_from_storeys_algo(scores, targets, pi0)
         return qvals
 
