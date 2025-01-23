@@ -314,7 +314,7 @@ def create_config_parser():
         default="default",
         choices=[
             "default",
-            "tdc",
+            "ratio",
             "slope",
             "storey_smoother",
             "storey_fixed",
