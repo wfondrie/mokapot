@@ -37,8 +37,15 @@ def main(main_args=None):
         3: logging.DEBUG,
     }
 
+    if not config.log_time:
+        log_format = "[{levelname}] {message}"
+    elif config.max_workers <= 1:
+        log_format = "[{asctime}/{levelname}] {message}"
+    else:
+        log_format = "[{threadName}/{asctime}/{levelname}] {message}"
+
     logging.basicConfig(
-        format=("[{levelname}] {message}"),
+        format=log_format,
         style="{",
         level=verbosity_dict[config.verbosity],
     )
@@ -100,10 +107,10 @@ def main(main_args=None):
     # Define a model:
     model = None
     if config.load_models:
+        logging.debug(f"Loading models ({config.load_models})")
         model = [load_model(model_file) for model_file in config.load_models]
-
-    if model is None:
-        logging.debug("Loading Percolator model.")
+    else:
+        logging.debug("Instantiating Percolator model.")
         model = PercolatorModel(
             train_fdr=config.train_fdr,
             max_iter=config.max_iter,

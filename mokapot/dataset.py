@@ -394,6 +394,9 @@ class LinearPsmDataset(PsmDataset):
         desc : bool
             Are high scores better for the best feature?
         """
+        LOGGER.debug(
+            f"\t- Finding best feature in {len(self._feature_columns)} feature columns."
+        )
         best_feat = None
         best_positives = 0
         new_labels = None

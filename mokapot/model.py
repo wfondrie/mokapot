@@ -229,7 +229,7 @@ class Model:
         feat_names = dataset.features.columns.tolist()
         if set(feat_names) != set(self.features):
             raise ValueError(
-                "Features of the input data do not match the " "features of this Model."
+                "Features of the input data do not match the features of this Model."
             )
 
         feat = self.scaler.transform(dataset.features.loc[:, self.features].values)
@@ -569,7 +569,10 @@ def _get_starting_labels(dataset: LinearPsmDataset, model):
     feat_pass : int
         The number of passing PSMs with the best feature.
     """
-    LOGGER.debug("Finding initial direction...")
+    LOGGER.debug(
+        f"Finding initial direction... (model: is_trained={model.is_trained}, "
+        f"direction={model.direction})"
+    )
     if model.direction is None and not model.is_trained:
         feat_res = dataset._find_best_feature(model.train_fdr)
         best_feat, feat_pass, start_labels, desc = feat_res
@@ -614,7 +617,7 @@ def _get_starting_labels(dataset: LinearPsmDataset, model):
             desc = False
 
         LOGGER.info(
-            "  - Selected feature %s with %i PSMs at q<=%g.",
+            "\t- Selected feature %s with %i PSMs at q<=%g.",
             model.direction,
             (start_labels == 1).sum(),
             model.train_fdr,
@@ -652,6 +655,7 @@ def _find_hyperparameters(model, features, labels):
         cv_targ = (labels[labels.astype(bool)] + 1) / 2
 
         # Fit the model
+        LOGGER.debug("\t- Fitting the model.")
         model.estimator.fit(cv_samples, cv_targ)
 
         # Extract the best params.
