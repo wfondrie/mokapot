@@ -103,10 +103,10 @@ def main(main_args=None):
     # Define a model:
     model = None
     if config.load_models:
+        logging.debug(f"Loading models ({config.load_models})")
         model = [load_model(model_file) for model_file in config.load_models]
-
-    if model is None:
-        logging.debug("Loading Percolator model.")
+    else:
+        logging.debug("Instantiating Percolator model.")
         model = PercolatorModel(
             train_fdr=config.train_fdr,
             max_iter=config.max_iter,
