@@ -36,8 +36,15 @@ def main(main_args=None):
         3: logging.DEBUG,
     }
 
+    if not config.log_time:
+        log_format = "[{levelname}] {message}"
+    elif config.max_workers <= 1:
+        log_format = "[{asctime}/{levelname}] {message}"
+    else:
+        log_format = "[{threadName}/{asctime}/{levelname}] {message}"
+
     logging.basicConfig(
-        format=("[{levelname}] {message}"),
+        format=log_format,
         style="{",
         level=verbosity_dict[config.verbosity],
     )

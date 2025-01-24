@@ -338,6 +338,13 @@ def create_config_parser():
     )
 
     parser.add_argument(
+        "--log_time",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help=("Specifies whether (and thread) should also be logged."),
+    )
+
+    parser.add_argument(
         "--suppress_warnings",
         default=False,
         action="store_true",
