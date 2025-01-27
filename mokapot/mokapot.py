@@ -18,11 +18,13 @@ from .config import create_config_parser
 from .model import load_model, PercolatorModel
 from .parsers.fasta import read_fasta
 from .parsers.pin import read_pin
+from .typecheck import register_numpy_typechecker
 
 
 def main(main_args=None):
     """The CLI entry point"""
     start = time.time()
+    register_numpy_typechecker()
 
     # Get command line arguments
     parser = create_config_parser()
