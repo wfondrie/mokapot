@@ -48,12 +48,17 @@ def reduce_linear(x, y, rtol=1e-10):
     return x, y
 
 
-def estimate_abs_int(x, y, mode=1):
+def estimate_abs_int(x, y, sort=False):
     """Estimate the normalized absolute difference between two curves"""
     if isinstance(x, pd.Series):
         x = x.values
     if isinstance(y, pd.Series):
         y = y.values
+
+    if sort:
+        sort_ind = np.argsort(x)
+        x = x[sort_ind]
+        y = y[sort_ind]
 
     if all(np.diff(x) <= 0):
         x = x[::-1]

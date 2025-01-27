@@ -13,8 +13,8 @@ def test_empirical_pvalues():
     # happen to have the same score, because he's using Pr(S>s|H0) instead of
     # Pr(S>=s|H0) for the p-values (which can make spuriously low p-values in
     # the case of discrete distributions)
-    s = np.arange(0, 13)
-    s0 = np.arange(-99, 101)
+    s = np.arange(0, 13, dtype=float)
+    s0 = np.arange(-99, 101, dtype=float)
     p = 0.505 - s / len(s0)
 
     def empPvals(s, s0):

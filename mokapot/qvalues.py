@@ -81,36 +81,8 @@ def tdc(
     scores = np.array(scores)
     target = np.array(target)
 
-    # Since numpy 2.x relying in attribute errors is not viable here
-    # https://numpy.org/neps/nep-0050-scalar-promotion.html#impact-on-can-cast
-    # So I am manually checking the constraints.
-    if (
-        np.issubdtype(target.dtype, np.integer)
-        and target.max() <= 1
-        and target.min() >= 0
-    ):
-        target = target.astype(bool)
-
-    if np.issubdtype(target.dtype, np.floating):
-        like_one = target == np.ones_like(target)
-        like_zero = target == np.zeros_like(target)
-        if np.all(like_one | like_zero):
-            target = target.astype(bool)
-
-    if not np.issubdtype(target.dtype, bool):
-        err = ValueError(
-            f"'target' should be boolean. passed type: {target.dtype}"
-            f" with value: {target}"
-        )
-        raise err
-
     if scores.shape[0] != target.shape[0]:
         raise ValueError("'scores' and 'target' must be the same length")
-
-    # Unsigned integers can cause weird things to happen.
-    # Convert all scores to floats to for safety.
-    if np.issubdtype(scores.dtype, np.integer):
-        scores = scores.astype(np.float32)
 
     # Sort and estimate FDR
     if desc:
@@ -424,7 +396,7 @@ def qvalues_func_from_hist(
     # We need to append zero to end of the qvalues for right edge of the last
     # bin, the other q-values correspond to the left edges of the bins
     # (because of the >= in the formula for the counts)
-    qvalues = np.append(qvalues, 0.0)
+    qvalues = np.append(qvalues, qvalues[-1])
     eval_scores = hist_data.targets.bin_edges
 
     return lambda scores: np.interp(scores, eval_scores, qvalues)
@@ -493,7 +465,7 @@ def qvalues_from_storeys_algo(
         pvals0 = qvalues_storey.empirical_pvalues(stat0, stat0, mode=pvalue_method)
         qvals0 = qvalues_storey.qvalues(pvals0, pi0=1)
 
-    qvals = np.zeros_like(scores)
+    qvals = np.zeros_like(scores, dtype=float)
     qvals[targets] = qvals1
     qvals[~targets] = qvals0
     return qvals

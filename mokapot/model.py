@@ -577,10 +577,8 @@ def _get_starting_labels(dataset: LinearPsmDataset, model):
         feat_res = dataset._find_best_feature(model.train_fdr)
         best_feat, feat_pass, start_labels, desc = feat_res
         LOGGER.info(
-            "\t- Selected feature %s with %i PSMs at q<=%g.",
-            best_feat,
-            feat_pass,
-            model.train_fdr,
+            f"\t- Selected feature {best_feat} (desc={desc}) with {feat_pass} "
+            f"PSMs at q<={model.train_fdr}."
         )
 
     elif model.is_trained:

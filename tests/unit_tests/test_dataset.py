@@ -53,7 +53,7 @@ def test_update_labels(psm_df_6):
         copy_data=True,
     )
 
-    scores = np.array([6, 5, 3, 3, 2, 1])
+    scores = np.array([6, 5, 3, 3, 2, 1], dtype=float)
     real_labs = np.array([1, 1, 0, -1, -1, -1])
     new_labs = dset._update_labels(scores, eval_fdr=0.5)
     assert np.array_equal(real_labs, new_labs)

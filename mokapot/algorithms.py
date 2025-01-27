@@ -136,7 +136,7 @@ class CountsQvalueAlgorithm(QvalueAlgorithm):
     def __init__(self, tdc: bool):
         self.tdc = tdc
 
-    def qvalues(self, scores, targets, desc):
+    def qvalues(self, scores: np.ndarray[float], targets: np.ndarray[bool], desc: bool):
         if not desc:
             scores = -scores
         qvals = qvalues.qvalues_from_counts(scores, targets, is_tdc=self.tdc)
@@ -148,15 +148,17 @@ class CountsQvalueAlgorithm(QvalueAlgorithm):
 
 @typechecked
 class StoreyQvalueAlgorithm(QvalueAlgorithm):
-    def __init__(self, *, pvalue_method="best"):
+    def __init__(self, *, pvalue_method="best", pi0_algo=None):
         super().__init__()
         self.pvalue_method = pvalue_method
+        self.pi0_algo = pi0_algo
 
-    def qvalues(self, scores, targets, desc):
-        pi0 = Pi0EstAlgorithm.pi0_algo.estimate(scores, targets)
-        LOGGER.debug(
-            f"pi0-estimate: pi0={pi0}, algo={Pi0EstAlgorithm.pi0_algo.long_desc()}"
-        )
+    def qvalues(self, scores: np.ndarray[float], targets: np.ndarray[bool], desc: bool):
+        pi0_algo = self.pi0_algo or Pi0EstAlgorithm.pi0_algo
+        pi0 = pi0_algo.estimate(scores, targets)
+        LOGGER.debug(f"pi0-estimate: pi0={pi0}, algo={pi0_algo.long_desc()}")
+        if not desc:
+            scores = -scores
         qvals = qvalues.qvalues_from_storeys_algo(scores, targets, pi0)
         return qvals
 

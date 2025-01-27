@@ -10,18 +10,21 @@ from mokapot.peps import monotonize_simple
 
 @typechecked
 def empirical_pvalues(
-    s: np.ndarray[float], s0: np.ndarray[float], *, mode: str = "conservative"
+    s: np.ndarray[float | int],
+    s0: np.ndarray[float | int],
+    *,
+    mode: str = "conservative",
 ) -> np.ndarray[float]:
     """
     Computes the empirical p-values for a set of values.
 
     Parameters
     ----------
-    s : np.ndarray[float]
+    s : np.ndarray[float | int]
         Array of data values/test statistics (typically scores) for which
         p-values are to be computed.
 
-    s0 : np.ndarray[float]
+    s0 : np.ndarray[float | int]
         Array of data values (scores) simulated under the null hypothesis
         against which the data values `s` are to be compared.
 
