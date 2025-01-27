@@ -26,8 +26,7 @@ import numpy as np
 import pandas as pd
 from typeguard import typechecked
 
-from mokapot import qvalues
-from mokapot import utils
+from mokapot import qvalues, utils
 from mokapot.parsers.fasta import read_fasta
 from mokapot.proteins import Proteins
 from .tabular_data import TabularDataReader
@@ -691,7 +690,7 @@ class OnDiskPsmDataset(PsmDataset):
 
 @typechecked
 def _update_labels(
-    scores: np.ndarray[float] | pd.Series,
+    scores: np.ndarray[float | int] | pd.Series,
     targets: np.ndarray[bool] | pd.Series,
     eval_fdr: float = 0.01,
     desc: bool = True,

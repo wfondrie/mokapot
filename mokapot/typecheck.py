@@ -17,7 +17,7 @@ def check_dtype(act_dtype, req_type):
     elif isinstance(req_type, type(Any)):
         return True
     else:
-        return act_dtype == req_type
+        return np.issubdtype(act_dtype, req_type)
 
 
 def check_numpy_ndarray(
