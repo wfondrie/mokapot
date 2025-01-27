@@ -40,7 +40,7 @@ def desc_scores():
         1,
         1,
     ])
-    return scores, target, qvals
+    return scores.astype(float), target == 1, qvals.astype(float)
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def asc_scores():
         1,
         1,
     ])
-    return scores, target, qvals
+    return scores.astype(float), target == 1, qvals.astype(float)
 
 
 def qvalues_are_valid(qvalues, scores=None):
@@ -121,18 +121,6 @@ def test_tdc_ascending(asc_scores, dtype):
 
     qvals = tdc(scores, target.astype(dtype), desc=False)
     np.testing.assert_allclose(qvals, true_qvals, atol=1e-7)
-
-
-def test_tdc_non_bool():
-    """If targets is not boolean, should get a value error"""
-    scores = np.array([1, 2, 3, 4, 5])
-    targets = np.array(["1", "0", "1", "0", "blarg"])
-    with pytest.raises(ValueError):
-        # Q-June 2024: JSP Since this function is runtime-type-checked,
-        # what is the purpose of this test?
-        # should it be raise if the passed type is not
-        # bool or if it is not convertible to bool?
-        tdc(scores, targets)
 
 
 def test_tdc_diff_len():

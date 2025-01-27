@@ -28,7 +28,11 @@ QVALUE_ALGORITHM = {
 
 
 @typechecked
-def tdc(scores: np.ndarray[float], target: np.ndarray[bool], desc: bool = True):
+def tdc(
+    scores: np.ndarray[np.floating | np.integer],
+    target: np.ndarray[bool | np.floating | np.integer],
+    desc: bool = True,
+):
     """Estimate q-values using target decoy competition.
 
     Estimates q-values using the simple target decoy competition method.
@@ -70,6 +74,10 @@ def tdc(scores: np.ndarray[float], target: np.ndarray[bool], desc: bool = True):
         A 1D array with the estimated q-value for each entry. The
         array is the same length as the `scores` and `target` arrays.
     """
+    # todo: I think the allowed data types are way to general and lenient. scores
+    # should me maximally integer|floating (but better just float) and targets
+    # should only be bool, nothing else. The rest is the job of the calling code.
+
     scores = np.array(scores)
     target = np.array(target)
 

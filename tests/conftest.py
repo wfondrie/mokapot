@@ -15,6 +15,7 @@ from triqler.qvality import getQvaluesFromScores
 
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from mokapot.qvalues import tdc
+from mokapot.typecheck import register_numpy_typechecker
 from mokapot.utils import convert_targets_column
 
 
@@ -666,3 +667,6 @@ def pytest_plugin_registered(plugin, manager):
     if str(plugin).find("xdist.dsession.DSession") != -1:
         if debugger_active:
             manager.unregister(plugin)
+
+
+register_numpy_typechecker()
