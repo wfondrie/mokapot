@@ -693,7 +693,7 @@ class OnDiskPsmDataset(PsmDataset):
 
 @typechecked
 def _update_labels(
-    scores: np.ndarray[float] | pd.Series,
+    scores: np.ndarray[float | int] | pd.Series,
     targets: np.ndarray[bool] | pd.Series,
     eval_fdr: float = 0.01,
     desc: bool = True,

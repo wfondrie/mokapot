@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TypeVar, Callable, Iterator
+from typing import Callable, Iterator, TypeVar
 
 import numpy as np
 import scipy.stats as stats
@@ -225,8 +225,8 @@ def monotonize(
 
 @typechecked
 def monotonize_nnls(
-    x: np.ndarray[float],
-    w: np.ndarray[float] | None = None,
+    x: np.ndarray[np.floating],
+    w: np.ndarray[np.floating | np.integer] | None = None,
     ascending: bool = True,
 ) -> np.ndarray[float]:
     """Monotonizes a given array `x` using non-negative least squares (NNLS)

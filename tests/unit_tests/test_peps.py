@@ -60,7 +60,7 @@ def test_monotonize_simple():
 
 
 def test_monotonize():
-    x = np.array([2, 3, 1])
+    x = np.array([2, 3, 1], dtype=float)
     w = np.array([2, 1, 10])
     y = peps.monotonize_nnls(x, w, False)
     testing.assert_allclose(y, np.array([7 / 3, 7 / 3, 1]))
@@ -79,28 +79,26 @@ def test_monotonize():
 
     # Test to check simple_averaging parameter when set to True
     assert np.allclose(
-        peps.monotonize(np.array([1, 2, 5, 4, 3]), True, True),
+        peps.monotonize(np.array([1.0, 2, 5, 4, 3]), True, True),
         np.array([1, 2, 4, 4, 4]),
     )
     assert np.allclose(
-        peps.monotonize(np.array([1, 2, 6, 6, 3]), True, True),
+        peps.monotonize(np.array([1.0, 2, 6, 6, 3]), True, True),
         np.array([1, 2, 4.5, 4.5, 4.5]),
     )
 
     # Test to check simple_averaging parameter when set to False
     assert np.allclose(
-        peps.monotonize(np.array([1, 2, 5, 4, 3]), True, False),
+        peps.monotonize(np.array([1.0, 2, 5, 4, 3]), True, False),
         np.array([1, 2, 4, 4, 4]),
     )
     assert np.allclose(
-        peps.monotonize(np.array([1, 2, 6, 6, 3]), True, False),
+        peps.monotonize(np.array([1.0, 2, 6, 6, 3]), True, False),
         np.array([1, 2, 5, 5, 5]),
     )
 
 
 def test_fit_nnls0():
-    # n = np.array([3, 2, 0, 0, 1, 1, 3])
-    # k = np.array([0, 0, 1, 1, 1, 1, 3])
     n = np.array([0, 2, 1, 0, 1, 0, 2, 0])
     k = np.array([1, 0, 0, 1, 1, 1, 2, 1])
     p_asc = np.array([0, 0, 0, 1 / 2, 1, 1, 1, 1])
@@ -208,18 +206,14 @@ def test_peps_qvality(is_tdc):
 
 @pytest.mark.parametrize("is_tdc", [True, False])
 def test_peps_kde_nnls(is_tdc):
-    np.random.seed(
-        1253
-    )  # this produced an error with failing iterations in nnls
+    np.random.seed(1253)  # this produced an error with failing iterations in nnls
     scores, targets = get_target_decoy_data()
     peps_values = peps.peps_from_scores_kde_nnls(scores, targets, is_tdc)
     assert np.all(peps_values >= 0)
     assert np.all(peps_values <= 1)
     assert np.all(np.diff(peps_values) * np.diff(scores) <= 0)
 
-    np.random.seed(
-        1245
-    )  # this produced an assertion error due to peps over 1.0
+    np.random.seed(1245)  # this produced an assertion error due to peps over 1.0
     scores, targets = get_target_decoy_data()
     peps_values = peps.peps_from_scores_kde_nnls(scores, targets, is_tdc)
     assert np.all(peps_values >= 0)
@@ -254,9 +248,7 @@ def test_hist_data_from_iterator():
             yield scores[i : i + chunksize], targets[i : i + chunksize]
 
     bins = np.histogram_bin_edges(scores, bins=31)
-    e0, t0, d0 = peps.hist_data_from_scores(
-        scores, targets, bins=bins
-    ).as_counts()
+    e0, t0, d0 = peps.hist_data_from_scores(scores, targets, bins=bins).as_counts()
     e1, t1, d1 = peps.hist_data_from_iterator(
         score_iterator(scores, targets), bin_edges=bins
     ).as_counts()
@@ -265,9 +257,7 @@ def test_hist_data_from_iterator():
     assert d0 == approx(d1)
 
     bins = np.histogram_bin_edges(scores, bins=17)
-    e0, t0, d0 = peps.hist_data_from_scores(
-        scores, targets, bins=bins
-    ).as_densities()
+    e0, t0, d0 = peps.hist_data_from_scores(scores, targets, bins=bins).as_densities()
     e1, t1, d1 = peps.hist_data_from_iterator(
         score_iterator(scores, targets, chunksize=7), bin_edges=bins
     ).as_densities()
@@ -282,13 +272,9 @@ def test_peps_from_qvality_sorting():
 
     N = 1126
     targets = (rng.uniform(0, 1, N)) > 0.7
-    scores = targets * rng.normal(1, 1, N) + (1 - targets) * rng.normal(
-        -1, 1, N
-    )
+    scores = targets * rng.normal(1, 1, N) + (1 - targets) * rng.normal(-1, 1, N)
 
-    peps0 = peps.peps_from_scores_qvality(
-        scores, targets, True, use_binary=False
-    )
+    peps0 = peps.peps_from_scores_qvality(scores, targets, True, use_binary=False)
 
     index = np.argsort(scores)[::-1]
     scores_sorted, targets_sorted = scores[index], targets[index]
