@@ -26,8 +26,7 @@ import numpy as np
 import pandas as pd
 from typeguard import typechecked
 
-from mokapot import qvalues
-from mokapot import utils
+from mokapot import qvalues, utils
 from mokapot.parsers.fasta import read_fasta
 from mokapot.proteins import Proteins
 from .tabular_data import TabularDataReader
@@ -394,6 +393,9 @@ class LinearPsmDataset(PsmDataset):
         desc : bool
             Are high scores better for the best feature?
         """
+        LOGGER.debug(
+            f"\t- Finding best feature in {len(self._feature_columns)} feature columns."
+        )
         best_feat = None
         best_positives = 0
         new_labels = None
