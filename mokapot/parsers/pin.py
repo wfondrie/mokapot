@@ -5,6 +5,7 @@ This module contains the parsers for reading in PSMs
 import logging
 import warnings
 from pathlib import Path
+from pprint import pformat
 from typing import Iterable, List
 
 import pandas as pd
@@ -286,7 +287,7 @@ def read_percolator(
         ),
     )
 
-    LOGGER.info(f"Infered column grouping: {column_groups}")
+    LOGGER.info(f"Infered column grouping: {pformat(column_groups)}")
 
     return OnDiskPsmDataset(
         perc_file,

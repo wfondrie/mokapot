@@ -58,6 +58,44 @@ class OptionalColumns:
 
 @dataclass(frozen=True, slots=True)
 class ColumnGroups:
+    """Helper class to store the columns and their names.
+
+    Parameters
+    ----------
+    columns : tuple[str, ...]
+        The columns that are available in the dataset.
+    target_column : str
+        The column that contains the target values.
+        This is usually a column that labels is a given entry
+        in the dataset is a target or a decoy. Internally
+        we will check if this column is also a feature column
+        and raise an error if it is.
+    peptide_column : str
+        The column that contains the peptide sequences.
+        In practice we also allow peptidoform/proforma-like
+        sequences. I till be used as a factor to deduplicate
+        the 'peptide' level of confidences.
+    spectrum_columns : tuple[str, ...]
+        The columns that contain the spectrum metadata.
+        These are metadata columns that specify what elements will
+        compete with each other.
+        Common examples of these would be: 'FileName', 'ScanNr'
+        Therefore if two entries ('rows') share the same pair, only
+        the top one will be kept.
+    feature_columns : tuple[str, ...]
+        The columns that contain the feature values.
+        These columns will be used to fit the model and calculate
+        the confidences. In general it is recommended to use features
+        that are monotonic in nature (absolute mass error for example,
+        low is always better, in contrast with mass error, where
+        "close to 0 is better").
+    extra_confidence_level_columns : tuple[str, ...]
+        The columns that contain the extra confidence levels.
+        Examples of this could be 'precursor ion', ''
+
+
+    """
+
     columns: tuple[str, ...]
     target_column: str
     peptide_column: str
@@ -68,10 +106,20 @@ class ColumnGroups:
 
     def __post_init__(self):
         # Make sure that all columns are present
+        if self.target_column not in self.columns:
+            msg = f"Target column {self.target_column} "
+            msg += f"not found in columns {self.columns}"
+            raise ValueError(msg)
+
+        if self.target_column in self.feature_columns:
+            msg = (
+                f"Target column {self.target_column} is also a feature column"
+            )
+            raise ValueError(msg)
+
         all_cols = [self.target_column, self.peptide_column]
         all_cols += self.spectrum_columns
         all_cols += self.feature_columns
-        all_strict_cols = tuple(all_cols)
         for v in self.optional_columns.as_dict().values():
             if v is not None:
                 all_cols.append(v)
@@ -86,14 +134,14 @@ class ColumnGroups:
         # make sure there are no duplicates in all cols
         seen = set()
         dupes = []
-        for col in all_strict_cols:
+        for col in self.feature_columns:
             if col in seen:
                 dupes.append(col)
             seen.add(col)
 
         if dupes:
             raise ValueError(
-                f"Duplicate columns found in all columns: {dupes}, {self}"
+                f"Duplicate columns found in feature columns: {dupes}, {self}"
             )
 
     def update(

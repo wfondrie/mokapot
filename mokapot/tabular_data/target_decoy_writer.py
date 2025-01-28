@@ -25,10 +25,14 @@ class TargetDecoyWriter(TabularDataWriter):
         self.target_column = target_column
         self.decoy_column = decoy_column
         self.output_columns = writers[0].get_column_names()
+        # Used to track how many values are imputed for missing columns
+        self.missing_value_columns = {}
 
-        assert (target_column is None) != (decoy_column is None), (
-            "Exactly one of `target_column` and `decoy_column` must be given"
-        )
+        if (target_column is not None) and (decoy_column is not None):
+            raise RuntimeError(
+                "Exactly one of `target_column` and"
+                " `decoy_column` must be given"
+            )
 
     def initialize(self):
         for writer in self.writers:
@@ -37,6 +41,14 @@ class TargetDecoyWriter(TabularDataWriter):
     def finalize(self):
         for writer in self.writers:
             writer.finalize()
+
+        # Provided where this is being used ... I am unusre how I can
+        # assure that the finalizer is called.
+        if self.missing_value_columns:
+            msg = "Missing values detected in the following columns:"
+            for col, count in self.missing_value_columns.items():
+                msg += f"\n\t- {col} ({count} missing values)"
+            warnings.warn(msg)
 
     def check_valid_data(self, data):
         # We let the `self.writers` to the validation
@@ -48,11 +60,21 @@ class TargetDecoyWriter(TabularDataWriter):
             if x in data.columns:
                 continue
             else:
-                warnings.warn(
-                    f"Column {x} not found in data,"
-                    f" found columns: {data.columns}"
-                    "Will try to assign missing values to it."
-                )
+                if x not in self.missing_value_columns:
+                    # Print traceback and break
+                    import traceback
+
+                    traceback.print_stack()
+                    breakpoint()
+                    warnings.warn(
+                        f"Column {x} not found in data,"
+                        f" found columns: {data.columns}"
+                        "Will try to assign missing values to it."
+                        f"\n\t Writers: {self.writers}"
+                    )
+                    self.missing_value_columns[x] = 0
+
+                self.missing_value_columns[x] += 1
                 data[x] = np.nan
 
         writers = self.writers

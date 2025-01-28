@@ -610,7 +610,8 @@ class LevelWriterCollection:
         }
         self.seen_level_entities = {level: set() for level in levels}
         for level, writer in self.level_writers.items():
-            LOGGER.info(f"Initializing writer for level {level}: {writer}")
+            LOGGER.info(f"Initializing writer for level {level}")
+            LOGGER.debug(f"\t {writer}")
             writer.initialize()
 
         self.score_stats = OnlineStatistics()
@@ -669,7 +670,7 @@ class LevelWriterCollection:
         for level in self.levels:
             count = len(self.seen_level_entities[level])
             curr_writer = self.level_writers[level]
-            LOGGER.info(f"Finalizing writer for level {level}: {curr_writer}")
+            LOGGER.debug(f"Finalizing writer for level {level}: {curr_writer}")
             curr_writer.finalize()
             if level == "psms":
                 if self.deduplication:
@@ -935,8 +936,6 @@ class OutputWriterFactory:
         ]
 
         self.output_column_names_proteins = [
-            *id_col,
-            *spectra_columns,
             "mokapot protein group",
             "best peptide",
             "stripped sequence",
@@ -969,6 +968,14 @@ class OutputWriterFactory:
         )
 
         if self.is_sqlite:
+            # Note this assertion is not meant to be used
+            # for control flow, it checks that the code is sound
+            # so far and I dont think it should be a recoverable
+            # error.
+            assert isinstance(self.sqlite_path, Path), (
+                "sqlite_path must be a Path object, "
+                f"got {type(self.sqlite_path)}"
+            )
             if path is not None:
                 LOGGER.warning(
                     "The path argument is ignored when using sqlite output."

@@ -145,6 +145,8 @@ def test_cli_fasta(tmp_path, phospho_files):
     assert file_approx_len(tmp_path, "targets.peptides.csv", 33538)
     assert file_approx_len(tmp_path, "targets.proteins.csv", 7827)
 
+    raise NotImplementedError("TODO: Actually test column contents")
+
 
 def test_cli_saved_models(tmp_path, phospho_files):
     """Test that saved_models works"""
