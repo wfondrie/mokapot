@@ -20,8 +20,8 @@ from ..helpers.utils import TestOutcome
 @pytest.fixture
 def desc_scores():
     """Create a series of descending scores and their q-values"""
-    scores = np.array([10, 10, 9, 8, 7, 7, 6, 5, 4, 3, 2, 2, 1, 1, 1, 1])
-    target = np.array([1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0])
+    scores = np.array([10, 10, 9, 8, 7, 7, 6, 5, 4, 3, 2, 2, 1, 1, 1, 1], dtype=float)
+    target = np.array([1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0], dtype=bool)
     qvals = np.array([
         1 / 4,
         1 / 4,
@@ -40,14 +40,14 @@ def desc_scores():
         1,
         1,
     ])
-    return scores.astype(float), target == 1, qvals.astype(float)
+    return scores, target, qvals
 
 
 @pytest.fixture
 def asc_scores():
     """Create a series of ascending scores and their q-values"""
-    scores = np.array([1, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9, 9, 10, 10, 10, 10])
-    target = np.array([1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0])
+    scores = np.array([1, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9, 9, 10, 10, 10, 10], dtype=float)
+    target = np.array([1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0], dtype=bool)
     qvals = np.array([
         1 / 4,
         1 / 4,
@@ -66,7 +66,7 @@ def asc_scores():
         1,
         1,
     ])
-    return scores.astype(float), target == 1, qvals.astype(float)
+    return scores, target, qvals
 
 
 def qvalues_are_valid(qvalues, scores=None):
