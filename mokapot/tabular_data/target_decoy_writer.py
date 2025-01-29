@@ -61,11 +61,6 @@ class TargetDecoyWriter(TabularDataWriter):
                 continue
             else:
                 if x not in self.missing_value_columns:
-                    # Print traceback and break
-                    import traceback
-
-                    traceback.print_stack()
-                    breakpoint()
                     warnings.warn(
                         f"Column {x} not found in data,"
                         f" found columns: {data.columns}"

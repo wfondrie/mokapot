@@ -76,7 +76,7 @@ def rollup_src_dirs(tmp_path_factory):
         for root, input_file in parts.items():
             # Run mokapot for the smaller data files
             if recompute or not Path.exists(
-                dest_dir / f"{root}.targets.precursors.csv"
+                dest_dir / f"{root}.targets.precursors.tsv"
             ):
                 params = [
                     Path("data", input_file),
@@ -87,7 +87,7 @@ def rollup_src_dirs(tmp_path_factory):
                 run_mokapot_cli(params)
 
             # Convert csv output to parquet
-            for file in Path(dest_dir).glob(f"{root}.*.csv"):
+            for file in Path(dest_dir).glob(f"{root}.*.tsv"):
                 outfile = pq_dest_dir / file.with_suffix(".parquet").name
                 if outfile.exists():
                     continue
@@ -113,7 +113,7 @@ def rollup_src_dirs(tmp_path_factory):
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "suffix",
-    [".csv", ".parquet"],
+    [".tsv", ".parquet"],
 )
 def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
     """Test that basic cli works."""

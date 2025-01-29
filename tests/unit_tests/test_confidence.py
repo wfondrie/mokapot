@@ -108,7 +108,7 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
             deduplication=deduplication,
         )
 
-    df_results_group = pd.read_csv(tmp_path / "targets.peptides.csv", sep="\t")
+    df_results_group = pd.read_csv(tmp_path / "targets.peptides.tsv", sep="\t")
     # The number of results is between 490 and 510
     # to account for collisions between targets/decoys
     # due to the random generation of the identifiers.

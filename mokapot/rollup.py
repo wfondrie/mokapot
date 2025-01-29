@@ -76,7 +76,7 @@ def do_rollup(config):
             )
         suffix = ".parquet"
     else:
-        suffix = ".csv"
+        suffix = ".tsv"
 
     target_files: list[Path] = sorted(
         src_dir.glob(f"*.targets.{base_level}s{suffix}")

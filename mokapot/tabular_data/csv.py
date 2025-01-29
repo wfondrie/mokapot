@@ -14,6 +14,11 @@ class CSVFileReader(TabularDataReader):
     """
     A tabular data reader for reading CSV files.
 
+    Technically speaking this is more of a tsv writter, since it
+    more often than not the default separator is tab. But keeping
+    the name for consisntency with pandas, where "CSV" is used
+    as a generic term to mean a delimited text file.
+
     Attributes:
     -----------
         file_name :  Path
@@ -57,7 +62,7 @@ class CSVFileReader(TabularDataReader):
             yield chunk if columns is None else chunk[columns]
 
     def get_default_extension(self) -> str:
-        return ".csv"
+        return ".tsv"
 
 
 @typechecked

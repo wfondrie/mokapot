@@ -69,11 +69,11 @@ def test_rollup_10000(
         "--save_models",
     ]
     run_mokapot_cli(params)
-    assert file_exist(path, "targets.psms.csv")
-    assert file_exist(path, "targets.peptides.csv")
-    assert file_exist(path, "targets.precursors.csv")
-    assert file_exist(path, "targets.modifiedpeptides.csv")
-    assert file_exist(path, "targets.peptidegroups.csv")
+    assert file_exist(path, "targets.psms.tsv")
+    assert file_exist(path, "targets.peptides.tsv")
+    assert file_exist(path, "targets.precursors.tsv")
+    assert file_exist(path, "targets.modifiedpeptides.tsv")
+    assert file_exist(path, "targets.peptidegroups.tsv")
 
 
 def test_extra_cols(tmp_path):
@@ -96,27 +96,27 @@ def test_extra_cols(tmp_path):
     run_mokapot_cli([extended_file] + params + ["--file_root", "run1"])
     run_mokapot_cli([non_extended_file] + params + ["--file_root", "run2"])
 
-    assert file_exist(tmp_path, "run1.targets.peptides.csv")
-    assert file_exist(tmp_path, "run1.decoys.peptides.csv")
-    assert file_exist(tmp_path, "run1.targets.psms.csv")
-    assert file_exist(tmp_path, "run1.decoys.psms.csv")
+    assert file_exist(tmp_path, "run1.targets.peptides.tsv")
+    assert file_exist(tmp_path, "run1.decoys.peptides.tsv")
+    assert file_exist(tmp_path, "run1.targets.psms.tsv")
+    assert file_exist(tmp_path, "run1.decoys.psms.tsv")
 
-    assert file_exist(tmp_path, "run2.targets.peptides.csv")
-    assert file_exist(tmp_path, "run2.decoys.peptides.csv")
-    assert file_exist(tmp_path, "run2.targets.psms.csv")
-    assert file_exist(tmp_path, "run2.decoys.psms.csv")
+    assert file_exist(tmp_path, "run2.targets.peptides.tsv")
+    assert file_exist(tmp_path, "run2.decoys.peptides.tsv")
+    assert file_exist(tmp_path, "run2.targets.psms.tsv")
+    assert file_exist(tmp_path, "run2.decoys.psms.tsv")
 
-    df_run1_t_psms = pd.read_csv(tmp_path / "run1.targets.psms.csv", sep="\t")
-    df_run2_t_psms = pd.read_csv(tmp_path / "run2.targets.psms.csv", sep="\t")
+    df_run1_t_psms = pd.read_csv(tmp_path / "run1.targets.psms.tsv", sep="\t")
+    df_run2_t_psms = pd.read_csv(tmp_path / "run2.targets.psms.tsv", sep="\t")
     pd.testing.assert_frame_equal(
         df_run1_t_psms[df_run2_t_psms.columns], df_run2_t_psms
     )
 
     df_run1_t_peptides = pd.read_csv(
-        tmp_path / "run1.targets.peptides.csv", sep="\t"
+        tmp_path / "run1.targets.peptides.tsv", sep="\t"
     )
     df_run2_t_peptides = pd.read_csv(
-        tmp_path / "run2.targets.peptides.csv", sep="\t"
+        tmp_path / "run2.targets.peptides.tsv", sep="\t"
     )
     pd.testing.assert_frame_equal(
         df_run1_t_peptides[df_run2_t_peptides.columns], df_run2_t_peptides
@@ -147,10 +147,10 @@ def test_deduplication(tmp_path):
     ]
     run_mokapot_cli(no_dedup_params)
 
-    assert file_exist(path, "dedup.targets.psms.csv")
-    assert file_exist(path, "nodedup.targets.psms.csv")
-    assert file_approx_len(path, "dedup.targets.psms.csv", 5549)
-    assert file_approx_len(path, "nodedup.targets.psms.csv", 37814)
+    assert file_exist(path, "dedup.targets.psms.tsv")
+    assert file_exist(path, "nodedup.targets.psms.tsv")
+    assert file_approx_len(path, "dedup.targets.psms.tsv", 5549)
+    assert file_approx_len(path, "nodedup.targets.psms.tsv", 37814)
 
     # Check that we have really the right number of results:
     # Without deduplication, all original targets have to be in the
@@ -161,9 +161,9 @@ def test_deduplication(tmp_path):
     nodedup_count = len(df[df.Label == 1])
     dedup_count = len(df.drop_duplicates(subset=["ScanNr", "ExpMass"]))
 
-    lines1a = count_lines(path, "dedup.targets.psms.csv") - 1
-    lines1b = count_lines(path, "dedup.decoys.psms.csv") - 1
-    lines2 = count_lines(path, "nodedup.targets.psms.csv") - 1
+    lines1a = count_lines(path, "dedup.targets.psms.tsv") - 1
+    lines1b = count_lines(path, "dedup.decoys.psms.tsv") - 1
+    lines2 = count_lines(path, "nodedup.targets.psms.tsv") - 1
 
     assert lines1a + lines1b == dedup_count
     assert lines2 == nodedup_count
@@ -207,7 +207,7 @@ def test_streaming(tmp_path, percolator_extended_file_big):
             "--stream_confidence",
         ]
         run_mokapot_cli(params)
-        assert file_exist(path, "stream1.targets.psms.csv")
+        assert file_exist(path, "stream1.targets.psms.tsv")
 
     # Set chunk size so low, that chunking really kicks in
     with run_with_chunk_size(123):
@@ -218,23 +218,23 @@ def test_streaming(tmp_path, percolator_extended_file_big):
             "--stream_confidence",
         ]
         run_mokapot_cli(params)
-        assert file_exist(path, "stream2.targets.psms.csv")
+        assert file_exist(path, "stream2.targets.psms.tsv")
 
     # Run mokapot without streaming
     params = base_params + ["--file_root", "base"]
     run_mokapot_cli(params)
-    assert file_exist(path, "base.targets.psms.csv")
+    assert file_exist(path, "base.targets.psms.tsv")
 
     # compare results
     def read_tsv(filename):
         return pd.read_csv(path / filename, sep="\t", index_col=False)
 
-    df_streamed = read_tsv("stream1.targets.psms.csv")
-    df_streamed2 = read_tsv("stream2.targets.psms.csv")
+    df_streamed = read_tsv("stream1.targets.psms.tsv")
+    df_streamed2 = read_tsv("stream2.targets.psms.tsv")
 
     pd.testing.assert_frame_equal(df_streamed, df_streamed2)
 
-    df_base = read_tsv("base.targets.psms.csv")
+    df_base = read_tsv("base.targets.psms.tsv")
 
     qvc = "mokapot_qvalue"
     pvc = "posterior_error_prob"
