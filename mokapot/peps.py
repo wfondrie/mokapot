@@ -310,8 +310,11 @@ def estimate_pi0_by_slope(
     """
     max_decoy = np.max(decoy_pdf)
     last_index = np.argmax(decoy_pdf >= threshold * max_decoy)
-    pi0_est, _ = np.polyfit(decoy_pdf[:last_index], target_pdf[:last_index], 1)
-    return max(pi0_est, 1e-10)
+    try:
+        pi0_est, _ = np.polyfit(decoy_pdf[:last_index], target_pdf[:last_index], 1)
+    except RuntimeError:
+        return 1.0
+    return np.clip(pi0_est, 1e-10, 1.0)
 
 
 @typechecked

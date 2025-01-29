@@ -283,6 +283,16 @@ def create_config_parser():
     )
 
     parser.add_argument(
+        "--tdc",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        help=(
+            "Specifies whether input comes from target decoy competition "
+            "(default) or from separate search."
+        ),
+    )
+
+    parser.add_argument(
         "--peps_error",
         default=False,
         action="store_true",
@@ -300,12 +310,37 @@ def create_config_parser():
     )
 
     parser.add_argument(
-        "--qvalue_algorithm",
-        default="tdc",
-        choices=["tdc", "from_peps", "from_counts"],
+        "--pi0_algorithm",
+        default="default",
+        choices=[
+            "default",
+            "ratio",
+            "slope",
+            "storey_smoother",
+            "storey_fixed",
+            "storey_bootstrap",
+        ],
+        help=("Specify the algorithm for pi0 estimation. "),
+    )
+
+    parser.add_argument(
+        "--pi0_eval_lambda",
+        default=0.5,
         help=(
-            "Specify the algorithm for qvalue computation. `tdc` is "
-            "the default mokapot algorithm."
+            "Specify the lambda in Storey's pi0 estimation for evaluation "
+            "(works currently only with storey_* pi0 algorithms."
+        ),
+    )
+
+    parser.add_argument(
+        "--qvalue_algorithm",
+        default="default",
+        choices=["default", "tdc", "from_counts", "storey"],
+        help=(
+            "Specify the algorithm for qvalue computation. If the `tdc` option"
+            "is set to true (which is the default0 `default` evals to `tdc`, "
+            "the original mokapot algorithm, which works only with tdc. "
+            "Otherwise, it defaults to `storey`."
         ),
     )
 

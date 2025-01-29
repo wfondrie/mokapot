@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from . import __version__
+from .algorithms import configure_algorithms
 from .brew import brew
 from .confidence import assign_confidence
 from .config import create_config_parser
@@ -62,6 +63,9 @@ def main(main_args=None):
     logging.info("mokapot version %s", str(__version__))
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
     logging.info("Department of Genome Sciences at the University of Washington.")
+
+    # Configure confidence algorithms
+    configure_algorithms(config)
 
     # Check config parameter validity
     if config.stream_confidence and config.peps_algorithm != "hist_nnls":
@@ -152,7 +156,6 @@ def main(main_args=None):
         proteins=proteins,
         peps_error=config.peps_error,
         peps_algorithm=config.peps_algorithm,
-        qvalue_algorithm=config.qvalue_algorithm,
         sqlite_path=config.sqlite_db_path,
         stream_confidence=config.stream_confidence,
     )

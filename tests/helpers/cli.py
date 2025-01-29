@@ -3,8 +3,8 @@ import io
 import logging
 import os
 import subprocess
-from contextlib import redirect_stdout, redirect_stderr
-from typing import List, Any, Optional, Dict, Callable
+from contextlib import redirect_stderr, redirect_stdout
+from typing import Any, Callable, Dict, List, Optional
 
 from typeguard import TypeCheckError
 
@@ -102,19 +102,14 @@ def _run_cli(
     params = flatten(params)
     params = [str(param) for param in params]
     if run_in_subprocess:
-        cmd = ["uv", "run", "python", "-m", module] + params
+        cmd = ["uv", "run", "--frozen", "python", "-m", module] + params
         try:
-            res = subprocess.run(
-                cmd, check=True, capture_output=capture_output
-            )
+            res = subprocess.run(cmd, check=True, capture_output=capture_output)
         except subprocess.CalledProcessError as e:
             logging.error(
-                f"Calling {module} with params {params} failed"
-                f"\nStderr: {e.stderr}"
+                f"Calling {module} with params {params} failed" f"\nStderr: {e.stderr}"
             )
-            raise RuntimeError(
-                f"Calling {module} with params {params} failed"
-            ) from e
+            raise RuntimeError(f"Calling {module} with params {params} failed") from e
         if capture_output:
             return {
                 "stdout": res.stdout.decode(),
@@ -124,9 +119,7 @@ def _run_cli(
         if res.returncode == 250:
             raise ValueError(f"Mokapot returned error status {res.returncode}")
         elif res.returncode != 0:
-            raise RuntimeError(
-                f"Mokapot returned error status {res.returncode}"
-            )
+            raise RuntimeError(f"Mokapot returned error status {res.returncode}")
 
     elif capture_output:
         stdout_sink = io.StringIO()
@@ -151,9 +144,7 @@ def _run_cli(
             main_func(params)
 
 
-def run_mokapot_cli(
-    params: List[Any], run_in_subprocess=None, capture_output=False
-):
+def run_mokapot_cli(params: List[Any], run_in_subprocess=None, capture_output=False):
     """
     Run the mokapot command either in a subprocess or as direct
     call to the main function.

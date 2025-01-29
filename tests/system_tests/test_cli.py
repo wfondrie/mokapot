@@ -7,6 +7,7 @@ output, just that the expect outputs are created.
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -300,3 +301,97 @@ def test_cli_help():
     assert "usage: mokapot" in stdout
     assert "Written by" in stdout
     assert "--enzyme" in stdout
+
+
+def test_cli_algo_options(tmp_path, scope_files):
+    """Test that algorithm options work."""
+
+    def read_psms(root):
+        file = Path(tmp_path, f"{root}.targets.psms.csv")
+        if not file.exists():
+            raise FileNotFoundError(f"File {file} does not exist")
+        return pd.read_csv(file, sep="\t", index_col=None)
+
+    file = scope_files[0]
+    # file = Path("./scratch/astral_dia_60spd_dia/percolator-noSplit.parquet")
+    params = [file, "--dest_dir", tmp_path, "--verbosity", 3]
+    params = params + [
+        ("--max_workers", 1),
+        ("--test_fdr", 0.01),
+        ("--subset_max_train", 400000),
+        ("--max_iter", 10),
+        "--ensemble",
+        "--log_time",
+        "--keep_decoys",
+        "--save_models",
+    ]
+
+    def run_with_options(
+        tdc, qvalue_algorithm, root="test", pi0algo="default", pi0lambda=None
+    ):
+        call_params = params + [
+            "--tdc" if tdc else "--no-tdc",
+            ("--qvalue_algorithm", qvalue_algorithm),
+            ("--pi0_algorithm", pi0algo),
+            ("--file_root", root),
+        ]
+        if pi0lambda is not None:
+            call_params += [("--pi0_lambda", pi0lambda)]
+        run_mokapot_cli(call_params, capture_output=True)
+        return read_psms(root)
+
+    def assert_result_frames_close(df1, df2, N=None):
+        # It's really difficult to compare results from different q-value algorithms
+        # in terms of overall mokapot output in a meaningful way...
+        if N is not None:
+            df1 = df1.head(N)
+            df2 = df2.head(N)
+        pd.testing.assert_frame_equal(
+            df1[["PSMId", "peptide"]],
+            df2[["PSMId", "peptide"]],
+        )
+        # Sometimes scores are close, but in general only ordering by score matters
+        # np.testing.assert_allclose(df1["score"].values, df2["score"].values)
+        np.testing.assert_allclose(
+            df1["q-value"].values, df2["q-value"].values, atol=0.01
+        )
+
+    # Test that certain calls raise errors
+    with pytest.raises(SystemExit):
+        # todo: capture stderr
+        run_mokapot_cli(params + ["--qvalue_algorithm", "xyz"], run_in_subprocess=False)
+
+    with pytest.raises(Exception):
+        run_mokapot_cli(
+            params + ["--no-tdc", "--qvalue_algorithm", "tdc"],
+            run_in_subprocess=False,
+        )
+    with pytest.raises(Exception):
+        run_mokapot_cli(
+            params + ["--no-tdc", "--pi0_algorithm", "ratio"],
+            run_in_subprocess=False,
+        )
+
+    # tdc
+    targets_psms_df1 = run_with_options(True, "default")
+    targets_psms_df2 = run_with_options(True, "tdc")
+    pd.testing.assert_frame_equal(targets_psms_df1, targets_psms_df2)
+
+    targets_psms_df3 = run_with_options(True, "from_counts")
+    pd.testing.assert_frame_equal(targets_psms_df1, targets_psms_df3)
+
+    targets_psms_df3 = run_with_options(True, "storey", pi0algo="ratio")
+    assert_result_frames_close(targets_psms_df1, targets_psms_df3)
+
+    targets_psms_df3 = run_with_options(True, "storey", pi0algo="storey_fixed")
+    assert_result_frames_close(targets_psms_df1, targets_psms_df3, 8)
+
+    # no-tdc
+    targets_psms_df3 = run_with_options(False, "storey")
+    assert_result_frames_close(targets_psms_df1, targets_psms_df3, 8)
+
+    targets_psms_df3 = run_with_options(False, "storey", pi0algo="storey_smoother")
+    assert_result_frames_close(targets_psms_df1, targets_psms_df3, 8)
+
+    targets_psms_df3 = run_with_options(False, "storey", pi0algo="storey_fixed")
+    assert_result_frames_close(targets_psms_df1, targets_psms_df3, 8)

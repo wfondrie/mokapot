@@ -1,6 +1,7 @@
 """
 Defines a function to run the Percolator algorithm.
 """
+
 import copy
 import logging
 from operator import itemgetter
@@ -8,21 +9,18 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
+from joblib import delayed, Parallel
 from typeguard import typechecked
 
 from mokapot import utils
-from mokapot.constants import (
-    CHUNK_SIZE_ROWS_PREDICTION,
-    CHUNK_SIZE_READ_ALL_DATA,
-)
+from mokapot.constants import CHUNK_SIZE_READ_ALL_DATA, CHUNK_SIZE_ROWS_PREDICTION
 from mokapot.dataset import (
-    LinearPsmDataset,
     calibrate_scores,
-    update_labels,
+    LinearPsmDataset,
     OnDiskPsmDataset,
+    update_labels,
 )
-from mokapot.model import PercolatorModel, Model
+from mokapot.model import Model, PercolatorModel
 from mokapot.parsers.pin import parse_in_chunks
 
 LOGGER = logging.getLogger(__name__)
@@ -109,9 +107,7 @@ def brew(
 
         # Check that all of the datasets have the same features:
     feat_set = set(datasets[0].feature_columns)
-    if not all([
-        set(dataset.feature_columns) == feat_set for dataset in datasets
-    ]):
+    if not all([set(dataset.feature_columns) == feat_set for dataset in datasets]):
         raise ValueError("All collections of PSMs must use the same features.")
 
     data_size = [len(datasets.spectra_dataframe) for datasets in datasets]
@@ -324,9 +320,7 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
             ds = data_size[file_idx]
             k = 0
             while k + chunk_range < ds:
-                train_idx[file_idx] += list(
-                    set(range(k, k + chunk_range)) - set(idx)
-                )
+                train_idx[file_idx] += list(set(range(k, k + chunk_range)) - set(idx))
                 k += chunk_range
             train_idx[file_idx] += list(set(range(k, ds)) - set(idx))
             train_idx_size += len(train_idx[file_idx])
@@ -338,9 +332,7 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
                 train_idx_size,
                 subset_max_train,
             )
-            for i, current_subset_max_train in enumerate(
-                subset_max_train_per_file
-            ):
+            for i, current_subset_max_train in enumerate(subset_max_train_per_file):
                 if current_subset_max_train < train_idx_size:
                     train_idx[i] = rng.choice(
                         train_idx[i], current_subset_max_train, replace=False
@@ -352,9 +344,7 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
 def _create_linear_dataset(
     dataset: OnDiskPsmDataset, psms: pd.DataFrame, enforce_checks: bool = True
 ):
-    utils.convert_targets_column(
-        data=psms, target_column=dataset.target_column
-    )
+    utils.convert_targets_column(data=psms, target_column=dataset.target_column)
     return LinearPsmDataset(
         psms=psms,
         target_column=dataset.target_column,
@@ -380,9 +370,7 @@ def get_index_values(df, col_name, val, orig_idx):
 
 
 @typechecked
-def predict_fold(
-    model: Model, fold: int, dataset: LinearPsmDataset, scores: list
-):
+def predict_fold(model: Model, fold: int, dataset: LinearPsmDataset, scores: list):
     scores[fold].append(model.predict(dataset))
 
 
@@ -434,9 +422,7 @@ def _predict(
                 for i in range(n_folds)
             ]
             dataset_slices = [
-                _create_linear_dataset(
-                    dataset, psm_slice, enforce_checks=False
-                )
+                _create_linear_dataset(dataset, psm_slice, enforce_checks=False)
                 for psm_slice in psms_slices
             ]
             for i, dataset_slice in enumerate(dataset_slices):

@@ -9,13 +9,13 @@ from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
 from mokapot.confidence import compute_and_write_confidence
 from mokapot.statistics import OnlineStatistics
 from mokapot.tabular_data import (
-    TabularDataReader,
-    remove_columns,
-    BufferType,
-    TabularDataWriter,
     auto_finalize,
+    BufferType,
     ComputedTabularDataReader,
     MergedTabularDataReader,
+    remove_columns,
+    TabularDataReader,
+    TabularDataWriter,
 )
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 
@@ -39,9 +39,7 @@ def compute_rollup_levels(
 
 def get_target_decoy_reader(path: Path, is_decoy: bool):
     return ComputedTabularDataReader(
-        reader=TabularDataReader.from_path(
-            path, column_map=STANDARD_COLUMN_NAME_MAP
-        ),
+        reader=TabularDataReader.from_path(path, column_map=STANDARD_COLUMN_NAME_MAP),
         column="is_decoy",
         dtype=np.dtype("bool"),
         func=lambda df: np.full(len(df), is_decoy),
@@ -78,30 +76,20 @@ def do_rollup(config):
     else:
         suffix = ".csv"
 
-    target_files: list[Path] = sorted(
-        src_dir.glob(f"*.targets.{base_level}s{suffix}")
-    )
-    decoy_files: list[Path] = sorted(
-        src_dir.glob(f"*.decoys.{base_level}s{suffix}")
-    )
+    target_files: list[Path] = sorted(src_dir.glob(f"*.targets.{base_level}s{suffix}"))
+    decoy_files: list[Path] = sorted(src_dir.glob(f"*.decoys.{base_level}s{suffix}"))
     target_files = [
         file for file in target_files if not file.name.startswith(file_root)
     ]
-    decoy_files = [
-        file for file in decoy_files if not file.name.startswith(file_root)
-    ]
+    decoy_files = [file for file in decoy_files if not file.name.startswith(file_root)]
     in_files: list[Path] = sorted(target_files + decoy_files)
     logging.info(f"Reading files: {[str(file) for file in in_files]}")
     if len(in_files) == 0:
         raise ValueError("No input files found.")
 
     # Configure readers (read targets/decoys and adjoin is_decoy column)
-    target_readers = [
-        get_target_decoy_reader(path, False) for path in target_files
-    ]
-    decoy_readers = [
-        get_target_decoy_reader(path, True) for path in decoy_files
-    ]
+    target_readers = [get_target_decoy_reader(path, False) for path in target_files]
+    decoy_readers = [get_target_decoy_reader(path, True) for path in decoy_files]
     reader = MergedTabularDataReader(
         target_readers + decoy_readers,
         priority_column="score",
@@ -116,14 +104,11 @@ def do_rollup(config):
     levels = [level for level in levels if level in reader.get_column_names()]
     logging.info(f"Rolling up to levels: {levels}")
     if len(levels_not_found) > 0:
-        logging.info(
-            f"  (Rollup levels not found in input: {levels_not_found})"
-        )
+        logging.info(f"  (Rollup levels not found in input: {levels_not_found})")
 
     # Determine temporary files
     temp_files = {
-        level: dest_dir / f"{file_root}temp.{level}s{suffix}"
-        for level in levels
+        level: dest_dir / f"{file_root}temp.{level}s{suffix}" for level in levels
     }
     logging.debug(
         "Using temp files: "
@@ -159,9 +144,7 @@ def do_rollup(config):
 
     # Write temporary files which contain only the best scoring entity of a
     # given level
-    logging.debug(
-        "Writing temp files: %s", [str(file) for file in temp_files.values()]
-    )
+    logging.debug("Writing temp files: %s", [str(file) for file in temp_files.values()])
 
     timer = make_timer()
     score_stats = OnlineStatistics()
@@ -173,9 +156,7 @@ def do_rollup(config):
         ):
             count += 1
             if count % 10000 == 0:
-                logging.debug(
-                    f"  Processed {count} lines ({timer():.2f} seconds)"
-                )
+                logging.debug(f"  Processed {count} lines ({timer():.2f} seconds)")
 
             for level in levels:
                 seen = seen_entities[level]
@@ -194,9 +175,7 @@ def do_rollup(config):
         logging.debug(f"Score statistics: {score_stats.describe()}")
         for level in levels:
             seen = seen_entities[level]
-            logging.info(
-                f"Rollup level {level}: found {len(seen)} unique entities"
-            )
+            logging.info(f"Rollup level {level}: found {len(seen)} unique entities")
 
     # Determine output files
     out_files_map = {
@@ -231,7 +210,6 @@ def do_rollup(config):
             compute_and_write_confidence(
                 temp_reader,
                 writer,
-                config.qvalue_algorithm,
                 config.peps_algorithm,
                 config.stream_confidence,
                 score_stats,

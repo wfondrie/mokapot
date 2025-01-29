@@ -26,10 +26,11 @@ import numpy as np
 import pandas as pd
 from typeguard import typechecked
 
-from mokapot import qvalues, utils
+from mokapot import utils
+from mokapot.algorithms import QvalueAlgorithm
 from mokapot.parsers.fasta import read_fasta
 from mokapot.proteins import Proteins
-from .tabular_data import TabularDataReader
+from mokapot.tabular_data import TabularDataReader
 
 LOGGER = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ class PsmDataset(ABC):
         self._proteins = proteins
 
 
+@typechecked
 class LinearPsmDataset(PsmDataset):
     """Store and analyze a collection of PSMs.
 
@@ -274,14 +276,16 @@ class LinearPsmDataset(PsmDataset):
         """A :py:class:`numpy.ndarray` indicating whether each PSM is a target
         sequence.
         """
-        return self.data[self._target_column].values
+        return self.data[self._target_column].values == 1
 
     @property
     def peptides(self):
         """A :py:class:`pandas.Series` of the peptide column."""
         return self.data.loc[:, self._peptide_column]
 
-    def _update_labels(self, scores, eval_fdr=0.01, desc=True):
+    def _update_labels(
+        self, scores: np.ndarray[float], eval_fdr: float = 0.01, desc: bool = True
+    ):
         """
         Return the label for each PSM, given it's score.
 
@@ -307,7 +311,10 @@ class LinearPsmDataset(PsmDataset):
             specified FDR threshold.
         """
         return _update_labels(
-            scores=scores, targets=self.targets, eval_fdr=eval_fdr, desc=desc
+            scores=scores,
+            targets=self.targets,
+            eval_fdr=eval_fdr,
+            desc=desc,
         )
 
     @property
@@ -354,20 +361,13 @@ class LinearPsmDataset(PsmDataset):
         :return: pd.Series
             The number of positive examples for each feature.
         """
-        return pd.Series(
-            [
-                (
-                    self._update_labels(
-                        self.data.loc[:, col],
-                        eval_fdr=eval_fdr,
-                        desc=desc,
-                    )
-                    == 1
-                ).sum()
-                for col in self._feature_columns
-            ],
-            index=self._feature_columns,
-        )
+        num_passed_per_col = []
+        for col in self._feature_columns:
+            scores = self.data.loc[:, col].values.astype(float)
+            labels = self._update_labels(scores, eval_fdr=eval_fdr, desc=desc)
+            num_passed = (labels == 1).sum()
+            num_passed_per_col.append(num_passed)
+        return pd.Series(num_passed_per_col, index=self._feature_columns)
 
     def _find_best_feature(self, eval_fdr):
         """
@@ -401,14 +401,19 @@ class LinearPsmDataset(PsmDataset):
         new_labels = None
         for desc in (True, False):
             num_passing = self._targets_count_by_feature(desc, eval_fdr)
+            for col, num in num_passing.items():
+                LOGGER.debug(
+                    f"\t  - Column {col} desc={desc}: found {num} passing PSMs."
+                )
             feat_idx = num_passing.idxmax()
             num_passing = num_passing[feat_idx]
 
             if num_passing > best_positives:
                 best_positives = num_passing
                 best_feat = feat_idx
+                feat_scores = self.data.loc[:, feat_idx].values.astype(float)
                 new_labels = self._update_labels(
-                    self.data.loc[:, feat_idx], eval_fdr=eval_fdr, desc=desc
+                    feat_scores, eval_fdr=eval_fdr, desc=desc
                 )
                 best_desc = desc
 
@@ -595,17 +600,6 @@ class OnDiskPsmDataset(PsmDataset):
 
         return best_feat, best_positives, new_labels, best_desc
 
-    def update_labels(self, scores, target_column, eval_fdr=0.01, desc=True):
-        df = self.read_data(columns=target_column)
-        if target_column:
-            df = utils.convert_targets_column(df, target_column)
-        return _update_labels(
-            scores=scores,
-            targets=df[target_column],
-            eval_fdr=eval_fdr,
-            desc=desc,
-        )
-
     @staticmethod
     def _hash_row(x: np.ndarray) -> int:
         """
@@ -693,11 +687,11 @@ class OnDiskPsmDataset(PsmDataset):
 
 @typechecked
 def _update_labels(
-    scores: np.ndarray[float | int] | pd.Series,
-    targets: np.ndarray[bool] | pd.Series,
+    scores: np.ndarray[float],
+    targets: np.ndarray[bool],
     eval_fdr: float = 0.01,
     desc: bool = True,
-):
+) -> np.ndarray[float]:
     """Return the label for each PSM, given it's score.
 
     This method is used during model training to define positive examples,
@@ -716,21 +710,18 @@ def _update_labels(
     Returns
     -------
     np.ndarray
-        The label of each PSM, where 1 indicates a positive example, -1
-        indicates a negative example, and 0 removes the PSM from training.
-        Typically, 0 is reserved for targets, below a specified FDR
-        threshold.
+        The label of each PSM, where 1 indicates a positive example (probably
+        true target), -1 indicates a negative example (decoy), and 0 removes
+        he PSM from training (probably false target). Typically, 0 is reserved
+        for targets, below a specified FDR threshold.
     """
-    if isinstance(scores, pd.Series):
-        scores = scores.values.astype(float)
-    if isinstance(targets, pd.Series):
-        targets = targets.values.astype(bool)
 
-    qvals = qvalues.tdc(scores, target=targets, desc=desc)
-    unlabeled = np.logical_and(qvals > eval_fdr, targets)
+    qvals = QvalueAlgorithm.eval(scores, targets=targets, desc=desc)
+    # not_passing = np.logical_and(qvals > eval_fdr, targets)
+
     new_labels = np.ones(len(qvals))
+    new_labels[qvals > eval_fdr] = 0
     new_labels[~targets] = -1
-    new_labels[unlabeled] = 0
     return new_labels
 
 
@@ -771,15 +762,15 @@ def calibrate_scores(scores, targets, eval_fdr, desc=True):
 @typechecked
 def update_labels(
     reader: TabularDataReader,
-    scores,
-    target_column,
-    eval_fdr=0.01,
-    desc=True,
+    scores: np.ndarray[float],
+    target_column: str,
+    eval_fdr: float = 0.01,
+    desc: bool = True,
 ):
     df = reader.read(columns=[target_column])
     return _update_labels(
         scores=scores,
-        targets=df[target_column],
+        targets=df[target_column].values == 1,
         eval_fdr=eval_fdr,
         desc=desc,
     )

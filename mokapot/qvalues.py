@@ -81,36 +81,8 @@ def tdc(
     scores = np.array(scores)
     target = np.array(target)
 
-    # Since numpy 2.x relying in attribute errors is not viable here
-    # https://numpy.org/neps/nep-0050-scalar-promotion.html#impact-on-can-cast
-    # So I am manually checking the constraints.
-    if (
-        np.issubdtype(target.dtype, np.integer)
-        and target.max() <= 1
-        and target.min() >= 0
-    ):
-        target = target.astype(bool)
-
-    if np.issubdtype(target.dtype, np.floating):
-        like_one = target == np.ones_like(target)
-        like_zero = target == np.zeros_like(target)
-        if np.all(like_one | like_zero):
-            target = target.astype(bool)
-
-    if not np.issubdtype(target.dtype, bool):
-        err = ValueError(
-            f"'target' should be boolean. passed type: {target.dtype}"
-            f" with value: {target}"
-        )
-        raise err
-
     if scores.shape[0] != target.shape[0]:
         raise ValueError("'scores' and 'target' must be the same length")
-
-    # Unsigned integers can cause weird things to happen.
-    # Convert all scores to floats to for safety.
-    if np.issubdtype(scores.dtype, np.integer):
-        scores = scores.astype(np.float32)
 
     # Sort and estimate FDR
     if desc:
@@ -358,6 +330,11 @@ def qvalues_from_counts(
     qvalues_sorted = monotonize_simple(fdr_sorted, ascending=True, reverse=True)
 
     # Extract unique scores and take qvalue from the last of them
+    # (for each unique score we need the unique qvalue, the extra return values
+    # are needed to get the correct one and to map them back later to the full
+    # array. See np.unique and do the math ;)
+    # Note: if all scores are uniq this step could be skipped and maybe some
+    # cpu cycles saved.
     scores_uniq, idx_uniq, rev_uniq, cnt_uniq = np.unique(
         scores_sorted,
         return_index=True,
@@ -365,7 +342,10 @@ def qvalues_from_counts(
         return_inverse=True,
     )
     qvalues_uniq = qvalues_sorted[idx_uniq + cnt_uniq - 1]
-    qvalues = qvalues_uniq[rev_uniq]
+
+    # Map unique values back, but in original order
+    qvalues = np.zeros_like(qvalues_sorted)
+    qvalues[ind] = qvalues_uniq[rev_uniq]
 
     return np.clip(qvalues, 0.0, 1.0)
 
@@ -416,7 +396,76 @@ def qvalues_func_from_hist(
     # We need to append zero to end of the qvalues for right edge of the last
     # bin, the other q-values correspond to the left edges of the bins
     # (because of the >= in the formula for the counts)
-    qvalues = np.append(qvalues, 0.0)
+    qvalues = np.append(qvalues, qvalues[-1])
     eval_scores = hist_data.targets.bin_edges
 
     return lambda scores: np.interp(scores, eval_scores, qvalues)
+
+
+@typechecked
+def qvalues_from_storeys_algo(
+    scores: np.ndarray[float],
+    targets: np.ndarray[bool],
+    pi0: float | None = None,
+    decoy_qvals_by_interp: bool = True,
+    pvalue_method: str = "conservative",
+):
+    """
+    Calculates q-values for a set of scores using Storey's algorithm.
+
+    The function computes empirical p-values, estimates the proportion of
+    null hypotheses (`pi0`), and subsequently calculates the q-values,
+    which are adjusted p-values used in multiple hypothesis testing.
+
+    Parameters
+    ----------
+    scores : np.ndarray[float]
+        Array of scores for which q-values are computed. Must be of
+        type float.
+    targets : np.ndarray[bool]
+        Binary array indicating whether a score is a target (`True`) or
+        a decoy (`False`). Must have the same shape as `scores`.
+    pi0 : float, optional
+        Proportion of null hypotheses in the dataset. If not provided,
+        it is estimated from the p-values using the "smoother" method
+        with evaluation at lambda = 0.5.
+    decoy_qvals_by_interp : bool, optional
+        Whether to calculate q-values for decoys by interpolating from
+        target q-values (`True`) or calculate decoy q-values independently
+        as 1:1 p-values (`False`). Defaults to `True`.
+    pvalue_method : str, optional
+        Method to calculate empirical p-values. Acceptable values are
+        mode-based methods such as "conservative". Defaults to
+        "conservative".
+
+    Returns
+    -------
+    np.ndarray[float]
+        An array of q-values corresponding to the input `scores`, where
+        lower scores generally indicate a higher likelihood of being a
+        target. The q-values are adjusted for multiple hypothesis testing.
+    """
+    import mokapot.qvalues_storey as qvalues_storey
+
+    stat1 = scores[targets]
+    stat0 = scores[~targets]
+
+    pvals1 = qvalues_storey.empirical_pvalues(stat1, stat0, mode=pvalue_method)
+
+    if pi0 is None:
+        pi0est = qvalues_storey.estimate_pi0(pvals1, method="smoother", eval_lambda=0.5)
+        pi0 = pi0est.pi0
+
+    qvals1 = qvalues_storey.qvalues(pvals1, pi0=pi0, small_p_correction=False)
+
+    if decoy_qvals_by_interp:
+        ind = np.argsort(stat1)
+        qvals0 = np.interp(stat0, stat1[ind], qvals1[ind])
+    else:
+        pvals0 = qvalues_storey.empirical_pvalues(stat0, stat0, mode=pvalue_method)
+        qvals0 = qvalues_storey.qvalues(pvals0, pi0=1)
+
+    qvals = np.zeros_like(scores, dtype=float)
+    qvals[targets] = qvals1
+    qvals[~targets] = qvals0
+    return qvals

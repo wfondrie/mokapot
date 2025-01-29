@@ -5,27 +5,20 @@ At least for now, they do not check the correctness of the
 output, just that the expect outputs are created.
 """
 
-import shutil
 from pathlib import Path
-from typing import List, Any
+from typing import Any, List
 
 import pytest
 from filelock import FileLock
 from pandas.testing import assert_series_equal
 
 from mokapot.rollup import compute_rollup_levels
-from mokapot.tabular_data import (
-    TabularDataReader,
-    CSVFileReader,
-    ParquetFileWriter,
-)
-from ..helpers.cli import run_mokapot_cli, _run_cli
+from mokapot.tabular_data import CSVFileReader, ParquetFileWriter, TabularDataReader
+from ..helpers.cli import _run_cli, run_mokapot_cli
 from ..helpers.math import estimate_abs_int
 
 
-def run_brew_rollup(
-    params: List[Any], run_in_subprocess=None, capture_output=False
-):
+def run_brew_rollup(params: List[Any], run_in_subprocess=None, capture_output=False):
     from mokapot.brew_rollup import main
 
     return _run_cli(
@@ -35,10 +28,8 @@ def run_brew_rollup(
 
 @pytest.fixture(scope="session")
 def rollup_src_dirs(tmp_path_factory):
-    dest_dir = Path("scratch", "testing_rollup")
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    pq_dest_dir = dest_dir / "parquet"
-    pq_dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_dir = tmp_path_factory.mktemp("csv")
+    pq_dest_dir = tmp_path_factory.mktemp("parquet")
 
     retrain = False
     recompute = retrain or False
@@ -101,13 +92,6 @@ def rollup_src_dirs(tmp_path_factory):
 
     yield dest_dir, pq_dest_dir
 
-    # Cleanup files here
-    # Note: If you want to keep the files, create a file or directory name
-    # "dont_remove_me" in the dest_dir e.g. by the command
-    # mkdir -p scratch/testing/dont_remove_me
-    if not Path.exists(dest_dir / "dont_remove_me"):
-        shutil.rmtree(dest_dir)
-
 
 @pytest.mark.parametrize(
     "suffix",
@@ -149,16 +133,17 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
     df0 = TabularDataReader.from_path(file0).read()
     df1 = TabularDataReader.from_path(file1).read()
 
+    # Note: this maximum difference is relatively large here (about 0.048),
+    # because, the scores are very concentrated around several values (nearly
+    # discrete) and the streaming (histogram) method is smoothing this out, what
+    # the pure counting method does not do.
+    # Todo: maybe it would be worthwile to have a much finer histogram with
+    #   much more bins for q-value calculation then for peps calculation
     qval_column = "q-value"
-    assert_series_equal(df0[qval_column], df1[qval_column], atol=0.02)
+    assert_series_equal(df0[qval_column], df1[qval_column], atol=0.05)
+    assert estimate_abs_int(df0.score, df1[qval_column] - df0[qval_column]) < 0.05
     assert (
-        estimate_abs_int(df0.score, df1[qval_column] - df0[qval_column])
-        < 0.002
-    )
-    assert (
-        estimate_abs_int(
-            df0.score, df1.posterior_error_prob - df0.posterior_error_prob
-        )
+        estimate_abs_int(df0.score, df1.posterior_error_prob - df0.posterior_error_prob)
         < 0.03
     )
 

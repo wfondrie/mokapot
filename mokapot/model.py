@@ -28,7 +28,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from typeguard import typechecked
 
-from mokapot import LinearPsmDataset
+from mokapot.algorithms import QvalueAlgorithm
+from mokapot.dataset import LinearPsmDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -310,6 +311,11 @@ class Model:
             scores = scores[original_idx]
 
             # Update target
+            LOGGER.debug(
+                "\t- Iteration %i: estimating q-values with: %s.",
+                i,
+                QvalueAlgorithm.long_desc(),
+            )
             target = dataset._update_labels(scores, eval_fdr=self.train_fdr)
             target = target[shuffled_idx]
             num_passed.append((target == 1).sum())
@@ -559,10 +565,8 @@ def _get_starting_labels(dataset: LinearPsmDataset, model):
         feat_res = dataset._find_best_feature(model.train_fdr)
         best_feat, feat_pass, start_labels, desc = feat_res
         LOGGER.info(
-            "\t- Selected feature %s with %i PSMs at q<=%g.",
-            best_feat,
-            feat_pass,
-            model.train_fdr,
+            f"\t- Selected feature {best_feat} (desc={desc}) with {feat_pass} "
+            f"PSMs at q<={model.train_fdr}."
         )
 
     elif model.is_trained:
