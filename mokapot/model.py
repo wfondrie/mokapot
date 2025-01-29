@@ -310,18 +310,6 @@ class Model:
             scores = _get_scores(model, norm_feat)
             scores = scores[original_idx]
 
-            def xplot(*args, **kwargs):
-                import matplotlib.pyplot as plt
-
-                plt.plot(*args, **kwargs)
-                plt.show()
-
-            def xhist(*args, **kwargs):
-                import matplotlib.pyplot as plt
-
-                plt.hist(*args, **kwargs)
-                plt.show()
-
             # Update target
             LOGGER.debug(
                 "\t- Iteration %i: estimating q-values with: %s.",

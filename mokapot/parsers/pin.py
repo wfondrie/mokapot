@@ -232,7 +232,6 @@ def read_percolator(
         for c in feat_slices
     )
 
-    logging.info(f"Spectra list {df_spectra_list}")
     df_spectra = convert_targets_column(
         pd.concat(df_spectra_list), target_column=labels
     )
