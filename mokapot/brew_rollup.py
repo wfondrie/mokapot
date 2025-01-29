@@ -11,11 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from mokapot import __version__
-from mokapot.cli_helper import (
-    setup_logging,
-    output_start_message,
-    output_end_message,
-)
+from mokapot.cli_helper import output_end_message, output_start_message, setup_logging
 from mokapot.rollup import do_rollup
 
 
@@ -47,7 +43,7 @@ def parse_arguments(main_args):
     add_confidence_options(confidence_options)
 
     misc_options = parser.add_argument_group("Miscellaneous options")
-    add_misc_options(misc_options)
+    add_logging_options(misc_options)
 
     args = parser.parse_args(args=main_args)
     return args
@@ -76,6 +72,13 @@ def add_main_options(parser: ArgumentGroup) -> None:
         type=Path,
         default=Path("."),
         help=("The directory in which to look for the files to rollup."),
+    )
+
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=1,
+        help=("An integer to use as the random seed."),
     )
 
 
@@ -126,13 +129,7 @@ def add_confidence_options(parser: ArgumentGroup) -> None:
     )
 
 
-def add_misc_options(parser: ArgumentGroup) -> None:
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=1,
-        help=("An integer to use as the random seed."),
-    )
+def add_logging_options(parser: ArgumentGroup) -> None:
     parser.add_argument(
         "-v",
         "--verbosity",
@@ -147,6 +144,14 @@ def add_misc_options(parser: ArgumentGroup) -> None:
             ", 3-debug info."
         ),
     )
+
+    parser.add_argument(
+        "--log_time",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help=("Specifies whether (and thread) should also be logged."),
+    )
+
     parser.add_argument(
         "--suppress_warnings",
         default=False,

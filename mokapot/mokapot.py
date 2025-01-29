@@ -14,6 +14,7 @@ import numpy as np
 from . import __version__
 from .algorithms import configure_algorithms
 from .brew import brew
+from .cli_helper import setup_logging
 from .confidence import assign_confidence
 from .config import create_config_parser
 from .model import load_model, PercolatorModel
@@ -32,28 +33,7 @@ def main(main_args=None):
     config = parser.parse_args(args=main_args)
 
     # Setup logging
-    verbosity_dict = {
-        0: logging.ERROR,
-        1: logging.WARNING,
-        2: logging.INFO,
-        3: logging.DEBUG,
-    }
-
-    if not config.log_time:
-        log_format = "[{levelname}] {message}"
-    elif config.max_workers <= 1:
-        log_format = "[{asctime}/{levelname}] {message}"
-    else:
-        log_format = "[{threadName}/{asctime}/{levelname}] {message}"
-
-    logging.basicConfig(
-        format=log_format,
-        style="{",
-        level=verbosity_dict[config.verbosity],
-    )
-    logging.captureWarnings(True)
-    numba_logger = logging.getLogger("numba")
-    numba_logger.setLevel(logging.WARNING)
+    setup_logging(config)
 
     # Suppress warning if asked for
     if config.suppress_warnings:

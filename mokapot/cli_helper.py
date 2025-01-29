@@ -26,21 +26,32 @@ def setup_logging(config):
         2: logging.INFO,
         3: logging.DEBUG,
     }
+
+    if not config.log_time:
+        log_format = "[{levelname}] {message}"
+    elif config.max_workers <= 1:
+        log_format = "[{asctime}/{levelname}] {message}"
+    else:
+        log_format = "[{threadName}/{asctime}/{levelname}] {message}"
+
     logging.basicConfig(
-        format=("[{levelname}] {message}"),
+        format=log_format,
         style="{",
         level=verbosity_dict[config.verbosity],
     )
+
     logging.captureWarnings(True)
+
+    # Stop numba from flooding the log
+    numba_logger = logging.getLogger("numba")
+    numba_logger.setLevel(logging.WARNING)
 
 
 def output_start_message(prog_name, config):
     timer = make_timer()
     logging.info(f"{prog_name} version {__version__}")
     logging.info("Written by William E. Fondrie (wfondrie@uw.edu) in the")
-    logging.info(
-        "Department of Genome Sciences at the University of Washington."
-    )
+    logging.info("Department of Genome Sciences at the University of Washington.")
     logging.info("Command issued:")
     logging.info("  %s", " ".join(sys.argv))
     logging.info("")
