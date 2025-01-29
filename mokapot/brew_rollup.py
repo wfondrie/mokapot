@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from mokapot import __version__
+from mokapot.algorithms import configure_algorithms
 from mokapot.cli_helper import output_end_message, output_start_message, setup_logging
 from mokapot.rollup import do_rollup
 
@@ -104,6 +105,39 @@ def add_output_options(parser: ArgumentGroup) -> None:
 
 def add_confidence_options(parser: ArgumentGroup) -> None:
     parser.add_argument(
+        "--tdc",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        help=(
+            "Specifies whether input comes from target decoy competition "
+            "(default) or from separate search."
+        ),
+    )
+
+    parser.add_argument(
+        "--pi0_algorithm",
+        default="default",
+        choices=[
+            "default",
+            "ratio",
+            "slope",
+            "storey_smoother",
+            "storey_fixed",
+            "storey_bootstrap",
+        ],
+        help=("Specify the algorithm for pi0 estimation. "),
+    )
+
+    parser.add_argument(
+        "--pi0_eval_lambda",
+        default=0.5,
+        help=(
+            "Specify the lambda in Storey's pi0 estimation for evaluation "
+            "(works currently only with storey_* pi0 algorithms."
+        ),
+    )
+
+    parser.add_argument(
         "--peps_algorithm",
         default="qvality",
         choices=["qvality", "qvality_bin", "kde_nnls", "hist_nnls"],
@@ -114,11 +148,13 @@ def add_confidence_options(parser: ArgumentGroup) -> None:
     )
     parser.add_argument(
         "--qvalue_algorithm",
-        default="tdc",
-        choices=["tdc", "from_peps", "from_counts"],
+        default="default",
+        choices=["default", "tdc", "from_counts", "storey"],
         help=(
-            "Specify the algorithm for qvalue computation. `tdc is` "
-            "the default mokapot algorithm."
+            "Specify the algorithm for qvalue computation. If the `tdc` option"
+            "is set to true (which is the default0 `default` evals to `tdc`, "
+            "the original mokapot algorithm, which works only with tdc. "
+            "Otherwise, it defaults to `storey`."
         ),
     )
     parser.add_argument(
@@ -170,6 +206,8 @@ def main(main_args=None):
     prog_name = "brew_rollup"
 
     setup_logging(config)
+
+    configure_algorithms(config)
 
     start_time = output_start_message(prog_name, config)
 

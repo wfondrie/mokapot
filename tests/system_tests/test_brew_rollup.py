@@ -10,6 +10,7 @@ from typing import Any, List
 
 import pytest
 from filelock import FileLock
+from numpy.testing import assert_allclose
 from pandas.testing import assert_series_equal
 
 from mokapot.rollup import compute_rollup_levels
@@ -116,22 +117,19 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
         ("--qvalue_algorithm", "from_counts"),
         ("--verbosity", 2),
     ]
-    run_brew_rollup(
-        rollup_params + ["--dest_dir", rollup_dest_dir / "rollup0"],
-        capture_output=False,
-    )
-    run_brew_rollup(
-        rollup_params
-        + ["--dest_dir", rollup_dest_dir / "rollup1", "--stream_confidence"],
-        capture_output=False,
-    )
 
-    assert rollup_dest_dir / "rollup0" / f"rollup.targets.peptides{suffix}"
+    def run_brew_rollup2(subdir: str, extra_params: list = []):
+        run_brew_rollup(
+            rollup_params + ["--dest_dir", rollup_dest_dir / subdir] + extra_params,
+            capture_output=False,
+        )
+        assert rollup_dest_dir / subdir / f"rollup.targets.peptides{suffix}"
+        file = rollup_dest_dir / subdir / f"rollup.targets.peptides{suffix}"
+        df = TabularDataReader.from_path(file).read()
+        return df
 
-    file0 = rollup_dest_dir / "rollup0" / f"rollup.targets.peptides{suffix}"
-    file1 = rollup_dest_dir / "rollup1" / f"rollup.targets.peptides{suffix}"
-    df0 = TabularDataReader.from_path(file0).read()
-    df1 = TabularDataReader.from_path(file1).read()
+    df0 = run_brew_rollup2("rollup0")
+    qval_column = "q-value"
 
     # Note: this maximum difference is relatively large here (about 0.048),
     # because, the scores are very concentrated around several values (nearly
@@ -139,13 +137,27 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
     # the pure counting method does not do.
     # Todo: maybe it would be worthwile to have a much finer histogram with
     #   much more bins for q-value calculation then for peps calculation
-    qval_column = "q-value"
+    df1 = run_brew_rollup2("rollup1", ["--stream_confidence"])
     assert_series_equal(df0[qval_column], df1[qval_column], atol=0.05)
     assert estimate_abs_int(df0.score, df1[qval_column] - df0[qval_column]) < 0.05
     assert (
         estimate_abs_int(df0.score, df1.posterior_error_prob - df0.posterior_error_prob)
         < 0.03
     )
+
+    df2 = run_brew_rollup2("rollup2", [("--qvalue_algorithm", "storey")])
+    assert_series_equal(df0[qval_column], df2[qval_column], atol=0.001)
+    assert_allclose(df0[qval_column], df2[qval_column], atol=0.001)
+    assert estimate_abs_int(df0.score, df2[qval_column] - df0[qval_column]) < 0.001
+
+    df3 = run_brew_rollup2(
+        "rollup2",
+        [("--qvalue_algorithm", "storey"), ("--pi0_algorithm", "storey_fixed")],
+    )
+    assert not all(df2[qval_column] == df3[qval_column])
+    assert_allclose(
+        df2[qval_column], df3[qval_column], atol=0.3
+    )  # todo: check is this real?
 
 
 def test_compute_rollup_levels():
