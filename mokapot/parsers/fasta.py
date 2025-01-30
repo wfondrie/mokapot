@@ -1,20 +1,26 @@
 """The code for parsing FASTA files"""
 
-import re
 import logging
-from textwrap import wrap
+import re
 from collections import defaultdict
+from pathlib import Path
+from textwrap import wrap
 
 import numpy as np
 
-from mokapot.utils import tuplize
 from mokapot.proteins import Proteins
+from mokapot.utils import tuplize
 
 LOGGER = logging.getLogger(__name__)
 
 
 def read_fasta(
-    fasta_files: str | list[str] | tuple[str],
+    fasta_files: str
+    | list[str]
+    | tuple[str, ...]
+    | Path
+    | list[Path]
+    | tuple[Path, ...],
     enzyme: str | re.Pattern = "[KR]",
     missed_cleavages: int = 2,
     clip_nterm_methionine: bool = False,

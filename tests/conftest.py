@@ -4,19 +4,44 @@ This file contains fixtures that are used at multiple points in the tests.
 
 import logging
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from triqler.qvality import getQvaluesFromScores
 
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from mokapot.qvalues import tdc
-from mokapot.utils import convert_targets_column
+from mokapot.utils import make_bool_trarget
+
+from .helpers.random_df import _psm_df_rand
+
+## This section just adds the sorting of the tests, makes the tests marked
+## with the slow marker run last.
+
+# I am assigning slow to tests that take more than 10 seconds to run for now.
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: mark test to run last")
+
+
+def by_slow_marker(item):
+    return 0 if item.get_closest_marker("slow") is None else 1
+
+
+def pytest_collection_modifyitems(session, config, items):
+    if config.getoption("--slow-last"):
+        items.sort(key=by_slow_marker, reverse=False)
+
+
+def pytest_addoption(parser, pluginmanager):
+    parser.addoption("--slow-last", action="store_true", default=False)
+
+
+## End of section (slow makrker)
 
 
 @pytest.fixture(autouse=True)
@@ -37,85 +62,6 @@ def psm_df_6() -> pd.DataFrame:
         "feature_2": [2, 3, 4, 1, 2, 3],
     }
     return pd.DataFrame(data)
-
-
-@dataclass
-class MockPsmDataframe:
-    df: pd.DataFrame
-    rng: np.random.Generator
-    score_cols: list[str]
-    fasta_string: str
-
-
-def _psm_df_rand(
-    ntargets: int,
-    ndecoys: int,
-    pct_real: float = 0.4,
-    score_diffs: list[float] = [3.0],
-    share_ids: bool = False,
-) -> MockPsmDataframe:
-    """A DataFrame with 100 PSMs."""
-    rng = np.random.Generator(np.random.PCG64(42))
-    score_cols = ["score" + str(i) for i in range(len(score_diffs))]
-    nreal = int(ntargets * pct_real)
-    nonreal = ntargets - nreal
-    max_scan = ntargets + ndecoys
-    targets = {
-        "specid": np.arange(ntargets),
-        "target": [True] * ntargets,
-        "scannr": rng.integers(0, max_scan, ntargets),
-        "calcmass": rng.uniform(500, 2000, size=ntargets),
-        "expmass": rng.uniform(500, 2000, size=ntargets),
-        "peptide": [_random_peptide(5, rng) for _ in range(ntargets)],
-        "proteins": ["_dummy" for _ in range(ntargets)],
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=ntargets),
-        "charge": rng.choice([2, 3, 4], size=ntargets),
-    }
-    targets = pd.DataFrame(targets)
-    for n, d in zip(score_cols, score_diffs):
-        targets[n] = np.concatenate([
-            rng.normal(d, size=nreal),
-            rng.normal(size=nonreal),
-        ])
-
-    decoys = {
-        "specid": np.arange(ntargets, ntargets + ndecoys),
-        "target": [False] * ndecoys,
-        "scannr": rng.integers(0, max_scan, ndecoys),
-        "calcmass": rng.uniform(500, 2000, size=ndecoys),
-        "expmass": rng.uniform(500, 2000, size=ndecoys),
-        "peptide": [_random_peptide(5, rng) for _ in range(ndecoys)],
-        "proteins": ["_dummy" for _ in range(ndecoys)],
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=ndecoys),
-        "charge": rng.choice([2, 3, 4], size=ndecoys),
-    }
-    decoys = pd.DataFrame(decoys)
-    for n, d in zip(score_cols, score_diffs):
-        decoys[n] = rng.normal(size=len(decoys))
-
-    if share_ids:
-        assert len(targets) == len(decoys), "Sharing ids requires equal number"
-        # targets["specid"] = decoys["specid"] Spec ID has to be different now.
-        targets["spectrum"] = np.arange(ntargets)
-        decoys["spectrum"] = np.arange(ndecoys)
-        decoys["scannr"] = targets["scannr"]
-
-    df = pd.concat([targets, decoys])
-    target_peptides = targets["peptide"].to_list()
-    decoy_peptides = decoys["peptide"].to_list()
-    fasta_data = "\n".join(
-        _make_fasta(100, target_peptides, 10, rng)
-        + _make_fasta(100, decoy_peptides, 10, rng, "decoy")
-    )
-    assert len(df) == (ntargets + ndecoys)
-    return MockPsmDataframe(
-        df=df,
-        rng=rng,
-        score_cols=score_cols,
-        fasta_string=fasta_data,
-    )
 
 
 @pytest.fixture()
@@ -184,15 +130,9 @@ def psms_dataset(psm_df_1000) -> LinearPsmDataset:
     psms = LinearPsmDataset(
         psms=data.df,
         target_column="target",
-        spectrum_columns="spectrum",
+        spectrum_columns=data.columns.spectrum_columns,
         peptide_column="peptide",
         feature_columns=data.score_cols,
-        filename_column="filename",
-        scan_column="spectrum",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
         copy_data=True,
     )
     return psms
@@ -213,12 +153,6 @@ def psms_ondisk() -> OnDiskPsmDataset:
         target_column="Label",
         spectrum_columns=["ScanNr", "ExpMass"],
         peptide_column="Peptide",
-        scan_column="ScanNr",
-        calcmass_column="CalcMass",
-        expmass_column="ExpMass",
-        rt_column=None,
-        charge_column=None,
-        protein_column=None,
         feature_columns=[
             "CalcMass",
             "lnrSp",
@@ -237,17 +171,7 @@ def psms_ondisk() -> OnDiskPsmDataset:
             "dM",
             "absdM",
         ],
-        metadata_columns=[
-            "SpecId",
-            "ScanNr",
-            "Peptide",
-            "Proteins",
-            "Label",
-        ],
-        metadata_column_types=["int", "int", "int", "string", "int"],
-        level_columns=["Peptide"],
-        filename_column=None,
-        specId_column="SpecId",
+        extra_confidence_level_columns=[],
         spectra_dataframe=df_spectra,
     )
     return psms
@@ -260,18 +184,12 @@ def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
     df_spectra = pq.read_table(
         filename, columns=["ScanNr", "ExpMass", "Label"]
     ).to_pandas()
-    df_spectra = convert_targets_column(df_spectra, "Label")
+    df_spectra["Label"] = make_bool_trarget(df_spectra["Label"])
     psms = OnDiskPsmDataset(
         filename,
         target_column="Label",
         spectrum_columns=["ScanNr", "ExpMass"],
         peptide_column="Peptide",
-        scan_column="ScanNr",
-        calcmass_column=None,
-        expmass_column="ExpMass",
-        rt_column=None,
-        charge_column=None,
-        protein_column="Proteins",
         feature_columns=[
             "Mass",
             "MS8_feature_5",
@@ -286,24 +204,7 @@ def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
             "MS8_feature_30",
             "MS8_feature_32",
         ],
-        metadata_columns=[
-            "SpecId",
-            "Label",
-            "ScanNr",
-            "Peptide",
-            "Proteins",
-            "ExpMass",
-        ],
-        metadata_column_types=[
-            pa.int64(),
-            pa.int64(),
-            pa.int64(),
-            pa.string(),
-            pa.int64(),
-        ],
-        level_columns=["Peptide"],
-        filename_column=None,
-        specId_column="SpecId",
+        extra_confidence_level_columns=[],
         spectra_dataframe=df_spectra,
     )
     return psms
@@ -422,47 +323,6 @@ def targets_decoys_psms_scored(tmp_path):
     )
 
     return [psms_t, psms_d]
-
-
-def _make_fasta(
-    num_proteins, peptides, peptides_per_protein, random_state, prefix=""
-):
-    """Create a FASTA string from a set of peptides
-
-    Parameters
-    ----------
-    num_proteins : int
-        The number of proteins to generate.
-    peptides : list of str
-        A list of peptide sequences.
-    peptides_per_protein: int
-        The number of peptides per protein.
-    random_state : numpy.random.Generator object
-        The random state.
-    prefix : str
-        The prefix, if generating decoys
-
-    Returns
-    -------
-    list of str
-        A list of lines in a FASTA file.
-    """
-    lines = []
-    for protein in range(num_proteins):
-        lines.append(f">{prefix}sp|test|test_{protein}")
-        lines.append(
-            "".join(list(random_state.choice(peptides, peptides_per_protein)))
-        )
-
-    return lines
-
-
-def _random_peptide(length, random_state):
-    """Generate a random peptide"""
-    return "".join(
-        list(random_state.choice(list("ACDEFGHILMNPQSTVWY"), length - 1))
-        + ["K"]
-    )
 
 
 @pytest.fixture

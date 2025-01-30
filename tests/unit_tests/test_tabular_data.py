@@ -6,13 +6,13 @@ import pytest
 from numpy import dtype
 
 from mokapot.tabular_data import (
-    TabularDataReader,
-    DataFrameReader,
     ColumnMappedReader,
-    auto_finalize,
     CSVFileReader,
-    ParquetFileReader,
     CSVFileWriter,
+    DataFrameReader,
+    ParquetFileReader,
+    TabularDataReader,
+    auto_finalize,
 )
 
 

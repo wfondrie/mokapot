@@ -9,13 +9,13 @@ from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
 from mokapot.confidence import compute_and_write_confidence
 from mokapot.statistics import OnlineStatistics
 from mokapot.tabular_data import (
-    TabularDataReader,
-    remove_columns,
     BufferType,
-    TabularDataWriter,
-    auto_finalize,
     ComputedTabularDataReader,
     MergedTabularDataReader,
+    TabularDataReader,
+    TabularDataWriter,
+    auto_finalize,
+    remove_columns,
 )
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 
@@ -76,7 +76,7 @@ def do_rollup(config):
             )
         suffix = ".parquet"
     else:
-        suffix = ".csv"
+        suffix = ".tsv"
 
     target_files: list[Path] = sorted(
         src_dir.glob(f"*.targets.{base_level}s{suffix}")

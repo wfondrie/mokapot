@@ -1,11 +1,12 @@
 import pandas as pd
+import pytest
+
 from mokapot.tabular_data import (
     DataFrameReader,
-    merge_readers,
     MergedTabularDataReader,
     join_readers,
+    merge_readers,
 )
-import pytest
 
 
 @pytest.fixture

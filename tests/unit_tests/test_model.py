@@ -1,13 +1,44 @@
 """Test that models work as expected"""
 
-import pytest
-import mokapot
 import numpy as np
-from sklearn.svm import LinearSVC
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.model_selection import GridSearchCV
+import pytest
 from sklearn.exceptions import NotFittedError
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.svm import LinearSVC
+
+import mokapot
+from mokapot import LinearPsmDataset, utils
+
+from ..helpers.random_df import _psm_df_rand
+
+
+@pytest.fixture
+def psms_dataset() -> LinearPsmDataset:
+    """A small LinearPsmDataset."""
+    data = _psm_df_rand(
+        ntargets=500,
+        ndecoys=500,
+        share_ids=True,
+        pct_real=0.5,
+        # This means there are 4 features, for decoys
+        # they are all normall distributed on with mean
+        # of 0 and std of 1.
+        # For targets they are distributed with mean
+        # of 0.5 (x3) and 2.0 (x1), and std of 1.
+        score_diffs=[0.5, 0.5, 0.5, 2.0],
+    )
+
+    psms = LinearPsmDataset(
+        psms=data.df,
+        target_column="target",
+        spectrum_columns=data.columns.spectrum_columns,
+        peptide_column="peptide",
+        feature_columns=data.score_cols,
+        copy_data=True,
+    )
+    return psms
 
 
 def test_model_init():
@@ -69,11 +100,11 @@ def test_model_fit(psms_dataset):
     assert isinstance(model.estimator, LogisticRegression)
     assert model.is_trained
 
-    psms_dataset._data[psms_dataset._target_column] = False
+    psms_dataset._data[psms_dataset.target_column] = False
     with pytest.raises(ValueError):
         model.fit(psms_dataset)  # no targets
 
-    psms_dataset._data[psms_dataset._target_column] = True
+    psms_dataset._data[psms_dataset.target_column] = True
     with pytest.raises(ValueError):
         model.fit(psms_dataset)  # no decoys
 
@@ -91,6 +122,8 @@ def test_model_fit_large_subset(psms_dataset):
 
 def test_model_predict(psms_dataset):
     """Test predictions"""
+    from mokapot.column_defs import ColumnGroups
+
     model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
 
     try:
@@ -104,8 +137,21 @@ def test_model_predict(psms_dataset):
     assert len(scores) == len(psms_dataset)
 
     # The case where a model is trained on a dataset with different features:
+    # Note: 'blah' is not a feature column originally
     psms_dataset._data["blah"] = np.random.randn(len(psms_dataset))
-    psms_dataset._feature_columns = ("score0", "blah")
+    cgs = psms_dataset.column_groups
+
+    new_cgs = ColumnGroups(
+        columns=utils.tuplize(psms_dataset._data.columns),
+        target_column=cgs.target_column,
+        peptide_column=cgs.peptide_column,
+        spectrum_columns=cgs.spectrum_columns,
+        feature_columns=cgs.feature_columns + ("blah",),
+        extra_confidence_level_columns=cgs.extra_confidence_level_columns,
+        optional_columns=cgs.optional_columns,
+    )
+    psms_dataset._column_groups = new_cgs
+
     with pytest.raises(ValueError):
         model.predict(psms_dataset)
 

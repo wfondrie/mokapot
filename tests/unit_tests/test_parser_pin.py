@@ -36,10 +36,12 @@ def test_pin_parsing(std_pin):
         df.loc[:, ("sCore",)], df.loc[:, datasets[0].feature_columns]
     )
     pd.testing.assert_series_equal(
-        df.loc[:, "sPeCid"], df.loc[:, datasets[0].specId_column]
+        df.loc[:, "sPeCid"],
+        df.loc[:, datasets[0].column_groups.optional_columns.id],
     )
     pd.testing.assert_series_equal(
-        df.loc[:, "pRoteins"], df.loc[:, datasets[0].protein_column]
+        df.loc[:, "pRoteins"],
+        df.loc[:, datasets[0].column_groups.optional_columns.protein],
     )
     pd.testing.assert_frame_equal(
         df.loc[:, ("scanNR",)], df.loc[:, datasets[0].spectrum_columns]

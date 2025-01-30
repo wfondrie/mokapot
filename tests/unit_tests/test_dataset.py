@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
+from mokapot.dataset.base import update_labels
 
 
 def test_linear_init(psm_df_6):
@@ -14,9 +15,8 @@ def test_linear_init(psm_df_6):
     dset = LinearPsmDataset(
         psms=dat,
         target_column="target",
-        spectrum_columns="spectrum",
+        spectrum_columns=["spectrum"],
         peptide_column="peptide",
-        protein_column="protein",
         feature_columns=None,
         copy_data=True,
     )
@@ -51,25 +51,15 @@ def test_linear_init(psm_df_6):
 
 def test_update_labels(psm_df_6):
     """Test that the _update_labels() methods are working"""
-    dset = LinearPsmDataset(
-        psm_df_6,
-        target_column="target",
-        spectrum_columns="spectrum",
-        peptide_column="peptide",
-        protein_column="protein",
-        feature_columns=None,
-        copy_data=True,
-    )
-
     scores = np.array([6, 5, 3, 3, 2, 1])
     real_labs = np.array([1, 1, 0, -1, -1, -1])
-    new_labs = dset._update_labels(scores, eval_fdr=0.5)
+    new_labs = update_labels(scores, psm_df_6["target"], eval_fdr=0.5)
     assert np.array_equal(real_labs, new_labs)
 
 
 def test_hash_row():
-    # Q: what is this meant to test? Onlyb that hashing is constant?
-    # It would be good to have the this test (or another) chech that its
+    # Q: what is this meant to test? Only that hashing is constant?
+    # It would be good to have this test (or another) check that its
     # consistent from the parsing time.
     x = np.array(
         ["test.mzML", 870, 5902.639978936955, 890.522815122875], dtype=object

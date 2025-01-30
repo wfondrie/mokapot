@@ -8,23 +8,22 @@ from mokapot.tabular_data.base import (
     BufferType,
     ColumnMappedReader,
     ColumnSelectReader,
+    DataFrameReader,
     TabularDataReader,
     TabularDataWriter,
-    DataFrameReader,
-)
-from mokapot.tabular_data.streaming import (
-    BufferedWriter,
 )
 from mokapot.tabular_data.csv import (
     CSVFileReader,
     CSVFileWriter,
 )
-
 from mokapot.tabular_data.parquet import (
     ParquetFileReader,
     ParquetFileWriter,
 )
 from mokapot.tabular_data.sqlite import SqliteWriter
+from mokapot.tabular_data.streaming import (
+    BufferedWriter,
+)
 from mokapot.tabular_data.traditional_pin import (
     is_traditional_pin,
     read_traditional_pin,

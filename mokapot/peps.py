@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TypeVar, Callable, Iterator
+from dataclasses import dataclass
+from typing import Callable, Iterator, TypeVar
 
 import numpy as np
 import scipy.stats as stats
@@ -538,9 +539,8 @@ def fit_nnls(n, k, ascending=True, *, weight_exponent=-1.0, erase_zeros=False):
 
 
 @typechecked
+@dataclass(slots=True)
 class TDHistData:
-    """ """
-
     targets: HistData
     decoys: HistData
 

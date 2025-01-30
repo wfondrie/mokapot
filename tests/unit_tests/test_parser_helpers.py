@@ -1,7 +1,8 @@
 import pytest
-from mokapot.parsers.helpers import (
-    find_optional_column,
+
+from mokapot.column_defs import (
     find_columns,
+    find_optional_column,
     find_required_column,
 )
 

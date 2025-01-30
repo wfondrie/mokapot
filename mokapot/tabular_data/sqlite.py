@@ -67,6 +67,7 @@ class ConfidenceSqliteWriter(SqliteWriter):
         level: str = "psms",
         qvalue_column: str = "q-value",
         pep_column: str = "posterior_error_prob",
+        psm_id_column: str = "PSMId",
     ) -> None:
         super().__init__(database, columns, column_types)
         self.level_cols = {
@@ -86,6 +87,7 @@ class ConfidenceSqliteWriter(SqliteWriter):
         self.level = level
         self.qvalue_column = qvalue_column
         self.pep_column = pep_column
+        self.psm_id_column = psm_id_column
 
     def get_query(self, level):
         if level == "psms":
@@ -101,6 +103,7 @@ class ConfidenceSqliteWriter(SqliteWriter):
         for row in data:
             row["q_value"] = row[self.qvalue_column]
             row["posterior_error_prob"] = row[self.pep_column]
+            row["PSMId"] = row[self.psm_id_column]
         self.connection.executemany(query, data)
 
     def read(self, level: str = "psms"):

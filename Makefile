@@ -4,10 +4,17 @@ DOCKER_IMAGE_NAME=wfondrie/mokapot
 DOCKER_IMAGE_TAG=latest
 
 test:
-	uv run --all-extras pytest --durations=0
+	uv run --group test --extra xml pytest --durations=0 --slow-last
+
+testff:
+	# Test but fails fast
+	uv run --group test pytest --extra xml --durations=0 --slow-last --last-failed -xs
+
+profile:
+	uv run --group test --extra xml --group profile scalene --cpu -m pytest
 
 unit-test:
-	uv run --all-extras pytest --durations=0 ./tests/unit_tests
+	uv run --group test pytest --extra xml --durations=0 --slow-last -v ./tests/unit_tests
 
 check: ruff-lint format pre-commit
 	@echo "All checks passed"

@@ -37,7 +37,7 @@ def test_compare_to_percolator(tmp_path):
     )
 
     perc_path = Path("data", "percolator.{p}.txt")
-    moka_path = tmp_path / "targets.{p}.csv"
+    moka_path = tmp_path / "targets.{p}.tsv"
 
     def format_name(path, **kwargs):
         return path.with_name(path.name.format(**kwargs))
