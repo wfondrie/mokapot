@@ -27,9 +27,9 @@ import pandas as pd
 from typeguard import typechecked
 
 from mokapot import utils
-from mokapot.algorithms import QvalueAlgorithm
 from mokapot.parsers.fasta import read_fasta
 from mokapot.proteins import Proteins
+from mokapot.stats.algorithms import QvalueAlgorithm
 from mokapot.tabular_data import TabularDataReader
 
 LOGGER = logging.getLogger(__name__)

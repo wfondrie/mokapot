@@ -8,7 +8,7 @@ import numba as nb
 import numpy as np
 from typeguard import typechecked
 
-from mokapot.peps import (
+from mokapot.stats.peps import (
     estimate_pi0_by_slope,
     hist_data_from_scores,
     monotonize_simple,
@@ -445,7 +445,7 @@ def qvalues_from_storeys_algo(
         lower scores generally indicate a higher likelihood of being a
         target. The q-values are adjusted for multiple hypothesis testing.
     """
-    import mokapot.qvalues_storey as qvalues_storey
+    import mokapot.stats.qvalues_storey as qvalues_storey
 
     stat1 = scores[targets]
     stat0 = scores[~targets]

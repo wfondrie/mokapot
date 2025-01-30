@@ -74,9 +74,7 @@ class OnlineStatistics:
         if unbiased:
             self.ddof = 1  # Use unbiased variance estimator
         else:
-            self.ddof = (
-                0  # Use maximum likelihood (best L2) variance estimator
-            )
+            self.ddof = 0  # Use maximum likelihood (best L2) variance estimator
 
     def update(self, vals: np.ndarray) -> None:
         """

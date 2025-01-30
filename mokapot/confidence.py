@@ -26,19 +26,19 @@ import pandas as pd
 from joblib import delayed, Parallel
 from typeguard import typechecked
 
-from mokapot.algorithms import QvalueAlgorithm
 from mokapot.column_defs import get_standard_column_name
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import OnDiskPsmDataset
-from mokapot.peps import (
+from mokapot.picked_protein import picked_protein
+from mokapot.stats.algorithms import QvalueAlgorithm
+from mokapot.stats.peps import (
     peps_from_scores,
     peps_func_from_hist_nnls,
     PepsConvergenceError,
     TDHistData,
 )
-from mokapot.picked_protein import picked_protein
-from mokapot.qvalues import qvalues_func_from_hist
-from mokapot.statistics import HistData, OnlineStatistics
+from mokapot.stats.qvalues import qvalues_func_from_hist
+from mokapot.stats.statistics import HistData, OnlineStatistics
 from mokapot.tabular_data import (
     BufferType,
     ColumnMappedReader,

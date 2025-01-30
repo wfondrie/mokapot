@@ -1,10 +1,11 @@
 import math
+
 import numpy as np
 import pytest
 import scipy as sp
 from pytest import approx
 
-from mokapot.statistics import OnlineStatistics, HistData
+from mokapot.stats.statistics import HistData, OnlineStatistics
 
 
 def test_init():

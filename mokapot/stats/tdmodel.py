@@ -195,9 +195,7 @@ class TDModel(ABC):
         # This pi0 is in both cases the Storey pi0, not the Keich pi0
         T_pdf, TT_pdf, FT_pdf, D_pdf, FDR = self.get_sampling_pdfs(x)
 
-        fdr = FDR * np.flip(
-            np.cumsum(np.flip(FT_pdf)) / np.cumsum(np.flip(T_pdf))
-        )
+        fdr = FDR * np.flip(np.cumsum(np.flip(FT_pdf)) / np.cumsum(np.flip(T_pdf)))
 
         return fdr
 

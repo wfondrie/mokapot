@@ -11,9 +11,9 @@ from pathlib import Path
 import numpy as np
 
 from mokapot import __version__
-from mokapot.algorithms import configure_algorithms
 from mokapot.cli_helper import output_end_message, output_start_message, setup_logging
 from mokapot.rollup import do_rollup
+from mokapot.stats.algorithms import configure_algorithms
 
 
 def parse_arguments(main_args):

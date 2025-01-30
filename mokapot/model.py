@@ -28,8 +28,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from typeguard import typechecked
 
-from mokapot.algorithms import QvalueAlgorithm
 from mokapot.dataset import LinearPsmDataset
+from mokapot.stats.algorithms import QvalueAlgorithm
 
 LOGGER = logging.getLogger(__name__)
 

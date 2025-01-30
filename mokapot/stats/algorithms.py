@@ -16,9 +16,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 from typeguard import typechecked
 
-import mokapot.peps as peps
-import mokapot.qvalues as qvalues
-import mokapot.qvalues_storey as qvalues_storey
+import mokapot.stats.peps as peps
+import mokapot.stats.qvalues as qvalues
+import mokapot.stats.qvalues_storey as qvalues_storey
 
 LOGGER = logging.getLogger(__name__)
 

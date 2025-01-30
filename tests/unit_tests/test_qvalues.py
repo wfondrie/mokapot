@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from scipy import stats
 
-from mokapot.peps import hist_data_from_scores, TDHistData
-from mokapot.qvalues import (
+from mokapot.stats.peps import hist_data_from_scores, TDHistData
+from mokapot.stats.qvalues import (
     qvalues_from_counts,
     qvalues_from_peps,
     qvalues_from_storeys_algo,

@@ -5,7 +5,7 @@ import numpy as np
 import scipy as sp
 from typeguard import typechecked
 
-from mokapot.peps import monotonize_simple
+from mokapot.stats.peps import monotonize_simple
 
 
 @typechecked

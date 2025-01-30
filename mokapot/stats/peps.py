@@ -10,7 +10,7 @@ from scipy.optimize._nnls import _nnls
 from triqler import qvality
 from typeguard import typechecked
 
-from mokapot.statistics import HistData
+from mokapot.stats.statistics import HistData
 
 LOGGER = logging.getLogger(__name__)
 

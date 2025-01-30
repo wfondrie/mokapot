@@ -14,7 +14,7 @@ import pytest
 from triqler.qvality import getQvaluesFromScores
 
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
-from mokapot.qvalues import tdc
+from mokapot.stats.qvalues import tdc
 from mokapot.typecheck import register_numpy_typechecker
 from mokapot.utils import convert_targets_column
 

@@ -7,7 +7,7 @@ import pytest
 from pytest import approx
 from scipy import stats
 
-import mokapot.peps as peps
+import mokapot.stats.peps as peps
 
 
 def get_target_decoy_data():

@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 
-from mokapot.algorithms import (
+from mokapot.stats.algorithms import (
     StoreyQvalueAlgorithm,
     TDCPi0Algorithm,
 )
-from mokapot.qvalues import tdc
+from mokapot.stats.qvalues import tdc
 from ..helpers.math import estimate_abs_int
 
 

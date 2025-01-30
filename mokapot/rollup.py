@@ -7,7 +7,7 @@ from typeguard import typechecked
 from mokapot.cli_helper import make_timer
 from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
 from mokapot.confidence import compute_and_write_confidence
-from mokapot.statistics import OnlineStatistics
+from mokapot.stats.statistics import OnlineStatistics
 from mokapot.tabular_data import (
     auto_finalize,
     BufferType,
