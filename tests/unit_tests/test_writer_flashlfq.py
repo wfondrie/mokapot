@@ -18,6 +18,7 @@ EXPECTED_COLS = {
 }
 
 
+# TODO: rewrite with the validator
 def is_flashlfq_df(df):
     """Check if the df is a valid FlashLFQ input.
 
@@ -67,11 +68,13 @@ def is_flashlfq_df(df):
 @pytest.fixture
 def flashlfq_psms_ds(psm_df_builder):
     """A small-ish PSM dataset"""
-    data = psm_df_builder(1000, 1000, score_diffs=[5.0])
+    # Since we have 2k targets with a "real" ratio
+    # of 0.4 in our fixture, we have 800 real targets.
+    data = psm_df_builder(2000, 2000, 0.4, score_diffs=[3.0] * 5)
     psms = LinearPsmDataset(
         psms=data.df,
         target_column="target",
-        spectrum_columns="specid",
+        spectrum_columns=["specid"],
         peptide_column="peptide",
         feature_columns=list(data.score_cols),
         filename_column="filename",
@@ -88,10 +91,33 @@ def flashlfq_psms_ds(psm_df_builder):
 @pytest.fixture
 def flashlfq_psms_ds_ondisk(psm_df_builder, tmp_path):
     """A small OnDiskPsmDataset"""
-    data = psm_df_builder(1000, 1000, score_diffs=[5.0])
+    # Since we have 2k targets with a "real" ratio
+    # of 0.4 in our fixture, we have 800 real targets.
+    data = psm_df_builder(2000, 2000, 0.4, score_diffs=[3.0] * 5)
     pin = tmp_path / "test.pin"
     df = data.df
     df["label"] = df["target"]
+    cols_keep = [
+        "PSMId",
+        # these two are parsed as features so we have to drop them.
+        # 'specid',
+        # 'target',
+        "scannr",
+        "calcmass",
+        "expmass",
+        "peptide",
+        "proteins",
+        "filename",
+        "ret_time",
+        "charge",
+        "score0",
+        "score1",
+        "score2",
+        "score3",
+        "score4",
+        "label",
+    ]
+    df = df[cols_keep]
     df.to_csv(pin, sep="\t", index=False)
 
     datasets = read_pin(
@@ -110,21 +136,27 @@ def flashlfq_psms_ds_ondisk(psm_df_builder, tmp_path):
 
 @pytest.mark.parametrize("deduplication", [True, False])
 def test_internal_flashlfq_ondisk(flashlfq_psms_ds_ondisk, deduplication):
-    mods, scores = mokapot.brew([flashlfq_psms_ds_ondisk], test_fdr=0.1)
+    mods, scores = mokapot.brew([flashlfq_psms_ds_ondisk], test_fdr=0.01)
     conf = mokapot.assign_confidence(
         [flashlfq_psms_ds_ondisk],
         scores_list=scores,
-        eval_fdr=0.1,
+        eval_fdr=0.01,
         deduplication=deduplication,
     )
     _tmp = _format_flashlfq(conf[0])
+    nrow = len(_tmp)
+
+    # Since we have 2k targets with a "real" ratio
+    # of 0.4 in our fixture, we have 800 real targets.
+    assert nrow < 1000
+    assert nrow > 500
     for col in EXPECTED_COLS:
         assert col in _tmp.columns, f"Column {col} not found in output"
 
 
 @pytest.mark.parametrize("deduplication", [True, False])
 def test_internal_flashlfq(flashlfq_psms_ds, deduplication):
-    mods, scores = mokapot.brew([flashlfq_psms_ds], test_fdr=0.1)
+    mods, scores = mokapot.brew([flashlfq_psms_ds], test_fdr=0.01)
     conf = mokapot.assign_confidence(
         [flashlfq_psms_ds],
         scores_list=scores,

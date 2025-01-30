@@ -86,13 +86,14 @@ def _format_flashlfq(conf):
     cols_pull = {k: v for k, v in opt_cols.items() if v is not None}
 
     # TODO: make this work again ...
+    # RN I am not using the peptide groupings
     # if conf._has_proteins:
     #     proteins = conf._proteins
     # elif conf._protein_column is not None:
     #     proteins = conf._protein_column
     # else:
     #     proteins = None
-    proteins = None
+    proteins: str | None = opt_cols["protein"]
 
     # Get parameters
     #### Start
@@ -137,7 +138,7 @@ def _format_flashlfq(conf):
 
     if isinstance(proteins, str):
         # TODO: Add delimiter sniffing.
-        prots = passing["proteinIds"].str.replace("\t", "; ", regex=False)
+        prots = passing[proteins].str.replace("\t", "; ", regex=False)
     elif proteins is None:
         prots = ""
     else:

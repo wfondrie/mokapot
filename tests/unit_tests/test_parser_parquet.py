@@ -12,14 +12,14 @@ def std_parquet(tmp_path):
     """Create a standard pin file"""
     out_file = tmp_path / "std_pin.parquet"
     df = pd.DataFrame([
-        {
-            "sPeCid": "DefaultDirection",
-            "LaBel": "0",
-            "pepTide": "-",
-            "sCore": "-",
-            "scanNR": "1",
-            "pRoteins": "-",
-        },
+        # {
+        #     "sPeCid": "DefaultDirection",
+        #     "LaBel": "0",
+        #     "pepTide": "-",
+        #     "sCore": "-",
+        #     "scanNR": "1",
+        #     "pRoteins": "-",
+        # },
         {
             "sPeCid": "a",
             "LaBel": "1",

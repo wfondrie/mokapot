@@ -23,7 +23,12 @@ from mokapot.dataset import (
     calibrate_scores,
     update_labels,
 )
-from mokapot.model import Model, PercolatorModel
+from mokapot.model import (
+    BestFeatureIsBetterError,
+    Model,
+    ModelIterationError,
+    PercolatorModel,
+)
 from mokapot.parsers.pin import parse_in_chunks
 from mokapot.utils import strictzip
 
@@ -311,6 +316,11 @@ def brew(
 
     LOGGER.info("Assigning scores to PSMs...")
     for score, dataset in strictzip(scores, datasets):
+        if str(score.dtype) == "bool":
+            # On the rare occasions where the scores are bools
+            # This can happen if the model falls back to the best feature
+            # and the best feature is a bool.
+            scores = np.array(score, dtype=float)
         dataset.scores = score
 
     return list(models), scores
@@ -563,8 +573,20 @@ def _fit_model(train_set, psms, model: Model, fold):
     train_set = _create_linear_dataset(psms[0], train_set)
     try:
         model.fit(train_set)
-    except RuntimeError as msg:
-        if str(msg) != "Model performs worse after training.":
+    except BestFeatureIsBetterError as msg:
+        LOGGER.debug(msg)
+        if "Model performs worse after training." not in str(msg):
+            LOGGER.info(f"Fold {fold + 1}: {msg}")
+            raise
+
+        if model.is_trained:
+            reset = True
+    except ModelIterationError as msg:
+        # Q: should we handle this differently?
+        #    the model getting better and then worse is different than
+        #    it never getting better.
+        LOGGER.debug(msg)
+        if "Model performs worse after training." not in str(msg):
             LOGGER.info(f"Fold {fold + 1}: {msg}")
             raise
 

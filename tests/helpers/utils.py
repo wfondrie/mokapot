@@ -169,16 +169,24 @@ class ColumnValidator:
     def validate(self, series: pd.Series) -> None:
         fails = []
         if not self.allow_missing and series.isna().any():
-            fails.append("Missing values")
+            fails.append(f"Missing values at col: {self.name}")
 
         if series.dtype != self.col_type:
-            fails.append(f"Type {series.dtype} != {self.col_type}")
+            fails.append(
+                f"Type {series.dtype} != {self.col_type} at col: {self.name}"
+            )
 
         if self.value_range is not None:
             if series.min() < self.value_range[0]:
-                fails.append(f"Min {series.min()} < {self.value_range[0]}")
+                fails.append(
+                    f"Min {series.min()} < {self.value_range[0]} "
+                    f"at col: {self.name}"
+                )
             if series.max() > self.value_range[1]:
-                fails.append(f"Max {series.max()} > {self.value_range[1]}")
+                fails.append(
+                    f"Max {series.max()} > {self.value_range[1]} "
+                    f"at col: {self.name}"
+                )
 
         if fails:
             raise ColumnValidationError(fails)
@@ -191,6 +199,16 @@ class TableValidator:
     row_range: tuple[int, int] | None = None
 
     def validate(self, df: pd.DataFrame) -> None:
+        """Validate a pandas DataFrame against this validator.
+
+        Does not return anything, but raises an exception if the validation
+        fails.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            The DataFrame to validate.
+        """
         fails = []
         if self.row_range is not None:
             if df.shape[0] < self.row_range[0]:

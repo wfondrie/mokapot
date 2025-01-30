@@ -8,11 +8,13 @@ output, just that the expect outputs are created.
 import sqlite3
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from mokapot.tabular_data import CSVFileReader
 
 from ..helpers.cli import run_mokapot_cli
+from ..helpers.utils import ColumnValidator, TableValidator
 
 
 @pytest.fixture
@@ -58,6 +60,7 @@ def test_sqlite_output(tmp_path, pin_file, sqlite_db_file):
         ("--train_fdr", "0.1"),
         ("--test_fdr", "0.2"),
         ("--peps_algorithm", "hist_nnls"),
+        ("--verbosity", "3"),
     ]
     run_mokapot_cli(params)
 
@@ -70,6 +73,121 @@ def test_sqlite_output(tmp_path, pin_file, sqlite_db_file):
         ("PEPTIDE_GROUP_VALIDATION", "FDR", 300),
     ]
 
+    pep_column_validator = ColumnValidator(
+        name="PEP",
+        col_type="float64",
+        value_range=(0.0, 0.9999),
+        allow_missing=False,
+    )
+
+    # NOTE: The SVM score will actually be the best feature if
+    # the best feature outperforms the model.
+    svm_score_validator = ColumnValidator(
+        name="SVM_SCORE",
+        col_type="float64",
+        value_range=(-20, 20),
+        allow_missing=False,
+    )
+    fdr_validator = ColumnValidator(
+        name="FDR",
+        col_type="float64",
+        value_range=(1e-32, 1.0),
+        allow_missing=False,
+    )
+
+    validators = {
+        "CANDIDATE": TableValidator(
+            columns=[
+                ColumnValidator(
+                    name="CANDIDATE_ID",
+                    col_type="int64",
+                    value_range=(1, 200_000),
+                    allow_missing=False,
+                ),
+                ColumnValidator(
+                    name="PSM_FDR",
+                    col_type="float64",
+                    value_range=(1e-32, 1.0),
+                    allow_missing=True,
+                ),
+                ColumnValidator(
+                    name="SVM_SCORE",
+                    col_type="float64",
+                    value_range=(-20, 20),
+                    allow_missing=True,
+                ),
+                ColumnValidator(
+                    name="POSTERIOR_ERROR_PROBABILITY",
+                    col_type="float64",
+                    value_range=(0.0, 0.999),
+                    allow_missing=True,
+                ),
+            ],
+            allow_extra=False,
+            row_range=(1000, 1000),
+        ),
+        "PRECURSOR_VALIDATION": TableValidator(
+            columns=[
+                ColumnValidator(
+                    name="PCM_ID",
+                    col_type="int64",
+                    value_range=(1_000_000, 2_500_000),
+                    allow_missing=False,
+                ),
+                pep_column_validator,
+                svm_score_validator,
+                fdr_validator,
+            ],
+            allow_extra=False,
+            row_range=(356 - 20, 356 + 20),
+        ),
+        "MODIFIED_PEPTIDE_VALIDATION": TableValidator(
+            columns=[
+                ColumnValidator(
+                    name="MODIFIED_PEPTIDE_ID",
+                    col_type="int64",
+                    value_range=(12781, 22445),
+                    allow_missing=False,
+                ),
+                fdr_validator,
+                pep_column_validator,
+                svm_score_validator,
+            ],
+            allow_extra=False,
+            row_range=(356, 356),
+        ),
+        "PEPTIDE_VALIDATION": TableValidator(
+            columns=[
+                ColumnValidator(
+                    name="PEPTIDE_ID",
+                    col_type="int64",
+                    value_range=(4689, 2077305),
+                    allow_missing=False,
+                ),
+                fdr_validator,
+                pep_column_validator,
+                svm_score_validator,
+            ],
+            allow_extra=False,
+            row_range=(356 - 20, 356 + 20),
+        ),
+        "PEPTIDE_GROUP_VALIDATION": TableValidator(
+            columns=[
+                ColumnValidator(
+                    name="PEPTIDE_GROUP_ID",
+                    col_type="int64",
+                    value_range=(9875, 21599),
+                    allow_missing=False,
+                ),
+                fdr_validator,
+                pep_column_validator,
+                svm_score_validator,
+            ],
+            allow_extra=False,
+            row_range=(356 - 20, 356 + 20),
+        ),
+    }
+
     connection = sqlite3.connect(sqlite_db_file)
     for table_name, column_name, min_rows in tables_and_cols:
         cursor = connection.execute(
@@ -77,3 +195,8 @@ def test_sqlite_output(tmp_path, pin_file, sqlite_db_file):
         )
         rows = cursor.fetchall()
         assert len(rows) > min_rows
+
+        # Test that the data is correct
+        df = pd.read_sql(f"SELECT * FROM {table_name};", connection)
+        validator = validators[table_name]
+        validator.validate(df)

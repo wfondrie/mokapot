@@ -1235,12 +1235,11 @@ wheels = [
 
 [[package]]
 name = "mokapot"
-version = "0.10.1.dev53+g10b9f02.d20250107"
+version = "0.10.1.dev56+g012ca0e.d20250130"
 source = { editable = "." }
 dependencies = [
     { name = "importlib-metadata" },
     { name = "joblib" },
-    { name = "lxml" },
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "numpy", version = "2.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pandas" },
@@ -1254,6 +1253,9 @@ dependencies = [
 [package.optional-dependencies]
 plot = [
     { name = "matplotlib" },
+]
+xml = [
+    { name = "lxml" },
 ]
 
 [package.dev-dependencies]
@@ -1283,7 +1285,7 @@ test = [
 requires-dist = [
     { name = "importlib-metadata", specifier = ">=5.1.0" },
     { name = "joblib", specifier = ">=1.1.0" },
-    { name = "lxml", specifier = ">=4.6.2" },
+    { name = "lxml", marker = "extra == 'xml'", specifier = ">=4.6.2" },
     { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.1.3" },
     { name = "numpy", specifier = ">=2.0.0,<3.0.0" },
     { name = "pandas", specifier = ">=1.0.3" },

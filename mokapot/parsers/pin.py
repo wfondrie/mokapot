@@ -12,17 +12,14 @@ import pandas as pd
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
-from mokapot.column_defs import ColumnGroups, OptionalColumns
+from mokapot.column_defs import (
+    ColumnGroups,
+)
 from mokapot.constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
 from mokapot.dataset import OnDiskPsmDataset, PsmDataset
-from mokapot.parsers.helpers import (
-    find_columns,
-    find_optional_column,
-    find_required_column,
-)
 from mokapot.tabular_data import TabularDataReader
 from mokapot.utils import (
     create_chunks,
@@ -154,7 +151,7 @@ def read_percolator(
 
     Percolator input format (PIN) files and the Percolator result files
     are tab-delimited, but also have a tab-delimited protein list as the
-    final column. This function parses the file and returns a DataFrame.
+    final column. This function parses the file and returns a Dataset.
 
     Parameters
     ----------
@@ -169,67 +166,22 @@ def read_percolator(
     LOGGER.info("Reading %s...", perc_file)
     reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
-
-    # Find all the necessary columns, case-insensitive:
-    if "id" in columns[0].lower():
-        # If the first column has 'id' it will be used as an identifier.
-        # Since both PSMid (percolator docs) and SpecId (sage) are valid
-        # options.
-        specid = columns[0]
-    else:
-        specid = find_required_column("specid", columns)
-
-    peptides = find_required_column("peptide", columns)
-    proteins = find_required_column("proteins", columns)
-    labels = find_required_column("label", columns)
-    scan = find_required_column("scannr", columns)
-    nonfeat = [specid, scan, peptides, proteins, labels]
-
-    # Columns for different rollup levels
-    # Currently no proteins, since the protein rollup is probably quite
-    # different from the other rollup levels IMHO
-    modifiedpeptides = find_columns("modifiedpeptide", columns)
-    precursors = find_columns("precursor", columns)
-    peptidegroups = find_columns("peptidegroup", columns)
-    extra_confidence_level_columns = (
-        modifiedpeptides + precursors + peptidegroups
+    prelim_columns = ColumnGroups.infer_from_colnames(
+        columns,
+        filename_column=filename_column,
+        calcmass_column=calcmass_column,
+        expmass_column=expmass_column,
+        rt_column=rt_column,
+        charge_column=charge_column,
     )
-    nonfeat += modifiedpeptides + precursors + peptidegroups
-
-    # Optional columns
-    filename = find_optional_column(filename_column, columns, "filename")
-    calcmass = find_optional_column(calcmass_column, columns, "calcmass")
-    expmass = find_optional_column(expmass_column, columns, "expmass")
-    ret_time = find_optional_column(rt_column, columns, "ret_time")
-    charge = find_optional_column(charge_column, columns, "charge_column")
-    # Q: Why isnt `specid` used here?
-    # A: Bc the specid is more accurately a PSM id, since multiple can occur
-    #    for a single scan, thus should not beused to separate the "elements"
-    #    that compete with each other.
-    spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
-
-    # Only add charge to features if there aren't other charge columns:
-    alt_charge = [c for c in columns if c.lower().startswith("charge")]
-    if charge is not None and len(alt_charge) > 1:
-        nonfeat.append(charge)
-
-    for col in [filename, calcmass, expmass, ret_time]:
-        if col is not None:
-            nonfeat.append(col)
-
-    features = [c for c in columns if c not in nonfeat]
-
-    # Check for errors:
-    if not all(spectra):
-        raise ValueError(
-            "This PIN format is incompatible with mokapot. Please"
-            " verify that the required columns are present."
-        )
+    features = prelim_columns.feature_columns
+    spectra = prelim_columns.spectrum_columns
+    labels = prelim_columns.target_column
 
     # Check that features don't have missing values:
     feat_slices = create_chunks_with_identifier(
-        data=features,
-        identifier_column=spectra + [labels],
+        data=list(features),
+        identifier_column=list(spectra + (labels,)),
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
@@ -239,7 +191,7 @@ def read_percolator(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
             reader=reader,
             column=c,
-            spectra=spectra + [labels],
+            spectra=list(spectra + (labels,)),
             df_spectra_list=df_spectra_list,
         )
         for c in feat_slices
@@ -268,25 +220,10 @@ def read_percolator(
     for i, feat in enumerate(_feature_columns):
         LOGGER.info("  (%i)\t%s", i + 0, feat)
 
-    column_groups = ColumnGroups(
-        columns=tuplize(columns),
-        target_column=labels,
-        peptide_column=peptides,
-        spectrum_columns=tuplize(spectra),
-        feature_columns=tuplize(_feature_columns),
-        extra_confidence_level_columns=tuplize(extra_confidence_level_columns),
-        optional_columns=OptionalColumns(
-            id=specid,
-            filename=filename,
-            scan=scan,
-            calcmass=calcmass,
-            expmass=expmass,
-            rt=ret_time,
-            charge=charge,
-            protein=proteins,
-        ),
+    prelim_columns.update(
+        feature_columns=_feature_columns,
     )
-
+    column_groups = prelim_columns
     LOGGER.info(f"Infered column grouping: {pformat(column_groups)}")
 
     return OnDiskPsmDataset(

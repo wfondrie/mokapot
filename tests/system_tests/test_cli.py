@@ -413,10 +413,25 @@ def test_negative_features(tmp_path, psm_df_1000):
         df.drop(columns=score_cols + ["target"], inplace=True)
         df["Label"] = targets * 1  # Q: what does the *1 do ?
         df["feat"] = scores * (1 if desc else -1)
-
         # Q: Why is this re-shuffled?
-        # df["scannr"] = np.random.randint(0, 1000, 1000)
+        df["scannr"] = np.random.randint(0, 1000, 1000)
         file = tmp_path / filename
+        cols_keep = [
+            "PSMId",
+            "scannr",
+            # 'spectrum', # these 3 are detected as features
+            # 'charge',   # so we remove them
+            # 'specid',
+            "calcmass",
+            "expmass",
+            "peptide",
+            "Label",
+            "filename",
+            "ret_time",
+            "feat",
+            "proteins",
+        ]
+        df = df[cols_keep]
         df.to_csv(file, sep="\t", index=False)
         return file, df
 
@@ -471,23 +486,16 @@ def test_negative_features(tmp_path, psm_df_1000):
     psms_df2b = read_result("test2b.targets.psms.tsv")
     pd.testing.assert_frame_equal(psms_df1b, psms_df2b)
 
-    # Let's check now that the score columns are indeed equal to the
-    # normal/negated feature column
-    msg = "Skipping while I figure out if this is the correct behavior."
-    msg += " We already tested that the frames from both runs are equal,"
-    msg += " so we just need to decide what the 'score' is meant to be."
-    pytest.skip(msg)
-
     sorted_df1b = df1b[df1b.Label == 1].sort_values(by="scannr")
     feature_col1 = sorted_df1b.feat
     sorted_psms_df1b = psms_df1b.sort_values(by="scannr")
     score_col1 = sorted_psms_df1b.score
 
     np.testing.assert_equal(
-        # Note, stable was introduced in v2.0.0
-        np.argsort(feature_col1.to_numpy()),  # , stable=True),
-        np.argsort(score_col1.to_numpy()),  # , stable=True)
+        np.argsort(feature_col1.to_numpy(), stable=True),
+        np.argsort(score_col1.to_numpy(), stable=True),
     )
+
     # Q: is this meant to be the behavior? shouldnt the score be a
     #    scaled/calibrated version of the feature? thus not equal
     #    to the feature?

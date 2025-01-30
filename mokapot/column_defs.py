@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from typeguard import typechecked
+
 from .utils import tuplize
 
 Q_VALUE_COL_NAME = "mokapot_qvalue"
@@ -91,8 +93,14 @@ class ColumnGroups:
         "close to 0 is better").
     extra_confidence_level_columns : tuple[str, ...]
         The columns that contain the extra confidence levels.
-        Examples of this could be 'precursor ion', ''
-
+        Examples of this could be 'precursor ion', 'peptide_group'
+        or 'modified_peptide'
+    optional_columns : OptionalColumns
+        These are columns that are not used during the scoring/training
+        but might be used for specific output formats.
+        For example the id column will be propagated to the output
+        table and is used to identify the PSM. The filename column
+        might be required for some output formats, such as FlashLFQ.
 
     """
 
@@ -107,7 +115,7 @@ class ColumnGroups:
     def __post_init__(self):
         # Make sure that all columns are present
         if self.target_column not in self.columns:
-            msg = f"Target column {self.target_column} "
+            msg = f"Target column '{self.target_column}' "
             msg += f"not found in columns {self.columns}"
             raise ValueError(msg)
 
@@ -143,6 +151,17 @@ class ColumnGroups:
             raise ValueError(
                 f"Duplicate columns found in feature columns: {dupes}, {self}"
             )
+
+    def get_unused_columns(self) -> list[str]:
+        # Get columns not assigned to any field
+        out = set(self.columns)
+        out -= set([self.target_column])
+        out -= set([self.peptide_column])
+        out -= set(self.spectrum_columns)
+        out -= set(self.feature_columns)
+        out -= set(self.extra_confidence_level_columns)
+        out -= set(self.optional_columns.as_dict().values())
+        return list(out)
 
     def update(
         self,
@@ -213,3 +232,262 @@ class ColumnGroups:
             charge_column=other.optional_columns.charge,
             protein_column=other.optional_columns.protein,
         )
+
+    @classmethod
+    def infer_from_colnames(
+        cls,
+        colnames: list[str],
+        filename_column: str | None = None,
+        calcmass_column: str | None = None,
+        expmass_column: str | None = None,
+        rt_column: str | None = None,
+        charge_column: str | None = None,
+    ) -> ColumnGroups:
+        # Note: I want to delete these arguments in the future
+        #       Since they are never used when calling the API
+        #       and this class makes them un-necessary.
+        return default_column_inference(
+            colnames,
+            filename_column=filename_column,
+            calcmass_column=calcmass_column,
+            expmass_column=expmass_column,
+            rt_column=rt_column,
+            charge_column=charge_column,
+        )
+
+
+def default_column_inference(
+    columns: list[str],
+    filename_column=None,
+    calcmass_column=None,
+    expmass_column=None,
+    rt_column=None,
+    charge_column=None,
+) -> ColumnGroups:
+    # Find all the necessary columns, case-insensitive:
+    if "id" in columns[0].lower():
+        # If the first column has 'id' it will be used as an identifier.
+        # Since both PSMid (percolator docs) and SpecId (sage) are valid
+        # options.
+        specid = columns[0]
+    else:
+        specid = find_required_column("specid", columns)
+
+    peptides = find_required_column("peptide", columns)
+    proteins = find_required_column("proteins", columns)
+    labels = find_required_column("label", columns)
+    scan = find_required_column("scannr", columns)
+    nonfeat = [specid, scan, peptides, proteins, labels]
+
+    # Columns for different rollup levels
+    # Currently no proteins, since the protein rollup is probably quite
+    # different from the other rollup levels IMHO
+    modifiedpeptides = find_columns("modifiedpeptide", columns)
+    precursors = find_columns("precursor", columns)
+    peptidegroups = find_columns("peptidegroup", columns)
+    extra_confidence_level_columns = (
+        modifiedpeptides + precursors + peptidegroups
+    )
+    nonfeat += modifiedpeptides + precursors + peptidegroups
+
+    # Optional columns
+    filename = find_optional_column(filename_column, columns, "filename")
+    calcmass = find_optional_column(calcmass_column, columns, "calcmass")
+    expmass = find_optional_column(expmass_column, columns, "expmass")
+    ret_time = find_optional_column(rt_column, columns, "ret_time")
+    charge = find_optional_column(charge_column, columns, "charge_column")
+    # Q: Why isnt `specid` used here?
+    # A: Bc the specid is more accurately a PSM id, since multiple can occur
+    #    for a single scan, thus should not beused to separate the "elements"
+    #    that compete with each other.
+    spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
+
+    # Only add charge to features if there aren't other charge columns:
+    alt_charge = [c for c in columns if c.lower().startswith("charge")]
+    if charge is not None and len(alt_charge) > 1:
+        nonfeat.append(charge)
+
+    for col in [filename, calcmass, expmass, ret_time]:
+        if col is not None:
+            nonfeat.append(col)
+
+    features = [c for c in columns if c not in nonfeat]
+
+    # Check for errors:
+    if not all(spectra):
+        raise ValueError(
+            "This PIN format is incompatible with mokapot. Please"
+            " verify that the required columns are present."
+        )
+
+    column_groups = ColumnGroups(
+        columns=tuplize(columns),
+        target_column=labels,
+        peptide_column=peptides,
+        spectrum_columns=tuplize(spectra),
+        feature_columns=tuplize(features),
+        extra_confidence_level_columns=tuplize(extra_confidence_level_columns),
+        optional_columns=OptionalColumns(
+            id=specid,
+            filename=filename,
+            scan=scan,
+            calcmass=calcmass,
+            expmass=expmass,
+            rt=ret_time,
+            charge=charge,
+            protein=proteins,
+        ),
+    )
+
+    return column_groups
+
+
+@typechecked
+def find_column(
+    col: str, columns: list[str], required=True, unique=True, ignore_case=False
+) -> str | list[str] | None:
+    """
+    Parameters
+    ----------
+    col : str
+        The column name to search for.
+
+    columns : list[str]
+        The list of column names to search within.
+
+    required : bool, optional
+        Specifies whether the column is required. If set to True (default),
+        an error will be raised if the column is not found.
+
+    unique : bool, optional
+        Specifies whether the column should be unique.
+        If set to True (default), an error will be raised if multiple
+        columns with the same name are found.
+
+    ignore_case : bool, optional
+        Specifies whether case should be ignored when comparing column names.
+        If set to True, the comparison will be case-insensitive.
+
+    Returns
+    -------
+    str or list[str] or None
+        Returns the matched column name(s) based on the search criteria.
+
+    Raises
+    ------
+    ValueError
+        If the column is required and not found, or if multiple columns
+            are found but unique is set to True.
+    """
+    if ignore_case:
+
+        def str_compare(str1, str2):
+            return str1.lower() == str2.lower()
+
+    else:
+
+        def str_compare(str1, str2):
+            return str1 == str2
+
+    found_columns = [c for c in columns if str_compare(c, col)]
+
+    if required and len(found_columns) == 0:
+        raise ValueError(
+            f"The column '{col}' was not found. (Options: {columns})"
+        )
+
+    if unique:
+        if len(found_columns) > 1:
+            raise ValueError(
+                f"The column '{col}' should be unique. Found {found_columns}."
+            )
+        return found_columns[0] if len(found_columns) > 0 else None
+    else:
+        return found_columns
+
+
+@typechecked
+def find_columns(col: str, columns: list[str]) -> list[str]:
+    """
+    Parameters
+    ----------
+    col : str
+        The column name to search for.
+
+    columns : List[str]
+        The list of columns to search within.
+
+    Returns
+    -------
+    List[str]
+        The list of columns that match the given column name, ignoring case
+        sensitivity.
+    """
+    return find_column(
+        col, columns, required=False, unique=False, ignore_case=True
+    )
+
+
+@typechecked
+def find_required_column(col: str, columns: list[str]) -> str:
+    """
+    Parameters
+    ----------
+    col : str
+        The column to search for (case-insensitive).
+
+    columns : list[str]
+        The list of columns to search within.
+
+    Returns
+    -------
+    str
+        The required column found with correct case.
+
+    Raises
+    ------
+    ValueError
+        If the column was not found or not unique.
+    """
+    return find_column(
+        col, columns, required=True, unique=True, ignore_case=True
+    )
+
+
+@typechecked
+def find_optional_column(
+    col: str | None, columns: list[str], default: str
+) -> str | None:
+    """
+    Parameters
+    ----------
+    col : Optional[str]
+        The column to check. If None, the default column will be searched in
+        `columns`.
+
+    columns : List[str]
+        The list of available columns to check against.
+
+    default : str
+        The default column to search for if `col` is None.
+
+    Returns
+    -------
+    Optional[str]:
+        The validated column. If `col` is None, it returns the first matching
+        column in `columns` with case-insensitive comparison to `default`. If
+        `col` is not None, it returns `col` after ensuring it is present in
+        `columns`.
+
+    Raises
+    ------
+    ValueError
+        If `col` is not None and it is not found in `columns`.
+    """
+    return find_column(
+        col or default,
+        columns,
+        required=col is not None,
+        unique=True,
+        ignore_case=col is None,
+    )

@@ -922,6 +922,7 @@ class OutputWriterFactory:
         self.write_decoys = write_decoys
         self.extra_output_columns = extra_output_columns
         self.append_to_output_file = append_to_output_file
+        self.id_col = id_column
         id_col = [id_column] if id_column is not None else []
         self.output_column_names = [
             *id_col,
@@ -980,6 +981,11 @@ class OutputWriterFactory:
                 LOGGER.warning(
                     "The path argument is ignored when using sqlite output."
                 )
+
+            if self.id_col is None:
+                raise RuntimeError(
+                    "id_column must be specified when using sqlite output."
+                )
             return ConfidenceSqliteWriter(
                 self.sqlite_path,
                 columns=output_columns,
@@ -987,6 +993,7 @@ class OutputWriterFactory:
                 level=level,
                 qvalue_column=Q_VALUE_COL_NAME,
                 pep_column="posterior_error_prob",
+                psm_id_column=self.id_col,
             )
 
         writer = TabularDataWriter.from_suffix(path, output_columns, [])
@@ -1241,7 +1248,6 @@ def compute_and_write_confidence(
         if peps_error and all(peps == 1):
             raise ValueError("PEP values are all equal to 1.")
         data[peps_column] = peps
-
         writer.append_data(data)
 
     else:  # Here comes the streaming part

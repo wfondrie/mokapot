@@ -9,7 +9,36 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.svm import LinearSVC
 
 import mokapot
-from mokapot import utils
+from mokapot import LinearPsmDataset, utils
+
+from ..helpers.random_df import _psm_df_rand
+
+
+@pytest.fixture
+def psms_dataset() -> LinearPsmDataset:
+    """A small LinearPsmDataset."""
+    data = _psm_df_rand(
+        ntargets=500,
+        ndecoys=500,
+        share_ids=True,
+        pct_real=0.5,
+        # This means there are 4 features, for decoys
+        # they are all normall distributed on with mean
+        # of 0 and std of 1.
+        # For targets they are distributed with mean
+        # of 0.5 (x3) and 2.0 (x1), and std of 1.
+        score_diffs=[0.5, 0.5, 0.5, 2.0],
+    )
+
+    psms = LinearPsmDataset(
+        psms=data.df,
+        target_column="target",
+        spectrum_columns=data.columns.spectrum_columns,
+        peptide_column="peptide",
+        feature_columns=data.score_cols,
+        copy_data=True,
+    )
+    return psms
 
 
 def test_model_init():
