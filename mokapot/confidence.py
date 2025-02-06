@@ -140,7 +140,7 @@ class Confidence:
     ):
         # As far as I can tell, the dataset is only used to export to flashlfq
         self.dataset = dataset
-        self._score_column = "mokapot_score"
+        self._score_column = STANDARD_COLUMN_NAME_MAP["score"]
         self._target_column = dataset.target_column
         self._peptide_column = peptide_column
 
@@ -538,7 +538,7 @@ def assign_confidence(
             ),
             max_workers=max_workers,
             input_output_column_mapping=level_input_output_column_mapping,
-            score_column="mokapot_score",
+            score_column=STANDARD_COLUMN_NAME_MAP["score"],
         ) as sorted_file_reader:
             LOGGER.info("Assigning confidence...")
             LOGGER.info("Performing target-decoy competition...")
@@ -903,7 +903,7 @@ class LevelManager:
             dataset.peptide_column,
             *self.extra_output_columns,
             *protein_col,
-            "mokapot_score",
+            STANDARD_COLUMN_NAME_MAP["score"],
         ]
         level_input_column_names = [
             *id_col,
@@ -912,7 +912,7 @@ class LevelManager:
             dataset.peptide_column,
             *self.extra_output_columns,
             *protein_col,
-            "mokapot_score",
+            STANDARD_COLUMN_NAME_MAP["score"],
         ]
 
         level_input_output_column_mapping = {
@@ -965,7 +965,7 @@ class OutputWriterFactory:
 
         self.output_column_names_proteins = [
             STANDARD_COLUMN_NAME_MAP["protein_group"],
-            "best_peptide",
+            STANDARD_COLUMN_NAME_MAP["best_peptide"],
             STANDARD_COLUMN_NAME_MAP["stripped_sequence"],
             STANDARD_COLUMN_NAME_MAP["score"],
             STANDARD_COLUMN_NAME_MAP["q-value"],
@@ -1113,7 +1113,7 @@ def create_sorted_file_reader(
     deduplication_columns: list[str] | tuple[str, ...] | None,
     max_workers: int,
     input_output_column_mapping,
-    score_column: str = "mokapot_score",
+    score_column: str = STANDARD_COLUMN_NAME_MAP["score"],
 ):
     """Read from the input psms and write into smaller sorted files by score"""
 
@@ -1158,7 +1158,7 @@ def create_sorted_file_reader(
 
     sorted_file_reader = MergedTabularDataReader(
         readers=readers,
-        priority_column="mokapot_score",
+        priority_column=STANDARD_COLUMN_NAME_MAP["score"],
         reader_chunk_size=CONFIDENCE_CHUNK_SIZE,
     )
 
@@ -1191,7 +1191,9 @@ def _save_sorted_metadata_chunks(
     del chunk_metadata[target_column]
     chunk_metadata.loc[:, target_column] = tmp
     chunk_metadata.sort_values(
-        by="mokapot_score", ascending=False, inplace=True
+        by=STANDARD_COLUMN_NAME_MAP["score"],
+        ascending=False,
+        inplace=True,
     )
 
     if deduplication_columns is not None:
@@ -1238,7 +1240,9 @@ def compute_and_write_confidence(
         # Read all data at once, compute the peps and qvalues and write in one
         # large chunk
         data = temp_reader.read()
-        scores = data["mokapot_score"].to_numpy()
+        scores = data[STANDARD_COLUMN_NAME_MAP["score"]].to_numpy()
+
+        # Q: Should I add 'is_decoy' to the standard col mapping?
         targets = ~data["is_decoy"].to_numpy()
         if all(targets):
             LOGGER.warning(
@@ -1284,11 +1288,15 @@ def compute_and_write_confidence(
 
     else:  # Here comes the streaming part
         LOGGER.info("Computing statistics for q-value and PEP assignment...")
+        if score_stats is None:
+            msg = "Requested streaming confidence without passing a"
+            msg += " `score_stats` argument, please provide one."
+            raise RuntimeError(msg)
         bin_edges = HistData.get_bin_edges(score_stats, clip=(50, 500))
         score_target_iterator = create_score_target_iterator(
             temp_reader.get_chunked_data_iterator(
                 chunk_size=CONFIDENCE_CHUNK_SIZE,
-                columns=["mokapot_score", "is_decoy"],
+                columns=[STANDARD_COLUMN_NAME_MAP["score"], "is_decoy"],
             )
         )
         hist_data = TDHistData.from_score_target_iterator(
@@ -1308,7 +1316,7 @@ def compute_and_write_confidence(
         for df_chunk in temp_reader.get_chunked_data_iterator(
             chunk_size=CONFIDENCE_CHUNK_SIZE
         ):
-            scores = df_chunk["mokapot_score"].values
+            scores = df_chunk[STANDARD_COLUMN_NAME_MAP["score"]].values
             df_chunk[qvals_column] = qvalues_func(scores)
             df_chunk[peps_column] = peps_func(scores)
 

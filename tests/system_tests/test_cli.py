@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
+
 from ..helpers.cli import run_mokapot_cli
 from ..helpers.utils import (
     ColumnValidator,
@@ -88,9 +90,9 @@ def test_basic_cli(tmp_path, scope_files):
         "ScanNr",
         "ExpMass",
         "Peptide",
-        "mokapot_score",
-        "mokapot_qvalue",
-        "mokapot_posterior_error_prob",
+        STANDARD_COLUMN_NAME_MAP["score"],
+        STANDARD_COLUMN_NAME_MAP["q-value"],
+        STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
         "Proteins",
     ]
     assert len(targets_psms_df.index) >= 5000
@@ -219,19 +221,19 @@ def test_cli_fasta(tmp_path, phospho_files):
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_score",
+                name=STANDARD_COLUMN_NAME_MAP["score"],
                 col_type=float,
                 value_range=(-100.0, 100.0),
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_qvalue",
+                name=STANDARD_COLUMN_NAME_MAP["q-value"],
                 col_type=float,
                 value_range=(1e-32, 1.0),
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_posterior_error_prob",
+                name=STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
                 col_type=float,
                 value_range=(1e-32, 1.0),
                 allow_missing=False,
@@ -282,19 +284,19 @@ def test_cli_fasta(tmp_path, phospho_files):
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_score",
+                name=STANDARD_COLUMN_NAME_MAP["score"],
                 col_type="float64",
                 value_range=(-30.0, 30.0),
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_qvalue",
+                name=STANDARD_COLUMN_NAME_MAP["q-value"],
                 col_type="float64",
                 value_range=(1e-32, 1.0),
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_posterior_error_prob",
+                name=STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
                 col_type="float64",
                 value_range=(1e-32, 1.0),
                 allow_missing=False,
@@ -319,7 +321,7 @@ def test_cli_fasta(tmp_path, phospho_files):
     protein_validator = TableValidator(
         columns=[
             ColumnValidator(
-                name="mokapot_protein_group",
+                name=STANDARD_COLUMN_NAME_MAP["protein_group"],
                 col_type="object",
                 value_range=(
                     "sp|A0A075B6I4|LVX54_HUMAN",
@@ -328,7 +330,7 @@ def test_cli_fasta(tmp_path, phospho_files):
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="best_peptide",
+                name=STANDARD_COLUMN_NAME_MAP["best_peptide"],
                 col_type="object",
                 value_range=(
                     "-.MAAAAPNAGGSAPET[79.97]AGSAEAPLQYSLLLQY[79.97]LVGDKRQPR.L",
@@ -337,7 +339,7 @@ def test_cli_fasta(tmp_path, phospho_files):
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="stripped_sequence",
+                name=STANDARD_COLUMN_NAME_MAP["stripped_sequence"],
                 col_type="object",
                 value_range=(
                     "AAAAAAAAAAAAAAAGAGAGAK",
@@ -346,19 +348,19 @@ def test_cli_fasta(tmp_path, phospho_files):
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_score",
+                name=STANDARD_COLUMN_NAME_MAP["score"],
                 col_type="float64",
                 value_range=(-100.0, 100.0),
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_qvalue",
+                name=STANDARD_COLUMN_NAME_MAP["q-value"],
                 col_type="float64",
                 value_range=(1e-32, 1.0),
                 allow_missing=False,
             ),
             ColumnValidator(
-                name="mokapot_posterior_error_prob",
+                name=STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
                 col_type="float64",
                 value_range=(1e-32, 1.0),
                 allow_missing=False,
@@ -487,7 +489,7 @@ def test_negative_features(tmp_path, psm_df_1000):
     def mean_scores(str):
         def mean_score(file):
             psms_df = read_result(file)
-            return psms_df["mokapot_score"].values.mean()
+            return psms_df[STANDARD_COLUMN_NAME_MAP["score"]].values.mean()
 
         target_mean = mean_score(f"{str}.targets.psms.tsv")
         decoy_mean = mean_score(f"{str}.decoys.psms.tsv")
@@ -529,7 +531,7 @@ def test_negative_features(tmp_path, psm_df_1000):
     sorted_df1b = df1b[df1b.Label == 1].sort_values(by="scannr")
     feature_col1 = sorted_df1b.feat
     sorted_psms_df1b = psms_df1b.sort_values(by="scannr")
-    score_col1 = sorted_psms_df1b["mokapot_score"]
+    score_col1 = sorted_psms_df1b[STANDARD_COLUMN_NAME_MAP["score"]]
 
     np.testing.assert_equal(
         np.argsort(feature_col1.to_numpy(), stable=True),

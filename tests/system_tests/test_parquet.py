@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
+
 from ..helpers.cli import run_mokapot_cli
 from ..helpers.utils import file_exist
 
@@ -56,21 +58,9 @@ def test_parquet_output(tmp_path):
         "Peptide",
         # Mokapot-prefixed cols are added, rest are
         # propagated from the input file.
-        "mokapot_score",
-        "mokapot_qvalue",
-        "mokapot_posterior_error_prob",
+        STANDARD_COLUMN_NAME_MAP["score"],
+        STANDARD_COLUMN_NAME_MAP["q-value"],
+        STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
         "Proteins",
     ]
-    # [
-    #     # "PSMId",
-    #     "peptide",
-    #     "score",
-    #     "mokapot_qvalue",
-    #     "posterior_error_prob",
-    #     "Proteins",
-    # ]
-    # breakpoint()
-    # for x in expected_cols:
-    #     assert x in targets_psms_df.columns
-    #
     assert list(targets_psms_df.columns) == expected_cols

@@ -24,6 +24,7 @@ STANDARD_COLUMN_NAME_MAP = {
     # Used in mokapot.picked_protein
     "protein_group": "mokapot_protein_group",
     "stripped_sequence": "stripped_sequence",
+    "best_peptide": "best_peptide",
 }
 
 

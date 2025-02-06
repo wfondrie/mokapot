@@ -4,6 +4,7 @@ Helper classes and methods used for streaming of tabular data.
 
 from __future__ import annotations
 
+import itertools
 import warnings
 from pprint import pformat
 from typing import Callable, Generator, Iterator
@@ -278,10 +279,9 @@ class MergedTabularDataReader(TabularDataReader):
             )
 
         def row_iterator_from_chunked(chunked_iter: Iterator) -> Iterator:
-            # Isnt this just itertools.chain?
-            for chunk in chunked_iter:
-                for row in iterate_over_chunk(chunk):
-                    yield row
+            yield from itertools.chain(
+                iterate_over_chunk(chunk) for chunk in chunked_iter
+            )
 
         row_iterators = [
             row_iterator_from_chunked(
