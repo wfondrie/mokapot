@@ -279,7 +279,7 @@ class MergedTabularDataReader(TabularDataReader):
             )
 
         def row_iterator_from_chunked(chunked_iter: Iterator) -> Iterator:
-            yield from itertools.chain(
+            yield from itertools.chain.from_iterable(
                 iterate_over_chunk(chunk) for chunk in chunked_iter
             )
 
