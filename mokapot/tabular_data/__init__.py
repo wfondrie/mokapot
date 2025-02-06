@@ -16,6 +16,4 @@ from .streaming import (
     ComputedTabularDataReader,
     JoinedTabularDataReader,
     MergedTabularDataReader,
-    join_readers,
-    merge_readers,
 )

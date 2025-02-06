@@ -16,6 +16,7 @@ class TargetDecoyWriter(TabularDataWriter):
         write_decoys: bool = True,
         target_column: str | None = None,
         decoy_column: str | None = None,
+        allow_missing: bool = False,
     ):
         super().__init__(
             writers[0].get_column_names(), writers[0].get_column_types()
@@ -27,6 +28,7 @@ class TargetDecoyWriter(TabularDataWriter):
         self.output_columns = writers[0].get_column_names()
         # Used to track how many values are imputed for missing columns
         self.missing_value_columns = {}
+        self.allow_missing = allow_missing
 
         if (target_column is not None) and (decoy_column is not None):
             raise RuntimeError(
@@ -60,13 +62,17 @@ class TargetDecoyWriter(TabularDataWriter):
             if x in data.columns:
                 continue
             else:
+                msg = (
+                    f"Column '{x}' not found in data,"
+                    f" found columns: {data.columns}"
+                    "Will try to assign missing values to it."
+                    f"\n\t Writers: {self.writers}"
+                )
+                if not self.allow_missing:
+                    raise RuntimeError(msg)
+
                 if x not in self.missing_value_columns:
-                    warnings.warn(
-                        f"Column {x} not found in data,"
-                        f" found columns: {data.columns}"
-                        "Will try to assign missing values to it."
-                        f"\n\t Writers: {self.writers}"
-                    )
+                    warnings.warn(msg)
                     self.missing_value_columns[x] = 0
 
                 self.missing_value_columns[x] += 1

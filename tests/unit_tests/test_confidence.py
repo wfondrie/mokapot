@@ -11,6 +11,7 @@ from pandas.testing import assert_frame_equal
 
 import mokapot
 from mokapot import LinearPsmDataset, OnDiskPsmDataset, assign_confidence
+from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
 
 
 @contextlib.contextmanager
@@ -116,11 +117,13 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
     assert len(df_results_group) < 510
     assert df_results_group.columns.tolist() == [
         *psms_disk.spectrum_columns,
-        "peptide",
-        "score",
-        "mokapot_qvalue",
-        "posterior_error_prob",
-        "proteinIds",
+        psms_disk.peptide_column,
+        STANDARD_COLUMN_NAME_MAP["score"],
+        STANDARD_COLUMN_NAME_MAP["q-value"],
+        STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
+        # psms_disk.protein_column,
+        # Since no protein column is assigned, we dont
+        # expect any on the ourtput.
     ]
     df_head = df_results_group.head(3)
     df_tail = df_results_group.tail(3)
@@ -137,10 +140,10 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
         # and > 500 to decoys.
     )
     # assert df["score"].tolist() == approx([5.767435, 5.572517, 5.531904])
-    assert np.all(df_head["score"] > 5.0), (
+    assert np.all(df_head[STANDARD_COLUMN_NAME_MAP["score"]] > 5.0), (
         "Good scores should be greater than 5.0"
     )
-    assert np.all(df_tail["score"] < 0.0), (
+    assert np.all(df_tail[STANDARD_COLUMN_NAME_MAP["score"]] < 0.0), (
         "Bad scores should be greater than less than 0"
     )
     # assert df["q-value"].tolist() == approx([
@@ -148,10 +151,10 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
     #     0.0103092780336737,
     #     0.0103092780336737,
     # ])
-    assert np.all(df_head["mokapot_qvalue"] < 0.015), (
+    assert np.all(df_head[STANDARD_COLUMN_NAME_MAP["q-value"]] < 0.015), (
         "Good q-values should be lt 0.015"
     )
-    assert np.all(df_tail["mokapot_qvalue"] > 0.9), (
+    assert np.all(df_tail[STANDARD_COLUMN_NAME_MAP["q-value"]] > 0.9), (
         "Bad q-values should be gt 0.9"
     )
 
@@ -160,12 +163,12 @@ def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
     #     5.558992546200682e-05,
     #     6.191049743361808e-05,
     # ])
-    assert np.all(df_head["posterior_error_prob"] < 0.001), (
-        "Good PEPs should be lt 0.001"
-    )
-    assert np.all(df_tail["posterior_error_prob"] > 0.98), (
-        "Bad PEPs should be gt 0.98"
-    )
+    assert np.all(
+        df_head[STANDARD_COLUMN_NAME_MAP["posterior_error_prob"]] < 0.001
+    ), "Good PEPs should be lt 0.001"
+    assert np.all(
+        df_tail[STANDARD_COLUMN_NAME_MAP["posterior_error_prob"]] > 0.98
+    ), "Bad PEPs should be gt 0.98"
 
 
 @pytest.mark.parametrize("deduplication", [True, False])

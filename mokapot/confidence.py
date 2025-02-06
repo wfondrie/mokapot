@@ -36,7 +36,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
-from mokapot.column_defs import Q_VALUE_COL_NAME, get_standard_column_name
+from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
 from mokapot.constants import CONFIDENCE_CHUNK_SIZE
 from mokapot.dataset import PsmDataset
 from mokapot.peps import (
@@ -57,8 +57,8 @@ from mokapot.tabular_data import (
     MergedTabularDataReader,
     TabularDataReader,
     TabularDataWriter,
-    join_readers,
 )
+from mokapot.tabular_data.streaming import JoinedTabularDataReader
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 from mokapot.utils import (
     make_bool_trarget,
@@ -122,9 +122,11 @@ class Confidence:
     def __init__(
         self,
         dataset: PsmDataset,
+        *,
         levels: list[str],
         level_paths: dict[str, Path],
         out_writers: dict[str, Sequence[TabularDataWriter]],
+        peptide_column: str = "peptide",
         eval_fdr: float = 0.01,
         write_decoys: bool = False,
         do_rollup: bool = True,
@@ -138,9 +140,9 @@ class Confidence:
     ):
         # As far as I can tell, the dataset is only used to export to flashlfq
         self.dataset = dataset
-        self._score_column = "score"
+        self._score_column = "mokapot_score"
         self._target_column = dataset.target_column
-        self._peptide_column = "peptide"
+        self._peptide_column = peptide_column
 
         self.eval_fdr = eval_fdr
         self.level_paths = level_paths
@@ -303,7 +305,7 @@ class Confidence:
         protein_writer.write(proteins_df)
         LOGGER.info("\t- Found %i unique protein groups.", len(proteins_df))
 
-    def read(self, level: str) -> pd.DataFrame:
+    def read(self, *, level: str) -> pd.DataFrame:
         """Read the results for a given level."""
         if level not in self.levels:
             raise ValueError(
@@ -314,15 +316,15 @@ class Confidence:
 
     @property
     def peptides(self) -> pd.DataFrame:
-        return self.read("peptides")
+        return self.read(level="peptides")
 
     @property
     def psms(self) -> pd.DataFrame:
-        return self.read("psms")
+        return self.read(level="psms")
 
     @property
     def proteins(self) -> pd.DataFrame:
-        return self.read("proteins")
+        return self.read(level="proteins")
 
     def to_flashlfq(self, out_file="mokapot.flashlfq.txt"):
         """Save confidenct peptides for quantification with FlashLFQ."""
@@ -353,7 +355,7 @@ class Confidence:
         """
 
         all_read = [x.read() for x in self.out_writers[level]]
-        qvals = pd.concat(all_read)[Q_VALUE_COL_NAME]
+        qvals = pd.concat(all_read)[STANDARD_COLUMN_NAME_MAP["q-value"]]
         return plot_qvalues(qvals, threshold=threshold, ax=ax, **kwargs)
 
 
@@ -469,7 +471,9 @@ def assign_confidence(
 
     output_writers_factory = OutputWriterFactory(
         id_column=curr_dataset.column_groups.optional_columns.id,
+        peptide_column=curr_dataset.column_groups.peptide_column,
         spectra_columns=curr_dataset.spectrum_columns,
+        protein_column=protein_column,
         extra_output_columns=level_manager.extra_output_columns,
         sqlite_path=sqlite_path,
         append_to_output_file=append_to_output_file,
@@ -513,7 +517,15 @@ def assign_confidence(
             prefix=prefix,
         )
 
-        score_reader = TabularDataReader.from_array(score, "score")
+        # This section basically create a temporaty file for each level.
+        # This file preserves only the best PSM for each of the levels.
+        # For instance in the peptide level, it preserves as the peptide's
+        # entry, the best scoring PSM among all the PSMs that share the
+        # same peptide.
+        #
+        # Also note that there is not protein level at this point. that one
+        # is created later in the confidence assignment.
+        score_reader = TabularDataReader.from_array(score, "mokapot_score")
         with create_sorted_file_reader(
             dataset=dataset,
             score_reader=score_reader,
@@ -526,6 +538,7 @@ def assign_confidence(
             ),
             max_workers=max_workers,
             input_output_column_mapping=level_input_output_column_mapping,
+            score_column="mokapot_score",
         ) as sorted_file_reader:
             LOGGER.info("Assigning confidence...")
             LOGGER.info("Performing target-decoy competition...")
@@ -553,6 +566,7 @@ def assign_confidence(
             dataset=dataset,
             levels=level_manager.levels_or_proteins,
             level_paths=level_manager.level_data_paths,
+            peptide_column=dataset.peptide_column,
             out_writers=output_writers,
             eval_fdr=eval_fdr,
             write_decoys=write_decoys,
@@ -593,10 +607,15 @@ class LevelWriterCollection:
             level_input_output_column_mapping
         )
         self.level_hash_columns = level_hash_columns
-        level_column_types = [
-            schema_dict[name]
-            for name in level_input_output_column_mapping.values()
-        ]
+        try:
+            level_column_types = [
+                schema_dict[name]
+                for name in level_input_output_column_mapping.values()
+            ]
+        except KeyError as e:
+            msg = f"Unable to find key '{str(e)}' in schema: {schema_dict}"
+            msg += "When mapping intermediate writer columns to output schema."
+            raise KeyError(msg)
 
         self.level_writers = {
             level: TabularDataWriter.from_suffix(
@@ -664,7 +683,7 @@ class LevelWriterCollection:
                     for col in self.level_input_output_column_mapping.values()
                 }
                 self.level_writers[level].append_data(out_row)
-                self.score_stats.update_single(data_row["score"])
+                self.score_stats.update_single(data_row["mokapot_score"])
 
     def finalize(self):
         for level in self.levels:
@@ -871,15 +890,20 @@ class LevelManager:
 
         id_col = dataset.column_groups.optional_columns.id
         id_col = [id_col] if id_col is not None else []
+        protein_col = (
+            [self.protein_column] if self.protein_column is not None else []
+        )
 
+        # TODO: cleanup this ... I dont see the purpose of the mapping
+        # at this point.
         level_column_names = [
             *id_col,
             *dataset.spectrum_columns,
             dataset.target_column,
-            "peptide",
+            dataset.peptide_column,
             *self.extra_output_columns,
-            "proteinIds",
-            "score",
+            *protein_col,
+            "mokapot_score",
         ]
         level_input_column_names = [
             *id_col,
@@ -887,8 +911,8 @@ class LevelManager:
             dataset.target_column,
             dataset.peptide_column,
             *self.extra_output_columns,
-            self.protein_column,
-            "score",
+            *protein_col,
+            "mokapot_score",
         ]
 
         level_input_output_column_mapping = {
@@ -910,39 +934,42 @@ class OutputWriterFactory:
         self,
         *,
         id_column: str | None,
+        peptide_column: str,
         spectra_columns: list[str] | tuple[str, ...],
         extra_output_columns: list[str],
+        protein_column: str | None,
         append_to_output_file: bool,
         write_decoys: bool,
         sqlite_path: Path | None,
     ):
         # Q: are we deleting the sqlite ops?
         self.is_sqlite = sqlite_path is not None
+        self.peptide_column = peptide_column
         self.sqlite_path = sqlite_path
         self.write_decoys = write_decoys
         self.extra_output_columns = extra_output_columns
         self.append_to_output_file = append_to_output_file
         self.id_col = id_column
         id_col = [id_column] if id_column is not None else []
+        prot_col = [protein_column] if protein_column is not None else []
         self.output_column_names = [
             *id_col,
             *spectra_columns,
-            "peptide",
+            peptide_column,
             *extra_output_columns,
-            # Q: should we prefix these with "mokapot"?
-            "score",
-            Q_VALUE_COL_NAME,
-            "posterior_error_prob",
-            "proteinIds",
+            STANDARD_COLUMN_NAME_MAP["score"],
+            STANDARD_COLUMN_NAME_MAP["q-value"],
+            STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
+            *prot_col,
         ]
 
         self.output_column_names_proteins = [
-            "mokapot protein group",
-            "best peptide",
-            "stripped sequence",
-            "score",
-            Q_VALUE_COL_NAME,
-            "posterior_error_prob",
+            STANDARD_COLUMN_NAME_MAP["protein_group"],
+            "best_peptide",
+            STANDARD_COLUMN_NAME_MAP["stripped_sequence"],
+            STANDARD_COLUMN_NAME_MAP["score"],
+            STANDARD_COLUMN_NAME_MAP["q-value"],
+            STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
         ]
 
     def __repr__(self) -> str:
@@ -991,8 +1018,10 @@ class OutputWriterFactory:
                 columns=output_columns,
                 column_types=[],
                 level=level,
-                qvalue_column=Q_VALUE_COL_NAME,
-                pep_column="posterior_error_prob",
+                score_column=STANDARD_COLUMN_NAME_MAP["score"],
+                qvalue_column=STANDARD_COLUMN_NAME_MAP["q-value"],
+                pep_column=STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
+                peptide_column=self.peptide_column,
                 psm_id_column=self.id_col,
             )
 
@@ -1084,19 +1113,20 @@ def create_sorted_file_reader(
     deduplication_columns: list[str] | tuple[str, ...] | None,
     max_workers: int,
     input_output_column_mapping,
+    score_column: str = "mokapot_score",
 ):
     """Read from the input psms and write into smaller sorted files by score"""
 
     # Create a reader that only reads columns given in psms.metadata_columns
     # in chunks of size CONFIDENCE_CHUNK_SIZE and joins the scores to it
-    reader = join_readers([
+    reader = JoinedTabularDataReader([
         ColumnMappedReader(dataset.reader, input_output_column_mapping),
         score_reader,
     ])
 
     # Q: Why is it reading all non-feature columns instead of just reading the
     #    spectrum columns?
-    input_columns = list(dataset.metadata_columns) + ["score"]
+    input_columns = list(dataset.metadata_columns) + [score_column]
     output_columns = [
         input_output_column_mapping.get(name, name) for name in input_columns
     ]
@@ -1128,7 +1158,7 @@ def create_sorted_file_reader(
 
     sorted_file_reader = MergedTabularDataReader(
         readers=readers,
-        priority_column="score",
+        priority_column="mokapot_score",
         reader_chunk_size=CONFIDENCE_CHUNK_SIZE,
     )
 
@@ -1160,7 +1190,9 @@ def _save_sorted_metadata_chunks(
     # column with incompatible dtype"
     del chunk_metadata[target_column]
     chunk_metadata.loc[:, target_column] = tmp
-    chunk_metadata.sort_values(by="score", ascending=False, inplace=True)
+    chunk_metadata.sort_values(
+        by="mokapot_score", ascending=False, inplace=True
+    )
 
     if deduplication_columns is not None:
         # This is not strictly necessary, as we deduplicate also afterwards,
@@ -1199,14 +1231,14 @@ def compute_and_write_confidence(
     #       if the streaming mode is used.
     # TODO: split this function into two, one for streaming and one for
     #       non-streaming.
-    qvals_column = get_standard_column_name("q-value")
-    peps_column = get_standard_column_name("posterior_error_prob")
+    qvals_column = STANDARD_COLUMN_NAME_MAP["q-value"]
+    peps_column = STANDARD_COLUMN_NAME_MAP["posterior_error_prob"]
 
     if not stream_confidence:
         # Read all data at once, compute the peps and qvalues and write in one
         # large chunk
         data = temp_reader.read()
-        scores = data["score"].to_numpy()
+        scores = data["mokapot_score"].to_numpy()
         targets = ~data["is_decoy"].to_numpy()
         if all(targets):
             LOGGER.warning(
@@ -1255,7 +1287,8 @@ def compute_and_write_confidence(
         bin_edges = HistData.get_bin_edges(score_stats, clip=(50, 500))
         score_target_iterator = create_score_target_iterator(
             temp_reader.get_chunked_data_iterator(
-                chunk_size=CONFIDENCE_CHUNK_SIZE, columns=["score", "is_decoy"]
+                chunk_size=CONFIDENCE_CHUNK_SIZE,
+                columns=["mokapot_score", "is_decoy"],
             )
         )
         hist_data = TDHistData.from_score_target_iterator(
@@ -1275,7 +1308,7 @@ def compute_and_write_confidence(
         for df_chunk in temp_reader.get_chunked_data_iterator(
             chunk_size=CONFIDENCE_CHUNK_SIZE
         ):
-            scores = df_chunk["score"].values
+            scores = df_chunk["mokapot_score"].values
             df_chunk[qvals_column] = qvalues_func(scores)
             df_chunk[peps_column] = peps_func(scores)
 
@@ -1285,7 +1318,7 @@ def compute_and_write_confidence(
 @typechecked
 def create_score_target_iterator(chunked_iterator: Iterator):
     for df_chunk in chunked_iterator:
-        scores = df_chunk["score"].values
+        scores = df_chunk["mokapot_score"].values
         targets = ~df_chunk["is_decoy"].values
         yield scores, targets
 

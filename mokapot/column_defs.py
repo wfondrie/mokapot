@@ -6,9 +6,8 @@ from typeguard import typechecked
 
 from .utils import tuplize
 
-Q_VALUE_COL_NAME = "mokapot_qvalue"
 STANDARD_COLUMN_NAME_MAP = {
-    "SpecId": "psm_id",
+    "SpecId": "psm_id",  # IMO these two are not the same ...
     "PSMId": "psm_id",
     "Precursor": "precursor",
     "pcm": "precursor",
@@ -18,13 +17,14 @@ STANDARD_COLUMN_NAME_MAP = {
     "peptidegroup": "peptide_group",
     "ModifiedPeptide": "modified_peptide",
     "modifiedpeptide": "modified_peptide",
-    # "q-value": "q_value",
-    "q-value": Q_VALUE_COL_NAME,
+    # Used in confidence assignment
+    "q-value": "mokapot_qvalue",
+    "posterior_error_prob": "mokapot_posterior_error_prob",
+    "score": "mokapot_score",
+    # Used in mokapot.picked_protein
+    "protein_group": "mokapot_protein_group",
+    "stripped_sequence": "stripped_sequence",
 }
-
-
-def get_standard_column_name(name):
-    return STANDARD_COLUMN_NAME_MAP.get(name, name)
 
 
 @dataclass
@@ -75,8 +75,10 @@ class ColumnGroups:
     peptide_column : str
         The column that contains the peptide sequences.
         In practice we also allow peptidoform/proforma-like
-        sequences. I till be used as a factor to deduplicate
-        the 'peptide' level of confidences.
+        sequences. It will be used as a factor to deduplicate
+        the 'peptide' level of confidences and to map
+        proteins if the protein inference option is used
+        (passed a fasta in the command line interface).
     spectrum_columns : tuple[str, ...]
         The columns that contain the spectrum metadata.
         These are metadata columns that specify what elements will

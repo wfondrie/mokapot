@@ -136,6 +136,10 @@ class PsmDataset(ABC):
         return self.column_groups.peptide_column
 
     @property
+    def protein_column(self) -> str | None:
+        return self.column_groups.optional_columns.protein
+
+    @property
     @abstractmethod
     def reader(self) -> TabularDataReader:
         raise NotImplementedError

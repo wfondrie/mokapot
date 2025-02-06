@@ -16,6 +16,28 @@ from ..helpers.utils import file_exist
 def test_parquet_output(tmp_path):
     """Test that parquet input/output works."""
     params = [Path("data") / "10k_psms_test.parquet", "--dest_dir", tmp_path]
+    orig_cols = list(pd.read_parquet(params[0]).columns)
+    assert orig_cols == [
+        "SpecId",
+        "Label",
+        "ScanNr",
+        "ExpMass",
+        "Mass",
+        "MS8_feature_5",
+        "missedCleavages",
+        "MS8_feature_7",
+        "MS8_feature_13",
+        "MS8_feature_20",
+        "MS8_feature_21",
+        "MS8_feature_22",
+        "MS8_feature_24",
+        "MS8_feature_29",
+        "MS8_feature_30",
+        "MS8_feature_32",
+        "Peptide",
+        "Proteins",
+    ]
+
     run_mokapot_cli(params)
     assert file_exist(tmp_path, "targets.psms.parquet")
     assert file_exist(tmp_path, "targets.peptides.parquet")
@@ -24,15 +46,31 @@ def test_parquet_output(tmp_path):
     assert len(targets_psms_df.index) >= 5000
 
     assert targets_psms_df.iloc[0, 0] == 6991
-    assert targets_psms_df["proteinIds"].iloc[0] == "_.dummy._"
+    # Here 'Proteins' gets propagated from the input file name
+    assert targets_psms_df["Proteins"].iloc[0] == "_.dummy._"
 
     expected_cols = [
-        # "PSMId",
-        "peptide",
-        "score",
+        "SpecId",
+        "ScanNr",
+        "ExpMass",
+        "Peptide",
+        # Mokapot-prefixed cols are added, rest are
+        # propagated from the input file.
+        "mokapot_score",
         "mokapot_qvalue",
-        "posterior_error_prob",
-        "proteinIds",
+        "mokapot_posterior_error_prob",
+        "Proteins",
     ]
-    for x in expected_cols:
-        assert x in targets_psms_df.columns
+    # [
+    #     # "PSMId",
+    #     "peptide",
+    #     "score",
+    #     "mokapot_qvalue",
+    #     "posterior_error_prob",
+    #     "Proteins",
+    # ]
+    # breakpoint()
+    # for x in expected_cols:
+    #     assert x in targets_psms_df.columns
+    #
+    assert list(targets_psms_df.columns) == expected_cols

@@ -8,7 +8,7 @@ test:
 
 testff:
 	# Test but fails fast
-	uv run --group test pytest --extra xml --durations=0 --slow-last --last-failed -xs
+	uv run --group test --extra xml pytest --durations=0 --slow-last --last-failed -xs
 
 profile:
 	uv run --group test --extra xml --group profile scalene --cpu -m pytest

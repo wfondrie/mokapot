@@ -169,11 +169,15 @@ class ColumnValidator:
     def validate(self, series: pd.Series) -> None:
         fails = []
         if not self.allow_missing and series.isna().any():
-            fails.append(f"Missing values at col: {self.name}")
+            num_missing = sum(series.isna())
+            tot_col = len(series)
+            msg = f"Missing values at col: '{self.name}'"
+            msg += f" ({num_missing}/{tot_col})"
+            fails.append(msg)
 
         if series.dtype != self.col_type:
             fails.append(
-                f"Type {series.dtype} != {self.col_type} at col: {self.name}"
+                f"Type {series.dtype} != {self.col_type} at col: '{self.name}'"
             )
 
         if self.value_range is not None:
@@ -221,7 +225,9 @@ class TableValidator:
 
         for validator in self.columns:
             if validator.name not in df.columns:
-                fails.append(f"Column {validator.name} not found")
+                msg = f"Column '{validator.name}' not found"
+                msg += f"in {df.columns}"
+                fails.append(msg)
             else:
                 try:
                     validator.validate(df[validator.name])

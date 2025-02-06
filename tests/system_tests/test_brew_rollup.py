@@ -13,6 +13,7 @@ import pytest
 from filelock import FileLock
 from pandas.testing import assert_series_equal
 
+from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
 from mokapot.rollup import compute_rollup_levels
 from mokapot.tabular_data import (
     CSVFileReader,
@@ -132,7 +133,7 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
         ("--level", "precursor"),
         ("--src_dir", src_dir),
         ("--qvalue_algorithm", "from_counts"),
-        ("--verbosity", 2),
+        ("--verbosity", 3),
     ]
     run_brew_rollup(
         rollup_params + ["--dest_dir", rollup_dest_dir / "rollup0"],
@@ -216,16 +217,16 @@ def test_rollup_10000(rollup_src_dirs, suffix, tmp_path):
     # JSPP 2024-12-16
     assert (
         estimate_abs_int(
-            df0_nonsrteam.score,
+            df0_nonsrteam[STANDARD_COLUMN_NAME_MAP["score"]],
             df1_stream[qval_column] - df0_nonsrteam[qval_column],
         )
         < 0.006
     )
     assert (
         estimate_abs_int(
-            df0_nonsrteam.score,
-            df1_stream.posterior_error_prob
-            - df0_nonsrteam.posterior_error_prob,
+            df0_nonsrteam[STANDARD_COLUMN_NAME_MAP["score"]],
+            df1_stream[STANDARD_COLUMN_NAME_MAP["posterior_error_prob"]]
+            - df0_nonsrteam[STANDARD_COLUMN_NAME_MAP["posterior_error_prob"]],
         )
         < 0.03
     )

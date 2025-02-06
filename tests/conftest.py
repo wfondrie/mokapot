@@ -370,24 +370,6 @@ def mock_conf():
 
 
 @pytest.fixture
-def confidence_write_data():
-    filename = Path("data") / "confidence_results_test.tsv"
-    psm_df = pd.read_csv(filename, sep="\t")
-    precursor_df = psm_df.drop_duplicates(subset=["Precursor"])
-    mod_pep_df = psm_df.drop_duplicates(subset=["ModifiedPeptide"])
-    peptide_df = psm_df.drop_duplicates(subset=["peptide"])
-    peptide_grp_df = psm_df.drop_duplicates(subset=["PeptideGroup"])
-    df_dict = {
-        "psms": psm_df,
-        "precursors": precursor_df,
-        "modifiedpeptides": mod_pep_df,
-        "peptides": peptide_df,
-        "peptidegroups": peptide_grp_df,
-    }
-    return df_dict
-
-
-@pytest.fixture
 def peptide_csv_file(tmp_path):
     file = tmp_path / "peptides.csv"
     with open(file, "w") as f:
