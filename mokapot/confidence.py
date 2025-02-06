@@ -1326,7 +1326,7 @@ def compute_and_write_confidence(
 @typechecked
 def create_score_target_iterator(chunked_iterator: Iterator):
     for df_chunk in chunked_iterator:
-        scores = df_chunk["mokapot_score"].values
+        scores = df_chunk[STANDARD_COLUMN_NAME_MAP["score"]].values
         targets = ~df_chunk["is_decoy"].values
         yield scores, targets
 

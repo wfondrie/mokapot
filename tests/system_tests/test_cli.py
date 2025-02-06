@@ -546,7 +546,9 @@ def test_negative_features(tmp_path, psm_df_1000):
     )
 
     feature_col2 = df2b[df2b.Label == 1].sort_values(by="PSMId").feat
-    score_col2 = psms_df2b.sort_values(by="PSMId")["mokapot_score"]
+    score_col2 = psms_df2b.sort_values(by="PSMId")[
+        STANDARD_COLUMN_NAME_MAP["score"]
+    ]
     pd.testing.assert_series_equal(
         score_col2, -feature_col2, check_index=False, check_names=False
     )
