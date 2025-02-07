@@ -1,8 +1,28 @@
 import sqlite3
+from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from mokapot.tabular_data import ConfidenceSqliteWriter
+
+
+@pytest.fixture
+def confidence_write_data():
+    filename = Path("data") / "confidence_results_test.tsv"
+    psm_df = pd.read_csv(filename, sep="\t")
+    precursor_df = psm_df.drop_duplicates(subset=["Precursor"])
+    mod_pep_df = psm_df.drop_duplicates(subset=["ModifiedPeptide"])
+    peptide_df = psm_df.drop_duplicates(subset=["peptide"])
+    peptide_grp_df = psm_df.drop_duplicates(subset=["PeptideGroup"])
+    df_dict = {
+        "psms": psm_df,
+        "precursors": precursor_df,
+        "modifiedpeptides": mod_pep_df,
+        "peptides": peptide_df,
+        "peptidegroups": peptide_grp_df,
+    }
+    return df_dict
 
 
 def test_sqlite_writer(confidence_write_data):
@@ -18,6 +38,7 @@ def test_sqlite_writer(confidence_write_data):
             column_types=[],
             level=level,
             qvalue_column="q_value",
+            score_column="score",
             pep_column="posterior_error_prob",
         )
         confidence_writer.append_data(df)

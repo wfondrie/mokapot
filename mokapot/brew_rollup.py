@@ -183,5 +183,9 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        logging.error(f"[Error] {e}")
+        logging.error(f"[Error] {str(e)}")
+        # Show traceback in debug log
+        import traceback
+
+        logging.debug(f"Traceback: {traceback.format_exc()}")
         sys.exit(250)  # input failure

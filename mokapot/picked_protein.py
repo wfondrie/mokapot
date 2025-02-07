@@ -9,10 +9,14 @@ import numpy as np
 import pandas as pd
 
 from mokapot import utils
+from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
 from mokapot.peptides import match_decoy
 from mokapot.proteins import Proteins
 
 LOGGER = logging.getLogger(__name__)
+
+PROT_GROUP_NAME = STANDARD_COLUMN_NAME_MAP["protein_group"]
+STRIP_SEQUENCE_NAME = STANDARD_COLUMN_NAME_MAP["stripped_sequence"]
 
 
 def picked_protein(
@@ -22,7 +26,7 @@ def picked_protein(
     score_column: str,
     proteins: Proteins,
     rng: int | np.random.Generator,
-):
+) -> pd.DataFrame:
     """Perform the picked-protein approach
 
     Parameters
@@ -48,31 +52,38 @@ def picked_protein(
     keep = [target_column, peptide_column, score_column]
 
     # Trim the dataframe
-    prots = peptides.loc[:, keep].rename(
-        columns={peptide_column: "best peptide"}
-    )
+    try:
+        prots = peptides.loc[:, keep].rename(
+            columns={peptide_column: "best_peptide"}
+        )
+    except KeyError as e:
+        not_found_cols = [x for x in keep if x not in peptides.columns]
+        raise ValueError(
+            f"Columns not found in dataframe: {not_found_cols}"
+            f" Found columns: {peptides.columns}"
+        ) from e
 
-    prots["stripped sequence"] = strip_peptides(prots["best peptide"])
+    prots[STRIP_SEQUENCE_NAME] = strip_peptides(prots["best_peptide"])
 
     # There are two cases we need to deal with:
     # 1. The fasta contained both targets and decoys (ideal)
     # 2. The fasta contained only targets (less ideal)
     if proteins.has_decoys:
-        prots["mokapot protein group"] = group_with_decoys(prots, proteins)
+        prots[PROT_GROUP_NAME] = group_with_decoys(prots, proteins)
 
     else:
         LOGGER.info("Mapping decoy peptides to protein groups...")
-        prots["mokapot protein group"] = group_without_decoys(
+        prots[PROT_GROUP_NAME] = group_without_decoys(
             prots, target_column, proteins
         )
 
     # Verify that unmatched peptides are shared:
-    unmatched = pd.isna(prots["mokapot protein group"])
+    unmatched = pd.isna(prots[PROT_GROUP_NAME])
     if not proteins.has_decoys:
         unmatched[~prots[target_column]] = False
 
     unmatched_prots = prots.loc[unmatched, :]
-    shared = unmatched_prots["stripped sequence"].isin(
+    shared = unmatched_prots[STRIP_SEQUENCE_NAME].isin(
         proteins.shared_peptides.keys()
     )
 
@@ -111,23 +122,24 @@ def picked_protein(
 
     prots = prots.loc[~unmatched, :]
     prots["decoy"] = (
-        prots["mokapot protein group"]
+        prots[PROT_GROUP_NAME]
         .str.split(",", expand=True)[0]
         .map(lambda x: proteins.protein_map.get(x, x))
     )
 
     prot_idx = utils.groupby_max(prots, ["decoy"], score_column, rng)
     final_cols = [
-        "mokapot protein group",
-        "best peptide",
-        "stripped sequence",
+        PROT_GROUP_NAME,
+        "decoy",
+        "best_peptide",
+        STRIP_SEQUENCE_NAME,
         score_column,
         target_column,
     ]
     return prots.loc[prot_idx, final_cols]
 
 
-def strip_peptides(sequences):
+def strip_peptides(sequences: pd.Series) -> pd.Series:
     """Strip modifications and flanking AA's from peptide sequences.
 
     Parameters
@@ -178,7 +190,7 @@ def group_with_decoys(peptides: pd.DataFrame, proteins: Proteins):
     pandas.Series
         The protein group for each peptide.
     """
-    return peptides["stripped sequence"].map(proteins.peptide_map.get)
+    return peptides[STRIP_SEQUENCE_NAME].map(proteins.peptide_map.get)
 
 
 def group_without_decoys(peptides, target_column, proteins):
@@ -201,7 +213,7 @@ def group_without_decoys(peptides, target_column, proteins):
         The protein group for each peptide.
     """
     decoys = pd.Series(
-        peptides.loc[~peptides[target_column], "stripped sequence"].unique()
+        peptides.loc[~peptides[target_column], STRIP_SEQUENCE_NAME].unique()
     )
 
     # decoys is now a dict mapping decoy peptides to target peptides
@@ -215,8 +227,8 @@ def group_without_decoys(peptides, target_column, proteins):
         decoy_map[decoy_peptide] = ", ".join(protein_group)
 
     # First lookup targets:
-    prots = peptides["stripped sequence"].map(proteins.peptide_map.get)
-    prots[prots.isna()] = peptides[prots.isna()]["stripped sequence"].map(
+    prots = peptides[STRIP_SEQUENCE_NAME].map(proteins.peptide_map.get)
+    prots[prots.isna()] = peptides[prots.isna()][STRIP_SEQUENCE_NAME].map(
         decoy_map.get
     )
     return prots
