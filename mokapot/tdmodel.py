@@ -1,9 +1,8 @@
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 
 import numpy as np
 import scipy as sp
 from typeguard import typechecked
-
 
 # This file (class) is only for checking validity of TD modelling assumptions.
 

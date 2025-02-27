@@ -3,8 +3,8 @@ import io
 import logging
 import os
 import subprocess
-from contextlib import redirect_stdout, redirect_stderr
-from typing import List, Any, Optional, Dict, Callable
+from contextlib import redirect_stderr, redirect_stdout
+from typing import Any, Callable, Dict, List, Optional
 
 from typeguard import TypeCheckError
 

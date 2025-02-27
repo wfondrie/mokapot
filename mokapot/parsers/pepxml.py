@@ -2,13 +2,12 @@
 This module contains a parser for PepXML files.
 """
 
-import logging
 import itertools
+import logging
 from functools import partial
 
 import numpy as np
 import pandas as pd
-from lxml import etree
 
 from mokapot import utils
 from mokapot.dataset import LinearPsmDataset
@@ -166,6 +165,14 @@ def _parse_pepxml(pepxml_file, decoy_prefix):
         A :py:class:`pandas.DataFrame` containing the information about each
         PSM.
     """
+    try:
+        from lxml import etree
+    except ImportError as e:
+        msg = f"Using the pepxml parser requires lxml: {e}, "
+        msg += "please either install it or install mokapot with the"
+        msg += "`xml` extra. (pip install mokapot[xml])"
+        raise ImportError(msg) from e
+
     LOGGER.info("Reading %s...", pepxml_file)
     parser = etree.iterparse(str(pepxml_file), tag="{*}msms_run_summary")
     parse_fun = partial(_parse_msms_run, decoy_prefix=decoy_prefix)

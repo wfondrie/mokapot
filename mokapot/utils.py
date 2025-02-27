@@ -1,10 +1,11 @@
 """
 Utility functions
 """
+
 import gzip
 import itertools
 from pathlib import Path
-from typing import Union, Iterator, Any, NewType, Dict
+from typing import Any, Dict, Iterator, NewType, Union
 
 import numpy as np
 import pandas as pd
@@ -121,11 +122,53 @@ def get_next_row(
 
 
 @typechecked
+def make_bool_trarget(target_column: pd.Series):
+    """Convert target column to boolean if possible.
+
+    1. If its a 0-1 col convert to bool
+    2. If its a -1,1 values > 0 becomes True, rest False
+    """
+    if target_column.dtype == bool:
+        return target_column
+
+    if target_column.dtype == object:
+        try:
+            target_column = target_column.astype(int)
+        except ValueError as e:
+            raise ValueError(
+                "The target column is not convertible to integers."
+            ) from e
+
+    if target_column.dtype == int or target_column.dtype == float:
+        # Check if all values are 0 or 1
+        uniq_vals = target_column.unique().tolist()
+        uniq_vals.sort()
+        if uniq_vals == [0, 1]:
+            # If so, we can just cast to bool
+            return target_column.astype(bool)
+        elif uniq_vals == [-1, 1]:
+            return target_column > 0
+        else:
+            raise ValueError(
+                f"Target column "
+                "has values that are not boolean or 0/1 or -1/1."
+                f"Please check and fix. (found {uniq_vals})"
+            )
+
+    # If not raise an error ... most likely the cast will be
+    # Something the user does not want.
+    raise ValueError(
+        "Target column "
+        "has values that are not boolean, 0/1 or -1/1,"
+        f" please check and fix. ({target_column})"
+        f" of dtype {target_column.dtype}"
+    )
+
+
 def convert_targets_column(
     data: pd.DataFrame, target_column: str
 ) -> pd.DataFrame:
-    """Converts target column values to boolean
-    (True if value is 1, False otherwise).
+    """Converts target column to boolean.
 
     Parameters
     ----------
@@ -145,17 +188,7 @@ def convert_targets_column(
     ValueError
         If the target column contains values other than -1, 0, or 1.
     """
-    if data[target_column].dtype == bool:
-        return data
-
-    labels = data[target_column].astype(int)
-    if any(labels < -1) or any(labels > 1):
-        raise ValueError(
-            f"Invalid target column '{target_column}' "
-            "contains values not in {-1, 0, 1}"
-        )
-
-    data[target_column] = labels == 1
+    data[target_column] = make_bool_trarget(data[target_column])
     return data
 
 
@@ -211,3 +244,35 @@ def map_columns_to_indices(
             for s in search
         )
     return result
+
+
+def strictzip(*iterables):
+    """Strict zip.
+
+    Backport of zip(strict=True) for pre-3.10 python.
+
+    Derived from: https://peps.python.org/pep-0618/
+    """
+    if not iterables:
+        return
+    iterators = tuple(iter(iterable) for iterable in iterables)
+    try:
+        while True:
+            items = []
+            for iterator in iterators:
+                items.append(next(iterator))
+            yield tuple(items)
+    except StopIteration:
+        pass
+
+    if items:
+        i = len(items)
+        plural = " " if i == 1 else "s 1-"
+        msg = f"zip() argument {i + 1} is shorter than argument{plural}{i}"
+        raise ValueError(msg)
+    sentinel = object()
+    for i, iterator in enumerate(iterators[1:], 1):
+        if next(iterator, sentinel) is not sentinel:
+            plural = " " if i == 1 else "s 1-"
+            msg = f"zip() argument {i + 1} is longer than argument{plural}{i}"
+            raise ValueError(msg)

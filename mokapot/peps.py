@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TypeVar, Callable, Iterator
+from dataclasses import dataclass
+from typing import Callable, Iterator, TypeVar
 
 import numpy as np
 import scipy.stats as stats
@@ -76,7 +77,9 @@ def peps_from_scores(
     if pep_function is not None:
         return pep_function(scores, targets, is_tdc)
     else:
-        raise ValueError(f"Unknown pep algorithm in peps_from_scores: {pep_algorithm}")
+        raise ValueError(
+            f"Unknown pep algorithm in peps_from_scores: {pep_algorithm}"
+        )
 
 
 @typechecked
@@ -415,7 +418,9 @@ def peps_from_scores_kde_nnls(
         factor = (~targets).sum() / targets.sum()
     else:
         # Estimate pi0 and estimate number of correct targets
-        factor = estimate_pi0_by_slope(target_pdf, decoy_pdf, pi0_estimation_threshold)
+        factor = estimate_pi0_by_slope(
+            target_pdf, decoy_pdf, pi0_estimation_threshold
+        )
 
     correct = target_pdf - decoy_pdf * factor
     correct = np.clip(correct, 0, None)
@@ -522,7 +527,9 @@ def fit_nnls(n, k, ascending=True, *, weight_exponent=-1.0, erase_zeros=False):
     tol = 1e-7
     d, _, mode = _nnls(W @ A @ R, W @ k, tol=tol)
     if mode != 1:
-        LOGGER.debug("\t - Warning: nnls went into loop. Taking last solution.")
+        LOGGER.debug(
+            "\t - Warning: nnls went into loop. Taking last solution."
+        )
     p = np.cumsum(R @ d)
 
     if not ascending:
@@ -532,9 +539,8 @@ def fit_nnls(n, k, ascending=True, *, weight_exponent=-1.0, erase_zeros=False):
 
 
 @typechecked
+@dataclass(slots=True)
 class TDHistData:
-    """ """
-
     targets: HistData
     decoys: HistData
 
@@ -793,7 +799,9 @@ def peps_func_from_hist_nnls(
     # Do monotone fit, minimizing || n - diag(p) * k || with weights n over
     # monotone descending p
     try:
-        pep_est = fit_nnls(n, k, ascending=False, weight_exponent=weight_exponent)
+        pep_est = fit_nnls(
+            n, k, ascending=False, weight_exponent=weight_exponent
+        )
     except RuntimeError as e:
         raise PepsConvergenceError from e
 
@@ -803,4 +811,6 @@ def peps_func_from_hist_nnls(
     # Linearly interpolate the pep estimates from the eval points to the scores
     # of interest (keeping monotonicity) clip in case we went slightly out of
     # bounds
-    return lambda scores: np.clip(np.interp(scores, eval_scores, pep_est), 0, 1)
+    return lambda scores: np.clip(
+        np.interp(scores, eval_scores, pep_est), 0, 1
+    )

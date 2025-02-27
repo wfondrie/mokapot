@@ -71,6 +71,7 @@ class TabularDataReader(ABC):
         only_columns: list[str] | None = None,
         **kwargs,
     ) -> TabularDataReader:
+        # This import has to be here to avoid a circular import ...
         from .format_chooser import reader_from_path
 
         return reader_from_path(file_name, column_map, only_columns, **kwargs)
@@ -136,7 +137,8 @@ class ColumnSelectReader(TabularDataReader):
     ) -> Generator[pd.DataFrame, None, None]:
         self._check_columns(columns)
         return self.reader.get_chunked_data_iterator(
-            columns=self.selected_columns or columns
+            chunk_size=chunk_size,
+            columns=self.selected_columns or columns,
         )
 
 
@@ -281,7 +283,8 @@ class TabularDataWriter(ABC):
 
     def check_valid_data(self, data: pd.DataFrame):
         columns = data.columns.tolist()
-        if not columns == self.get_column_names():
+
+        if not set(columns) == set(self.get_column_names()):
             raise ValueError(
                 f"Column names {columns} do not "
                 f"match {self.get_column_names()}"
@@ -307,6 +310,11 @@ class TabularDataWriter(ABC):
 
     def finalize(self):
         pass
+
+    @abstractmethod
+    def read(self) -> pd.DataFrame:
+        # TODO: Evaluate if this method should allow lazier reading.
+        raise NotImplementedError
 
     def __enter__(self):
         self.initialize()

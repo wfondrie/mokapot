@@ -29,6 +29,7 @@ from sklearn.svm import LinearSVC
 from typeguard import typechecked
 
 from mokapot import LinearPsmDataset
+from mokapot.dataset.base import update_labels
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +39,20 @@ PERC_GRID = {
         {0: neg, 1: pos} for neg in (0.1, 1, 10) for pos in (0.1, 1, 10)
     ]
 }
+
+# Errors ----------------------------------------------------------------------
+
+
+class BestFeatureIsBetterError(RuntimeError):
+    """Raised when the best feature is better than the model."""
+
+    pass
+
+
+class ModelIterationError(RuntimeError):
+    """Raised when the model does not improve after training."""
+
+    pass
 
 
 # Classes ---------------------------------------------------------------------
@@ -224,14 +239,16 @@ class Model:
         numpy.ndarray
             A :py:class:`numpy.ndarray` containing the score for each PSM.
         """
+        # Q: we should rename this methid to "score_dataset" ...
+        # ... or just remove it ... since it is redundant with `predict`
         if not self.is_trained:
             raise NotFittedError("This model is untrained. Run fit() first.")
 
         feat_names = dataset.features.columns.tolist()
         if set(feat_names) != set(self.features):
             raise ValueError(
-                "Features of the input data do not match the "
-                "features of this Model."
+                "Features of the input data do not "
+                "match the features of this Model."
             )
 
         feat = self.scaler.transform(
@@ -315,7 +332,9 @@ class Model:
             scores = scores[original_idx]
 
             # Update target
-            target = dataset._update_labels(scores, eval_fdr=self.train_fdr)
+            target = update_labels(
+                scores, dataset.target_values, eval_fdr=self.train_fdr
+            )
             target = target[shuffled_idx]
             num_passed.append((target == 1).sum())
 
@@ -324,18 +343,21 @@ class Model:
             )
 
             if num_passed[i] == 0:
-                raise RuntimeError("Model performs worse after training.")
-
+                raise ModelIterationError(
+                    "Model performs worse after training."
+                )
 
         # If the model performs worse than what was initialized:
-        if (
-            num_passed[-1] < (start_labels == 1).sum()
-            or num_passed[-1] < self.feat_pass
-        ):
+        best_feat_better = num_passed[-1] <= self.feat_pass
+        start_better = num_passed[-1] <= (start_labels == 1).sum()
+
+        if best_feat_better or start_better:
             if self.override:
                 LOGGER.warning("Model performs worse after training.")
             else:
-                raise RuntimeError("Model performs worse after training.")
+                raise BestFeatureIsBetterError(
+                    "Model performs worse after training."
+                )
 
         self.estimator = model
         weights = _get_weights(self.estimator, self.features)
@@ -559,12 +581,21 @@ def _get_starting_labels(dataset: LinearPsmDataset, model):
     feat_pass : int
         The number of passing PSMs with the best feature.
     """
+
+    # Note: This function does sooo much more than getting the starting
+    # labels, we should at least rename it to something more descriptive.
+    # JSPP 2024-12-14
     LOGGER.debug("Finding initial direction...")
     if model.direction is None and not model.is_trained:
-        feat_res = dataset._find_best_feature(model.train_fdr)
-        best_feat, feat_pass, start_labels, desc = feat_res
+        feat_res = dataset.find_best_feature(model.train_fdr)
+        best_feat, feat_pass, start_labels, desc = (
+            feat_res.feature.name,
+            feat_res.feature.positives,
+            feat_res.new_labels,
+            feat_res.feature.descending,
+        )
         LOGGER.info(
-            "\t- Selected feature %s with %i PSMs at q<=%g.",
+            "\t- Selected feature '%s' with %i PSMs at q<=%g.",
             best_feat,
             feat_pass,
             model.train_fdr,
@@ -588,8 +619,18 @@ def _get_starting_labels(dataset: LinearPsmDataset, model):
 
     else:
         feat = dataset.features[model.direction].values
-        desc_labels = dataset._update_labels(feat, model.train_fdr, desc=True)
-        asc_labels = dataset._update_labels(feat, model.train_fdr, desc=False)
+        desc_labels = update_labels(
+            feat,
+            dataset.target_values,
+            model.train_fdr,
+            desc=True,
+        )
+        asc_labels = update_labels(
+            feat,
+            dataset.target_values,
+            model.train_fdr,
+            desc=False,
+        )
         best_feat = feat
 
         desc_pass = (desc_labels == 1).sum()
@@ -657,7 +698,7 @@ def _find_hyperparameters(model, features, labels):
     return new_est
 
 
-def _get_weights(model, features):
+def _get_weights(model, features) -> list[str] | None:
     """
     If the model is a linear model, parse the weights to a list of strings.
 
@@ -681,6 +722,7 @@ def _get_weights(model, features):
         assert len(intercept) == 1
         weights = list(weights.flatten())
     except (AttributeError, AssertionError):
+        LOGGER.debug("No coefficients in the current model.")
         return None
 
     col_width = max([len(f) for f in features]) + 2

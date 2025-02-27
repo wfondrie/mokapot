@@ -2,16 +2,16 @@
 These tests verify that our q-value calculations are correct.
 """
 
-import pytest
 import numpy as np
-from mokapot.peps import TDHistData, hist_data_from_scores
+import pytest
 from scipy import stats
 
+from mokapot.peps import TDHistData, hist_data_from_scores
 from mokapot.qvalues import (
-    tdc,
-    qvalues_from_peps,
     qvalues_from_counts,
+    qvalues_from_peps,
     qvalues_func_from_hist,
+    tdc,
 )
 
 

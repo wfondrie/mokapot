@@ -4,8 +4,10 @@ Helper classes and methods used for streaming of tabular data.
 
 from __future__ import annotations
 
+import itertools
 import warnings
-from typing import Generator, Callable, Iterator
+from pprint import pformat
+from typing import Callable, Generator, Iterator
 
 import numpy as np
 import pandas as pd
@@ -87,7 +89,17 @@ class JoinedTabularDataReader(TabularDataReader):
             except StopIteration:
                 break
             df = pd.concat(chunks, axis=1)
-            yield df if columns is None else df[columns]
+            if columns is None:
+                yield df
+            else:
+                if not all(x in df.columns for x in columns):
+                    missing_columns = [
+                        x for x in columns if x not in df.columns
+                    ]
+                    msg = f"Requested columns: {missing_columns} were"
+                    msg += f" not found in the aviailable columns {df.columns}"
+                    raise RuntimeError(msg)
+                yield df[columns]
 
 
 @typechecked
@@ -119,6 +131,11 @@ class ComputedTabularDataReader(TabularDataReader):
         self.dtype = dtype
         self.func = func
         self.column = column
+
+    def __repr__(self) -> str:
+        out = f"ComputedTabularDataReader({pformat(self.reader)},"
+        out += f" {self.column}, {self.dtype}, {self.func})"
+        return out
 
     def get_column_names(self) -> list[str]:
         return self.reader.get_column_names() + [self.column]
@@ -211,7 +228,9 @@ class MergedTabularDataReader(TabularDataReader):
                 raise ValueError("Column types do not match")
 
             if priority_column not in self.column_names:
-                raise ValueError("Priority column not found")
+                msg = f"Priority column '{priority_column}' not found"
+                msg += f" in {self.column_names}"
+                raise ValueError(msg)
 
     def get_column_names(self) -> list[str]:
         return self.column_names
@@ -255,14 +274,14 @@ class MergedTabularDataReader(TabularDataReader):
             get_value = get_value_dict
         else:
             raise ValueError(
-                "ret_type must be 'dataframe', 'records'"
-                f" or 'dicts', not {row_type}"
+                "ret_type must be 'dataframe', 'records' or 'dicts',"
+                f" not {row_type}"
             )
 
         def row_iterator_from_chunked(chunked_iter: Iterator) -> Iterator:
-            for chunk in chunked_iter:
-                for row in iterate_over_chunk(chunk):
-                    yield row
+            yield from itertools.chain.from_iterable(
+                iterate_over_chunk(chunk) for chunk in chunked_iter
+            )
 
         row_iterators = [
             row_iterator_from_chunked(
@@ -335,28 +354,6 @@ class MergedTabularDataReader(TabularDataReader):
 
 
 @typechecked
-def join_readers(readers: list[TabularDataReader]):
-    return JoinedTabularDataReader(readers)
-
-
-@typechecked
-def merge_readers(
-    readers: list[TabularDataReader],
-    priority_column: str,
-    descending: bool = True,
-    reader_chunk_size: int = 1000,
-):
-    reader = MergedTabularDataReader(
-        readers,
-        priority_column,
-        descending,
-        reader_chunk_size=reader_chunk_size,
-    )
-    iterator = reader.get_chunked_data_iterator(chunk_size=1)
-    return iterator
-
-
-@typechecked
 class BufferedWriter(TabularDataWriter):
     """
     This class represents a buffered writer for tabular data. It allows
@@ -397,6 +394,13 @@ class BufferedWriter(TabularDataWriter):
         # correctly initialized and finalized, so we make sure
         self.finalized = False
         self.initialized = False
+
+    def __repr__(self):
+        IGNORE_KEYS = {"buffer"}
+        dict_repr = pformat({
+            k: v for k, v in self.__dict__.items() if k not in IGNORE_KEYS
+        })
+        return f"{self.__class__!s}({dict_repr})"
 
     def __del__(self):
         if self.initialized and not self.finalized:

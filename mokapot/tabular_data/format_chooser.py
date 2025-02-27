@@ -4,21 +4,45 @@ from pathlib import Path
 import numpy as np
 from typeguard import typechecked
 
-from mokapot.tabular_data import (
+from mokapot.tabular_data.base import (
     BufferType,
-    BufferedWriter,
     ColumnMappedReader,
     ColumnSelectReader,
-    CSVFileReader,
-    CSVFileWriter,
-    ParquetFileReader,
-    ParquetFileWriter,
-    SqliteWriter,
+    DataFrameReader,
     TabularDataReader,
     TabularDataWriter,
 )
+from mokapot.tabular_data.csv import (
+    CSVFileReader,
+    CSVFileWriter,
+)
+from mokapot.tabular_data.parquet import (
+    ParquetFileReader,
+    ParquetFileWriter,
+)
+from mokapot.tabular_data.sqlite import SqliteWriter
+from mokapot.tabular_data.streaming import (
+    BufferedWriter,
+)
+from mokapot.tabular_data.traditional_pin import (
+    is_traditional_pin,
+    read_traditional_pin,
+)
 
-CSV_SUFFIXES = [".csv", ".pin", ".tab", ".csv"]
+CSV_SUFFIXES = [
+    ".csv",
+    ".tab",
+    ".tsv",
+    ".peptides",
+    ".psms",
+    ".proteins",
+    ".modifiedpeptides",
+    ".peptidegroups",
+    ".modified_peptides",
+    ".peptide_groups",
+    ".precursors",
+]
+PIN_SUFFIXES = [".pin"]
 PARQUET_SUFFIXES = [".parquet"]
 SQLITE_SUFFIXES = [".db"]
 
@@ -35,7 +59,24 @@ def reader_from_path(
     # some "magic bytes"? ...)
 
     suffix = file_name.suffix
-    if suffix in CSV_SUFFIXES:
+    if suffix in PIN_SUFFIXES:
+        reader = None
+        try:
+            if is_traditional_pin(file_name):
+                reader = DataFrameReader(read_traditional_pin(file_name))
+        except ValueError as e:
+            msg = "Deprecation warning: Passing files with a .pin extesion"
+            msg += " that are not compliant with the format specification"
+            msg += " is deprecated."
+            msg += " In a future release, this will raise an error."
+            msg += " Please use the .tsv extension instead"
+            msg += " (and combine the protein column as needed)."
+            msg += f" This one failed with the following error: {e}"
+            warnings.warn(msg)
+
+        if reader is None:
+            reader = CSVFileReader(file_name, **kwargs)
+    elif suffix in CSV_SUFFIXES:
         reader = CSVFileReader(file_name, **kwargs)
     elif suffix in PARQUET_SUFFIXES:
         reader = ParquetFileReader(file_name, **kwargs)
@@ -65,7 +106,9 @@ def writer_from_suffix(
     **kwargs,
 ) -> TabularDataWriter:
     suffix = file_name.suffix
-    if suffix in CSV_SUFFIXES:
+    if suffix in PIN_SUFFIXES:
+        writer = CSVFileWriter(file_name, columns, column_types, **kwargs)
+    elif suffix in CSV_SUFFIXES:
         writer = CSVFileWriter(file_name, columns, column_types, **kwargs)
     elif suffix in PARQUET_SUFFIXES:
         writer = ParquetFileWriter(file_name, columns, column_types, **kwargs)

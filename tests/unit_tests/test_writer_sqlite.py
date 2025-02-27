@@ -1,7 +1,28 @@
 import sqlite3
+from pathlib import Path
 
 import pandas as pd
+import pytest
+
 from mokapot.tabular_data import ConfidenceSqliteWriter
+
+
+@pytest.fixture
+def confidence_write_data():
+    filename = Path("data") / "confidence_results_test.tsv"
+    psm_df = pd.read_csv(filename, sep="\t")
+    precursor_df = psm_df.drop_duplicates(subset=["Precursor"])
+    mod_pep_df = psm_df.drop_duplicates(subset=["ModifiedPeptide"])
+    peptide_df = psm_df.drop_duplicates(subset=["peptide"])
+    peptide_grp_df = psm_df.drop_duplicates(subset=["PeptideGroup"])
+    df_dict = {
+        "psms": psm_df,
+        "precursors": precursor_df,
+        "modifiedpeptides": mod_pep_df,
+        "peptides": peptide_df,
+        "peptidegroups": peptide_grp_df,
+    }
+    return df_dict
 
 
 def test_sqlite_writer(confidence_write_data):
@@ -17,6 +38,7 @@ def test_sqlite_writer(confidence_write_data):
             column_types=[],
             level=level,
             qvalue_column="q_value",
+            score_column="score",
             pep_column="posterior_error_prob",
         )
         confidence_writer.append_data(df)
@@ -31,12 +53,13 @@ def test_sqlite_writer(confidence_write_data):
     for level, level_table in level_tables.items():
         df = pd.read_sql(f"SELECT * FROM {level_table};", connection)
         df_test = confidence_write_data[level]
-        assert (
-            len(df_test) == len(df)
-        ), f"Rows in test data:{len(df_test)} does not match rows in sqlite database:{len(df)} for level:{level}"  # noqa: E501
-        assert (
-            df.isnull().sum().sum() == 0
-        ), f"Null values found in database after write for level:{level}"
+        assert len(df_test) == len(df), (
+            f"Rows in test data:{len(df_test)} does not match rows in sqlite "
+            "database:{len(df)} for level:{level}"
+        )  # noqa: E501
+        assert df.isnull().sum().sum() == 0, (
+            f"Null values found in database after write for level:{level}"
+        )
 
 
 def prepare_tables_sqlite_db(connection, candidate_ids):

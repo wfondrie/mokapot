@@ -1,18 +1,22 @@
 """
 This module estimates q-values.
 """
-import numpy as np
-import numba as nb
-from typeguard import typechecked
+
+import logging
 from typing import Callable
 
+import numpy as np
+from typeguard import typechecked
+
 from mokapot.peps import (
-    peps_from_scores_hist_nnls,
-    monotonize_simple,
-    hist_data_from_scores,
-    estimate_pi0_by_slope,
     TDHistData,
+    estimate_pi0_by_slope,
+    hist_data_from_scores,
+    monotonize_simple,
+    peps_from_scores_hist_nnls,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 QVALUE_ALGORITHM = {
     "tdc": lambda scores, targets: tdc(scores, targets, desc=True),
@@ -50,6 +54,8 @@ def tdc(
     The reported q-value for each PSM is the minimum FDR at which that
     PSM would be accepted.
 
+    With one exception, the lowest score will always have a q-value of 1.0.
+
     Parameters
     ----------
     scores : numpy.ndarray of float
@@ -70,9 +76,6 @@ def tdc(
         A 1D array with the estimated q-value for each entry. The
         array is the same length as the `scores` and `target` arrays.
     """
-    scores = np.array(scores)
-    target = np.array(target)
-
     # Since numpy 2.x relying in attribute errors is not viable here
     # https://numpy.org/neps/nep-0050-scalar-promotion.html#impact-on-can-cast
     # So I am manually checking the constraints.
@@ -101,20 +104,21 @@ def tdc(
 
     # Unsigned integers can cause weird things to happen.
     # Convert all scores to floats to for safety.
-    if np.issubdtype(scores.dtype, np.integer):
-        scores = scores.astype(np.float32)
+    scores = scores.astype(np.float32)
 
     # Sort and estimate FDR
+    # Sort order is first by score and then ties are
+    # sorted by target
     if desc:
-        srt_idx = np.argsort(-scores)
+        srt_idx = np.lexsort((target, -scores))
     else:
-        srt_idx = np.argsort(scores)
+        srt_idx = np.lexsort((target, scores))
 
     scores = scores[srt_idx]
     target = target[srt_idx]
+
     cum_targets = target.cumsum()
-    cum_decoys = ((target - 1) ** 2).cumsum()
-    num_total = cum_targets + cum_decoys
+    cum_decoys = (~target).cumsum()
 
     # Handles zeros in denominator
     fdr = np.divide(
@@ -123,67 +127,29 @@ def tdc(
         out=np.ones_like(cum_targets, dtype=np.float32),
         where=(cum_targets != 0),
     )
+    # Clamp the FDR to 1.0
+    fdr = np.minimum(fdr, 1.0)
 
-    # Calculate q-values
-    unique_metric, indices = np.unique(scores, return_counts=True)
+    # Sort by scores and resolve ties with fdr
+    # This implementation is 1.5x slower with small data
+    # from 0.05 to 0.07 miliseconds.
+    # But up to 100x faster with large data
+    # and does not need compilation (or numba as a dependency)
+    # For the former implementation check the git history
+    if desc:
+        sorting = np.lexsort((fdr, scores))
+    else:
+        sorting = np.lexsort((fdr, -scores))
+    tmp = np.minimum.accumulate(fdr[sorting])
+    # Set the FDR to 1 for the lowest score
+    # This prevent prevents a bug where features like the charge
+    # would seem to be very good, because ... since they tie a lot
+    # of PSMs, and we report the 'best' FDR for all ties, it would
+    # artifially yield very low q-values.
+    tmp[tmp == tmp[0]] = 1.0
+    np_qval = np.flip(tmp)[np.argsort(srt_idx)]
 
-    # Some arrays need to be flipped so that we can loop through from
-    # worse to best score.
-    fdr = np.flip(fdr)
-    num_total = np.flip(num_total)
-    if not desc:
-        unique_metric = np.flip(unique_metric)
-        indices = np.flip(indices)
-
-    qvals = _fdr2qvalue(fdr, num_total, unique_metric, indices)
-    qvals = np.flip(qvals)
-    qvals = qvals[np.argsort(srt_idx)]
-
-    return qvals
-
-
-@nb.njit
-def _fdr2qvalue(fdr, num_total, met, indices):
-    """Quickly turn a list of FDRs to q-values.
-
-    All of the inputs are assumed to be sorted.
-
-    Parameters
-    ----------
-    fdr : numpy.ndarray
-        A vector of all unique FDR values.
-    num_total : numpy.ndarray
-        A vector of the cumulative number of PSMs at each score.
-    met : numpy.ndarray
-        A vector of the scores for each PSM.
-    indices : tuple of numpy.ndarray
-        Tuple where the vector at index i indicates the PSMs that
-        shared the unique FDR value in `fdr`.
-
-    Returns
-    -------
-    numpy.ndarray
-        A vector of q-values.
-    """
-    min_q = 1
-    qvals = np.ones(len(fdr))
-    group_fdr = np.ones(len(fdr))
-    prev_idx = 0
-    for idx in range(met.shape[0]):
-        next_idx = prev_idx + indices[idx]
-        group = slice(prev_idx, next_idx)
-        prev_idx = next_idx
-
-        fdr_group = fdr[group]
-        n_group = num_total[group]
-        curr_fdr = fdr_group[np.argmax(n_group)]
-        if curr_fdr < min_q:
-            min_q = curr_fdr
-
-        group_fdr[group] = curr_fdr
-        qvals[group] = min_q
-
-    return qvals
+    return np_qval
 
 
 @typechecked

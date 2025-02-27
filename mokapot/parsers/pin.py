@@ -5,28 +5,27 @@ This module contains the parsers for reading in PSMs
 import logging
 import warnings
 from pathlib import Path
-from typing import List, Iterable
+from pprint import pformat
+from typing import Iterable, List
 
 import pandas as pd
 from joblib import Parallel, delayed
 from typeguard import typechecked
 
+from mokapot.column_defs import (
+    ColumnGroups,
+)
 from mokapot.constants import (
     CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS,
 )
-from mokapot.dataset import OnDiskPsmDataset
-from mokapot.parsers.helpers import (
-    find_optional_column,
-    find_columns,
-    find_required_column,
-)
+from mokapot.dataset import OnDiskPsmDataset, PsmDataset
 from mokapot.tabular_data import TabularDataReader
 from mokapot.utils import (
-    tuplize,
     create_chunks,
-    convert_targets_column,
     flatten,
+    make_bool_trarget,
+    tuplize,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -35,7 +34,7 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 def read_pin(
     pin_files,
-    max_workers,
+    max_workers: int,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
@@ -146,13 +145,13 @@ def read_percolator(
     expmass_column=None,
     rt_column=None,
     charge_column=None,
-):
+) -> OnDiskPsmDataset:
     """
     Read a Percolator tab-delimited file.
 
     Percolator input format (PIN) files and the Percolator result files
     are tab-delimited, but also have a tab-delimited protein list as the
-    final column. This function parses the file and returns a DataFrame.
+    final column. This function parses the file and returns a Dataset.
 
     Parameters
     ----------
@@ -161,78 +160,49 @@ def read_percolator(
 
     Returns
     -------
-    pandas.DataFrame
-        A DataFrame of the parsed data.
+    OnDiskPsmDataset
     """
 
     LOGGER.info("Reading %s...", perc_file)
     reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
-    col_types = reader.get_column_types()
-
-    # Find all the necessary columns, case-insensitive:
-    specid = find_required_column("specid", columns)
-    peptides = find_required_column("peptide", columns)
-    proteins = find_required_column("proteins", columns)
-    labels = find_required_column("label", columns)
-    scan = find_required_column("scannr", columns)
-    nonfeat = [specid, scan, peptides, proteins, labels]
-
-    # Columns for different rollup levels
-    # Currently no proteins, since the protein rollup is probably quite
-    # different from the other rollup levels IMHO
-    modifiedpeptides = find_columns("modifiedpeptide", columns)
-    precursors = find_columns("precursor", columns)
-    peptidegroups = find_columns("peptidegroup", columns)
-    level_columns = [peptides] + modifiedpeptides + precursors + peptidegroups
-    nonfeat += modifiedpeptides + precursors + peptidegroups
-
-    # Optional columns
-    filename = find_optional_column(filename_column, columns, "filename")
-    calcmass = find_optional_column(calcmass_column, columns, "calcmass")
-    expmass = find_optional_column(expmass_column, columns, "expmass")
-    ret_time = find_optional_column(rt_column, columns, "ret_time")
-    charge = find_optional_column(charge_column, columns, "charge_column")
-    spectra = [c for c in [filename, scan, ret_time, expmass] if c is not None]
-
-    # Only add charge to features if there aren't other charge columns:
-    alt_charge = [c for c in columns if c.lower().startswith("charge")]
-    if charge is not None and len(alt_charge) > 1:
-        nonfeat.append(charge)
-
-    for col in [filename, calcmass, expmass, ret_time]:
-        if col is not None:
-            nonfeat.append(col)
-
-    features = [c for c in columns if c not in nonfeat]
-    nonfeat_types = [col_types[columns.index(col)] for col in nonfeat]
-
-    # Check for errors:
-    if not all(spectra):
-        raise ValueError(
-            "This PIN format is incompatible with mokapot. Please"
-            " verify that the required columns are present."
-        )
+    prelim_columns = ColumnGroups.infer_from_colnames(
+        columns,
+        filename_column=filename_column,
+        calcmass_column=calcmass_column,
+        expmass_column=expmass_column,
+        rt_column=rt_column,
+        charge_column=charge_column,
+    )
+    features = prelim_columns.feature_columns
+    spectra = prelim_columns.spectrum_columns
+    labels = prelim_columns.target_column
 
     # Check that features don't have missing values:
     feat_slices = create_chunks_with_identifier(
-        data=features,
-        identifier_column=spectra + [labels],
+        data=list(features),
+        identifier_column=list(spectra + (labels,)),
         chunk_size=CHUNK_SIZE_COLUMNS_FOR_DROP_COLUMNS,
     )
     df_spectra_list = []
+    # Q: this really feels like a bad idea ... concurrent mutation of a list
+    # .  where the elements are concrruently mutated datafames in-place.
     features_to_drop = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(drop_missing_values_and_fill_spectra_dataframe)(
             reader=reader,
             column=c,
-            spectra=spectra + [labels],
+            spectra=list(spectra + (labels,)),
             df_spectra_list=df_spectra_list,
         )
         for c in feat_slices
     )
-    df_spectra = convert_targets_column(
-        pd.concat(df_spectra_list), target_column=labels
-    )
+
+    df_spectra = pd.concat(df_spectra_list)
+    tmp_labels = make_bool_trarget(df_spectra.loc[:, labels])
+    # Deleting the column solves a deprecation warning that mentions
+    # "assiging column with incompatible dtype"
+    del df_spectra[labels]
+    df_spectra.loc[:, labels] = tmp_labels
 
     features_to_drop = [drop for drop in features_to_drop if drop]
     features_to_drop = flatten(features_to_drop)
@@ -242,32 +212,23 @@ def read_percolator(
             LOGGER.warning("  - %s", col)
 
         LOGGER.warning("Dropping features with missing values...")
-    _feature_columns = tuple([
+    _feature_columns = [
         feature for feature in features if feature not in features_to_drop
-    ])
+    ]
 
     LOGGER.info("Using %i features:", len(_feature_columns))
     for i, feat in enumerate(_feature_columns):
-        LOGGER.debug("  (%i)\t%s", i + 1, feat)
+        LOGGER.info("  (%i)\t%s", i + 0, feat)
+
+    prelim_columns.update(
+        feature_columns=_feature_columns,
+    )
+    column_groups = prelim_columns
+    LOGGER.info(f"Infered column grouping: {pformat(column_groups)}")
 
     return OnDiskPsmDataset(
         perc_file,
-        columns=columns,
-        target_column=labels,
-        spectrum_columns=spectra,
-        peptide_column=peptides,
-        protein_column=proteins,
-        feature_columns=_feature_columns,
-        metadata_columns=nonfeat,
-        metadata_column_types=nonfeat_types,
-        level_columns=level_columns,
-        filename_column=filename,
-        scan_column=scan,
-        specId_column=specid,
-        calcmass_column=calcmass,
-        expmass_column=expmass,
-        rt_column=ret_time,
-        charge_column=charge,
+        column_groups=column_groups,
         spectra_dataframe=df_spectra,
     )
 
@@ -284,7 +245,9 @@ def drop_missing_values_and_fill_spectra_dataframe(
         chunk_size=CHUNK_SIZE_ROWS_FOR_DROP_COLUMNS, columns=column
     )
     for i, feature in enumerate(file_iterator):
-        if set(spectra) <= set(column):
+        if set(spectra) <= set(
+            column
+        ):  # Isnt this a constant within the function?
             df_spectra_list.append(feature[spectra])
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -306,7 +269,7 @@ def get_rows_from_dataframe(
     idx: Iterable,
     chunk: pd.DataFrame,
     train_psms,
-    dataset: OnDiskPsmDataset,
+    target_column: str,
     file_idx: int,
 ):
     """
@@ -320,19 +283,20 @@ def get_rows_from_dataframe(
         Contains subsets of dataframes that are already extracted.
     chunk : dataframe
         Subset of a dataframe.
-    dataset : OnDiskPsmDataset
-        A collection of PSMs.
+    target_column : str
+        The target column name, expected to be in the dataframe.
     file_idx : the index of the file being searched
 
     Returns
     -------
-    List
-        list of list of dataframes
+    None
+        The function modifies the `train_psms` list in place.
     """
-    chunk = convert_targets_column(
-        data=chunk,
-        target_column=dataset.target_column,
-    )
+    tmp = make_bool_trarget(chunk.loc[:, target_column])
+    # Deleting the column solves a deprecation warning that
+    # mentions "assiging column with incompatible dtype"
+    del chunk[target_column]
+    chunk.loc[:, target_column] = tmp
     for k, train in enumerate(idx):
         idx_ = list(set(train) & set(chunk.index))
         train_psms[file_idx][k].append(chunk.loc[idx_])
@@ -347,8 +311,8 @@ def concat_and_reindex_chunks(df, orig_idx):
 
 @typechecked
 def parse_in_chunks(
-    datasets: list[OnDiskPsmDataset],
-    train_idx: list,
+    datasets: list[PsmDataset],
+    train_idx: list[list[list[int]]],
     chunk_size: int,
     max_workers: int,
 ) -> list[pd.DataFrame]:
@@ -359,9 +323,12 @@ def parse_in_chunks(
     ----------
     datasets : OnDiskPsmDataset
         A collection of PSMs.
-    train_idx : list of a list of a list of indexes (first level are training
-        splits, second one is the number of input files, third level the
-        actual idexes The indexes to select from data.
+    train_idx : list of a list of a list of indexes
+        - first level are training splits,
+        - second one is the number of input files
+        - third level the actual idexes The indexes to select from data.
+        Thus if you have 3 splits, 2 files and 10 PSMs per file, the
+        "shape" of the list is [3,2,10]
     chunk_size : int
         The chunk size in bytes.
     max_workers: int
@@ -379,16 +346,36 @@ def parse_in_chunks(
     for dataset, idx, file_idx in zip(
         datasets, zip(*train_idx), range(len(datasets))
     ):
-        reader = dataset.reader
-        file_iterator = reader.get_chunked_data_iterator(
-            chunk_size=chunk_size, columns=dataset.columns
-        )
-        Parallel(n_jobs=max_workers, require="sharedmem")(
-            delayed(get_rows_from_dataframe)(
-                idx, chunk, train_psms, dataset, file_idx
+        # Note: Here idx is a tuple of len == number of folds
+        #       each element is a list of ints, so each list is
+        #       the indices for each split of the dataset.
+
+        # Note2: Technically the file_idx is not a file but a dataset
+        #        index.
+        if hasattr(dataset, "reader"):
+            # Handle OnDiskPsmDataset
+            reader = dataset.reader
+            file_iterator = reader.get_chunked_data_iterator(
+                chunk_size=chunk_size, columns=dataset.columns
             )
-            for chunk in file_iterator
-        )
+            # Q: Is it really a good idea to modify a list in place
+            #    in a parallel loop?
+            Parallel(n_jobs=max_workers, require="sharedmem")(
+                delayed(get_rows_from_dataframe)(
+                    idx, chunk, train_psms, dataset.target_column, file_idx
+                )
+                for chunk in file_iterator
+            )
+        else:
+            # Handle LinearPsmDataset
+            chunk = dataset.data
+            get_rows_from_dataframe(
+                idx,
+                chunk,
+                train_psms=train_psms,
+                target_column=dataset.target_column,
+                file_idx=file_idx,
+            )
     train_psms_reordered = Parallel(n_jobs=max_workers, require="sharedmem")(
         delayed(concat_and_reindex_chunks)(df=df, orig_idx=orig_idx)
         for df, orig_idx in zip(train_psms, zip(*train_idx))

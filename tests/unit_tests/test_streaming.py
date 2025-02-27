@@ -1,11 +1,28 @@
 import pandas as pd
+import pytest
+
 from mokapot.tabular_data import (
     DataFrameReader,
-    merge_readers,
+    JoinedTabularDataReader,
     MergedTabularDataReader,
-    join_readers,
+    TabularDataReader,
 )
-import pytest
+
+
+def merge_readers(
+    readers: list[TabularDataReader],
+    priority_column: str,
+    descending: bool = True,
+    reader_chunk_size: int = 1000,
+):
+    reader = MergedTabularDataReader(
+        readers,
+        priority_column,
+        descending,
+        reader_chunk_size=reader_chunk_size,
+    )
+    iterator = reader.get_chunked_data_iterator(chunk_size=1)
+    return iterator
 
 
 @pytest.fixture
@@ -126,9 +143,9 @@ def test_merge_readers(readers_to_merge):
 
 def test_joined_tabular_data_reader(readers_to_join):
     # Check that complete merged read works
-    joined_reader = join_readers(readers_to_join)
+    joined_reader = JoinedTabularDataReader(readers_to_join)
     assert joined_reader.get_column_names() == ["foo", "bar", "baz", "quux"]
-    assert join_readers(
+    assert JoinedTabularDataReader(
         list(reversed(readers_to_join))
     ).get_column_names() == [
         "baz",

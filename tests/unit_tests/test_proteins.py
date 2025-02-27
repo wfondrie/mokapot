@@ -1,8 +1,9 @@
 """Test that we can parse a FASTA file correctly"""
 
 import pytest
+
 import mokapot
-from mokapot import read_fasta, digest, make_decoys
+from mokapot import digest, make_decoys, read_fasta
 
 
 @pytest.fixture
@@ -33,9 +34,7 @@ def missing_fasta(tmp_path):
     out_file = tmp_path / "missing.fasta"
     with open(out_file, "w+") as fasta_ref:
         fasta_ref.write(
-            ">sp|test_1|test_1\n"
-            ">sp|test_2|test_2\n"
-            "TKDIPIIFLSAVNIDKRFITKGYNSGGADY"
+            ">sp|test_1|test_1\n>sp|test_2|test_2\nTKDIPIIFLSAVNIDKRFITKGYNSGGADY"
         )
 
     return out_file

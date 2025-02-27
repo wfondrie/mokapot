@@ -1,4 +1,9 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
 from pathlib import Path
+
+import pandas as pd
 
 
 class Interval:
@@ -74,14 +79,21 @@ class FileCheck:
             success message string.
         """
         path = Path(dir_path, ext_path)
+        dir_contents = [str(x.name) for x in path.parent.rglob("*")]
         if min is not None and min <= 0:
             if path.is_file():
-                return False, f"File `{ext_path}` does not exist (but it did)"
+                msg = f"File `{ext_path}` does not exist (but it did)"
+                msg += " Found files: " + "\n ".join(dir_contents)
+                return False, msg
             else:
-                return True, f"File `{ext_path}` does not exist as it should"
+                msg = f"File `{ext_path}` does not exist as it should"
+                msg += " Found files: " + "\n ".join(dir_contents)
+                return True, msg
 
         if not path.is_file():
-            return False, f"File `{ext_path}` exists (but it didn't)"
+            msg = f"File `{ext_path}` does not exist"
+            msg += " Found files: " + "\n ".join(dir_contents)
+            return False, msg
 
         if min is not None:
             line_count = count_lines(path)
@@ -137,3 +149,112 @@ def file_exact_len(file_path, ext_path, length):
 
 def file_approx_len(file_path, ext_path, length, diff=100):
     return file_check(file_path, ext_path, expected_lines=length, diff=diff)
+
+
+class ColumnValidationError(Exception):
+    pass
+
+
+class TableValidationError(Exception):
+    pass
+
+
+@dataclass
+class ColumnValidator:
+    name: str
+    col_type: type | str
+    value_range: tuple[float | str, float | str] | None = None
+    allow_missing: bool = False
+
+    def validate(self, series: pd.Series) -> None:
+        fails = []
+        if not self.allow_missing and series.isna().any():
+            num_missing = sum(series.isna())
+            tot_col = len(series)
+            msg = f"Missing values at col: '{self.name}'"
+            msg += f" ({num_missing}/{tot_col})"
+            fails.append(msg)
+
+        if series.dtype != self.col_type:
+            fails.append(
+                f"Type {series.dtype} != {self.col_type} at col: '{self.name}'"
+            )
+
+        if self.value_range is not None:
+            if series.min() < self.value_range[0]:
+                fails.append(
+                    f"Min {series.min()} < {self.value_range[0]} "
+                    f"at col: {self.name}"
+                )
+            if series.max() > self.value_range[1]:
+                fails.append(
+                    f"Max {series.max()} > {self.value_range[1]} "
+                    f"at col: {self.name}"
+                )
+
+        if fails:
+            raise ColumnValidationError(fails)
+
+
+@dataclass
+class TableValidator:
+    columns: list[ColumnValidator]
+    allow_extra: bool = False
+    row_range: tuple[int, int] | None = None
+
+    def validate(self, df: pd.DataFrame) -> None:
+        """Validate a pandas DataFrame against this validator.
+
+        Does not return anything, but raises an exception if the validation
+        fails.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            The DataFrame to validate.
+        """
+        fails = []
+        if self.row_range is not None:
+            if df.shape[0] < self.row_range[0]:
+                fails.append(f"Row count {df.shape[0]} < {self.row_range[0]}")
+            if df.shape[0] > self.row_range[1]:
+                fails.append(f"Row count {df.shape[0]} > {self.row_range[1]}")
+
+        if self.allow_extra and df.shape[1] < len(self.columns):
+            fails.append(f"Column count {df.shape[1]} < {len(self.columns)}")
+
+        for validator in self.columns:
+            if validator.name not in df.columns:
+                msg = f"Column '{validator.name}' not found"
+                msg += f"in {df.columns}"
+                fails.append(msg)
+            else:
+                try:
+                    validator.validate(df[validator.name])
+                except ColumnValidationError as e:
+                    fails.append(e)
+
+        if fails:
+            raise TableValidationError(fails)
+
+    @classmethod
+    def derive_from_df(cls, df: pd.DataFrame) -> TableValidator:
+        columns = []
+        nrow = df.shape[0]
+        for col in df.columns:
+            any_missing = df[col].isna().any().item()
+            min = df[col].min()
+            if not isinstance(min, str):
+                min = min.item()
+            max = df[col].max()
+            if not isinstance(max, str):
+                max = max.item()
+            columns.append(
+                ColumnValidator(
+                    col,
+                    str(df[col].dtype),
+                    value_range=(min, max),
+                    allow_missing=any_missing,
+                )
+            )
+        return cls(columns, row_range=(nrow, nrow))

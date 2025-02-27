@@ -9,13 +9,13 @@ from mokapot.column_defs import STANDARD_COLUMN_NAME_MAP
 from mokapot.confidence import compute_and_write_confidence
 from mokapot.statistics import OnlineStatistics
 from mokapot.tabular_data import (
-    TabularDataReader,
-    remove_columns,
     BufferType,
-    TabularDataWriter,
-    auto_finalize,
     ComputedTabularDataReader,
     MergedTabularDataReader,
+    TabularDataReader,
+    TabularDataWriter,
+    auto_finalize,
+    remove_columns,
 )
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
 
@@ -76,7 +76,7 @@ def do_rollup(config):
             )
         suffix = ".parquet"
     else:
-        suffix = ".csv"
+        suffix = ".tsv"
 
     target_files: list[Path] = sorted(
         src_dir.glob(f"*.targets.{base_level}s{suffix}")
@@ -102,9 +102,10 @@ def do_rollup(config):
     decoy_readers = [
         get_target_decoy_reader(path, True) for path in decoy_files
     ]
+
     reader = MergedTabularDataReader(
         target_readers + decoy_readers,
-        priority_column="score",
+        priority_column=STANDARD_COLUMN_NAME_MAP["score"],
         reader_chunk_size=10000,
     )
 
@@ -116,7 +117,7 @@ def do_rollup(config):
     levels = [level for level in levels if level in reader.get_column_names()]
     logging.info(f"Rolling up to levels: {levels}")
     if len(levels_not_found) > 0:
-        logging.info(
+        logging.warning(
             f"  (Rollup levels not found in input: {levels_not_found})"
         )
 
@@ -135,7 +136,12 @@ def do_rollup(config):
     in_column_types = reader.get_column_types()
 
     temp_column_names, temp_column_types = remove_columns(
-        in_column_names, in_column_types, ["q_value", "posterior_error_prob"]
+        in_column_names,
+        in_column_types,
+        [
+            "q_value",
+            "posterior_error_prob",
+        ],
     )
 
     # Configure temp writers
@@ -188,7 +194,9 @@ def do_rollup(config):
                     seen.add(id)
                     temp_writers[level].append_data(data_row)
 
-            score_stats.update_single(data_row["score"])
+            score_stats.update_single(
+                data_row[STANDARD_COLUMN_NAME_MAP["score"]]
+            )
 
         logging.info(f"Read {count} PSMs")
         logging.debug(f"Score statistics: {score_stats.describe()}")

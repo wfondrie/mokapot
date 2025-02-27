@@ -1,8 +1,9 @@
 """Test the pepxml parser"""
 
-import pytest
-import mokapot
 import numpy as np
+import pytest
+
+import mokapot
 
 
 @pytest.fixture

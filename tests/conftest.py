@@ -8,14 +8,40 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from triqler.qvality import getQvaluesFromScores
 
 from mokapot import LinearPsmDataset, OnDiskPsmDataset
 from mokapot.qvalues import tdc
-from mokapot.utils import convert_targets_column
+from mokapot.utils import make_bool_trarget
+
+from .helpers.random_df import _psm_df_rand
+
+## This section just adds the sorting of the tests, makes the tests marked
+## with the slow marker run last.
+
+# I am assigning slow to tests that take more than 10 seconds to run for now.
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: mark test to run last")
+
+
+def by_slow_marker(item):
+    return 0 if item.get_closest_marker("slow") is None else 1
+
+
+def pytest_collection_modifyitems(session, config, items):
+    if config.getoption("--slow-last"):
+        items.sort(key=by_slow_marker, reverse=False)
+
+
+def pytest_addoption(parser, pluginmanager):
+    parser.addoption("--slow-last", action="store_true", default=False)
+
+
+## End of section (slow makrker)
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +51,7 @@ def set_logging(caplog):
 
 
 @pytest.fixture(scope="session")
-def psm_df_6():
+def psm_df_6() -> pd.DataFrame:
     """A DataFrame containing 6 PSMs"""
     data = {
         "target": [True, True, True, False, False, False],
@@ -39,235 +65,94 @@ def psm_df_6():
 
 
 @pytest.fixture()
-def psm_df_100(tmp_path):
+def psm_df_builder() -> callable:
+    return _psm_df_rand
+
+
+@pytest.fixture()
+def psm_df_100(tmp_path) -> Path:
     """A DataFrame with 100 PSMs."""
-    rng = np.random.Generator(np.random.PCG64(42))
-    targets = {
-        "specid": np.arange(50),
-        "target": [True] * 50,
-        "scannr": rng.integers(0, 100, 50),
-        "calcmass": rng.uniform(500, 2000, size=50),
-        "expmass": rng.uniform(500, 2000, size=50),
-        "peptide": [_random_peptide(5, rng) for _ in range(50)],
-        "proteins": ["_dummy" for _ in range(50)],
-        "score": np.concatenate([rng.normal(3, size=20), rng.normal(size=30)]),
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=50),
-        "charge": rng.choice([2, 3, 4], size=50),
-    }
-
-    decoys = {
-        "specid": np.arange(50, 100),
-        "target": [False] * 50,
-        "scannr": rng.integers(0, 100, 50),
-        "calcmass": rng.uniform(500, 2000, size=50),
-        "expmass": rng.uniform(500, 2000, size=50),
-        "peptide": [_random_peptide(5, rng) for _ in range(50)],
-        "proteins": ["_dummy" for _ in range(50)],
-        "score": rng.normal(size=50),
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=50),
-        "charge": rng.choice([2, 3, 4], size=50),
-    }
-
+    data = _psm_df_rand(50, 50, score_diffs=[3.0])
     pin = tmp_path / "test.pin"
-    df = pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)])
-    df.to_csv(pin, sep="\t", index=False)
+    data.df.to_csv(pin, sep="\t", index=False)
     return pin
 
 
 @pytest.fixture()
-def psm_df_100_parquet(tmp_path):
+def psm_df_100_parquet(tmp_path) -> Path:
     """A DataFrame with 100 PSMs."""
-    rng = np.random.Generator(np.random.PCG64(42))
-    targets = {
-        "specid": np.arange(50),
-        "target": [True] * 50,
-        "scannr": rng.integers(0, 100, 50),
-        "calcmass": rng.uniform(500, 2000, size=50),
-        "expmass": rng.uniform(500, 2000, size=50),
-        "peptide": [_random_peptide(5, rng) for _ in range(50)],
-        "proteins": ["_dummy" for _ in range(50)],
-        "score": np.concatenate([rng.normal(3, size=20), rng.normal(size=30)]),
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=50),
-        "charge": rng.choice([2, 3, 4], size=50),
-    }
-
-    decoys = {
-        "specid": np.arange(50, 100),
-        "target": [False] * 50,
-        "scannr": rng.integers(0, 100, 50),
-        "calcmass": rng.uniform(500, 2000, size=50),
-        "expmass": rng.uniform(500, 2000, size=50),
-        "peptide": [_random_peptide(5, rng) for _ in range(50)],
-        "proteins": ["_dummy" for _ in range(50)],
-        "score": rng.normal(size=50),
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=50),
-        "charge": rng.choice([2, 3, 4], size=50),
-    }
-
+    data = _psm_df_rand(50, 50)
     pf = tmp_path / "test.parquet"
-    df = pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)])
-    df.to_parquet(pf, index=False)
+    data.df.to_parquet(pf, index=False)
     return pf
 
 
 @pytest.fixture()
-def psm_df_1000(tmp_path):
+def psm_df_1000(tmp_path) -> tuple[Path, pd.DataFrame, Path, list[str]]:
     """A DataFrame with 1000 PSMs from 500 spectra and a FASTA file."""
-    rng = np.random.Generator(np.random.PCG64(42))
-    targets = {
-        "specid": np.arange(500),
-        "target": [True] * 500,
-        "spectrum": np.arange(500),
-        "scannr": rng.integers(0, 1000, 500),
-        "calcmass": rng.uniform(500, 2000, size=500),
-        "expmass": rng.uniform(500, 2000, size=500),
-        "peptide": [_random_peptide(5, rng) for _ in range(500)],
-        "proteins": ["_dummy" for _ in range(500)],
-        "score": np.concatenate([
-            rng.normal(3, size=200),
-            rng.normal(size=300),
-        ]),
-        "score2": np.concatenate([
-            rng.normal(3, size=200),
-            rng.normal(size=300),
-        ]),
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=500),
-        "charge": rng.choice([2, 3, 4], size=500),
-    }
-
-    decoys = {
-        "specid": np.arange(500, 1000),
-        "target": [False] * 500,
-        "spectrum": np.arange(500),
-        "scannr": rng.integers(0, 1000, 500),
-        "calcmass": rng.uniform(500, 2000, size=500),
-        "expmass": rng.uniform(500, 2000, size=500),
-        "peptide": [_random_peptide(5, rng) for _ in range(500)],
-        "proteins": ["_dummy" for _ in range(500)],
-        "score": rng.normal(size=500),
-        "score2": rng.normal(size=500),
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=500),
-        "charge": rng.choice([2, 3, 4], size=500),
-    }
-
-    fasta_data = "\n".join(
-        _make_fasta(100, targets["peptide"], 10, rng)
-        + _make_fasta(100, decoys["peptide"], 10, rng, "decoy")
+    data = _psm_df_rand(500, 500, score_diffs=[3.0, 3.0], share_ids=True)
+    df, _rng, score_cols, fasta_data = (
+        data.df,
+        data.rng,
+        data.score_cols,
+        data.fasta_string,
     )
 
     fasta = tmp_path / "test_1000.fasta"
     with open(fasta, "w+") as fasta_ref:
         fasta_ref.write(fasta_data)
 
-    df = pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)])
-
     pin = tmp_path / "test.pin"
-    df.drop(columns=["score", "score2"]).to_csv(pin, sep="\t", index=False)
-    return pin, df, fasta
+    df.to_csv(pin, sep="\t", index=False)
+    return pin, df, fasta, score_cols
 
 
 @pytest.fixture()
 def psm_df_1000_parquet(tmp_path):
     """A DataFrame with 1000 PSMs from 500 spectra and a FASTA file."""
-    rng = np.random.Generator(np.random.PCG64(42))
-    targets = {
-        "specid": np.arange(500),
-        "target": [True] * 500,
-        "scannr": rng.integers(0, 1000, 500),
-        "calcmass": rng.uniform(500, 2000, size=500),
-        "expmass": rng.uniform(500, 2000, size=500),
-        "peptide": [_random_peptide(5, rng) for _ in range(500)],
-        "proteins": ["_dummy" for _ in range(500)],
-        "score": np.concatenate([
-            rng.normal(3, size=200),
-            rng.normal(size=300),
-        ]),
-        "score2": np.concatenate([
-            rng.normal(3, size=200),
-            rng.normal(size=300),
-        ]),
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=500),
-        "charge": rng.choice([2, 3, 4], size=500),
-    }
-
-    decoys = {
-        "specid": np.arange(500, 1000),
-        "target": [False] * 500,
-        "spectrum": np.arange(500),
-        "score2": rng.normal(size=500),
-        "scannr": rng.integers(0, 1000, 500),
-        "calcmass": rng.uniform(500, 2000, size=500),
-        "expmass": rng.uniform(500, 2000, size=500),
-        "peptide": [_random_peptide(5, rng) for _ in range(500)],
-        "proteins": ["_dummy" for _ in range(500)],
-        "score": rng.normal(size=500),
-        "filename": "test.mzML",
-        "ret_time": rng.uniform(0, 60 * 120, size=500),
-        "charge": rng.choice([2, 3, 4], size=500),
-    }
-
-    fasta_data = "\n".join(
-        _make_fasta(100, targets["peptide"], 10, rng)
-        + _make_fasta(100, decoys["peptide"], 10, rng, "decoy")
-    )
-
+    # Q: is this docstring accurate? It seems to me that it is 1k psms
+    #    from 1k spectra
+    data = _psm_df_rand(500, 500, score_diffs=[3.0, 3.0], share_ids=True)
     fasta = tmp_path / "test_1000.fasta"
     with open(fasta, "w+") as fasta_ref:
-        fasta_ref.write(fasta_data)
-
-    df = pd.concat([pd.DataFrame(targets), pd.DataFrame(decoys)])
+        fasta_ref.write(data.fasta_string)
 
     pf = tmp_path / "test.parquet"
-    df.drop(columns=["score", "score2"]).to_parquet(pf, index=False)
-    return pf, df, fasta
+    data.df.drop(columns=data.score_cols).to_parquet(pf, index=False)
+    return pf, data.df, fasta
 
 
 @pytest.fixture
-def psms_dataset(psm_df_1000):
+def psms_dataset(psm_df_1000) -> LinearPsmDataset:
     """A small LinearPsmDataset"""
-    _, df, _ = psm_df_1000
+    data = _psm_df_rand(500, 500, share_ids=True)
+
     psms = LinearPsmDataset(
-        psms=df,
+        psms=data.df,
         target_column="target",
-        spectrum_columns="spectrum",
+        spectrum_columns=data.columns.spectrum_columns,
         peptide_column="peptide",
-        feature_columns=["score", "score2"],
-        filename_column="filename",
-        scan_column="spectrum",
-        calcmass_column="calcmass",
-        expmass_column="expmass",
-        rt_column="ret_time",
-        charge_column="charge",
+        feature_columns=data.score_cols,
         copy_data=True,
     )
     return psms
 
 
 @pytest.fixture
-def psms_ondisk():
+def psms_ondisk() -> OnDiskPsmDataset:
     """A small OnDiskPsmDataset"""
     filename = Path("data", "scope2_FP97AA.pin")
-    df_spectra = pd.read_csv(filename, sep="\t", usecols=["ScanNr", "ExpMass", "Label"])
-    with open(filename) as perc:
-        columns = perc.readline().rstrip().split("\t")
+    df_spectra = pd.read_csv(
+        filename,
+        sep="\t",
+        usecols=["ScanNr", "ExpMass", "Label"],
+    )
+    # Q: why is the exp mass in the spectra dataframe?
     psms = OnDiskPsmDataset(
         filename,
         target_column="Label",
         spectrum_columns=["ScanNr", "ExpMass"],
         peptide_column="Peptide",
-        scan_column="ScanNr",
-        calcmass_column="CalcMass",
-        expmass_column="ExpMass",
-        rt_column=None,
-        charge_column=None,
-        protein_column=None,
         feature_columns=[
             "CalcMass",
             "lnrSp",
@@ -286,43 +171,25 @@ def psms_ondisk():
             "dM",
             "absdM",
         ],
-        metadata_columns=[
-            "SpecId",
-            "ScanNr",
-            "Peptide",
-            "Proteins",
-            "Label",
-        ],
-        metadata_column_types=["int", "int", "int", "string", "int"],
-        level_columns=["Peptide"],
-        filename_column=None,
-        specId_column="SpecId",
+        extra_confidence_level_columns=[],
         spectra_dataframe=df_spectra,
-        columns=columns,
     )
     return psms
 
 
 @pytest.fixture
-def psms_ondisk_from_parquet():
+def psms_ondisk_from_parquet() -> OnDiskPsmDataset:
     """A small OnDiskPsmDataset"""
     filename = Path("data") / "10k_psms_test.parquet"
     df_spectra = pq.read_table(
         filename, columns=["ScanNr", "ExpMass", "Label"]
     ).to_pandas()
-    df_spectra = convert_targets_column(df_spectra, "Label")
-    columns = pq.ParquetFile(filename).schema.names
+    df_spectra["Label"] = make_bool_trarget(df_spectra["Label"])
     psms = OnDiskPsmDataset(
         filename,
         target_column="Label",
         spectrum_columns=["ScanNr", "ExpMass"],
         peptide_column="Peptide",
-        scan_column="ScanNr",
-        calcmass_column=None,
-        expmass_column="ExpMass",
-        rt_column=None,
-        charge_column=None,
-        protein_column="Proteins",
         feature_columns=[
             "Mass",
             "MS8_feature_5",
@@ -337,26 +204,8 @@ def psms_ondisk_from_parquet():
             "MS8_feature_30",
             "MS8_feature_32",
         ],
-        metadata_columns=[
-            "SpecId",
-            "Label",
-            "ScanNr",
-            "Peptide",
-            "Proteins",
-            "ExpMass",
-        ],
-        metadata_column_types=[
-            pa.int64(),
-            pa.int64(),
-            pa.int64(),
-            pa.string(),
-            pa.int64(),
-        ],
-        level_columns=["Peptide"],
-        filename_column=None,
-        specId_column="SpecId",
+        extra_confidence_level_columns=[],
         spectra_dataframe=df_spectra,
-        columns=columns,
     )
     return psms
 
@@ -449,7 +298,9 @@ def targets_decoys_psms_scored(tmp_path):
     scores = scores[idx]
     label = label[idx]
     qval = tdc(scores, label)
-    pep = getQvaluesFromScores(target_scores, decoy_scores, includeDecoys=True)[1]
+    pep = getQvaluesFromScores(
+        target_scores, decoy_scores, includeDecoys=True
+    )[1]
     peptides = np.hstack([np.arange(1, n + 1), np.arange(1, n + 1)])
     peptides.sort()
     df = pd.DataFrame(
@@ -464,46 +315,14 @@ def targets_decoys_psms_scored(tmp_path):
         ],
     )
     df["proteinIds"] = "dummy"
-    df[df["Label"] == 1].drop("Label", axis=1).to_csv(psms_t, sep="\t", index=False)
-    df[df["Label"] == -1].drop("Label", axis=1).to_csv(psms_d, sep="\t", index=False)
+    df[df["Label"] == 1].drop("Label", axis=1).to_csv(
+        psms_t, sep="\t", index=False
+    )
+    df[df["Label"] == -1].drop("Label", axis=1).to_csv(
+        psms_d, sep="\t", index=False
+    )
 
     return [psms_t, psms_d]
-
-
-def _make_fasta(num_proteins, peptides, peptides_per_protein, random_state, prefix=""):
-    """Create a FASTA string from a set of peptides
-
-    Parameters
-    ----------
-    num_proteins : int
-        The number of proteins to generate.
-    peptides : list of str
-        A list of peptide sequences.
-    peptides_per_protein: int
-        The number of peptides per protein.
-    random_state : numpy.random.Generator object
-        The random state.
-    prefix : str
-        The prefix, if generating decoys
-
-    Returns
-    -------
-    list of str
-        A list of lines in a FASTA file.
-    """
-    lines = []
-    for protein in range(num_proteins):
-        lines.append(f">{prefix}sp|test|test_{protein}")
-        lines.append("".join(list(random_state.choice(peptides, peptides_per_protein))))
-
-    return lines
-
-
-def _random_peptide(length, random_state):
-    """Generate a random peptide"""
-    return "".join(
-        list(random_state.choice(list("ACDEFGHILMNPQSTVWY"), length - 1)) + ["K"]
-    )
 
 
 @pytest.fixture
@@ -516,6 +335,8 @@ def mock_proteins():
     return proteins()
 
 
+# TODO: Remove, this is only used in flashlfq tests
+# .     and is not up to date with the current imeplementation.
 @pytest.fixture
 def mock_conf():
     """Create a mock-up of a LinearConfidence object"""
@@ -546,24 +367,6 @@ def mock_conf():
             })
 
     return conf()
-
-
-@pytest.fixture
-def confidence_write_data():
-    filename = Path("data") / "confidence_results_test.tsv"
-    psm_df = pd.read_csv(filename, sep="\t")
-    precursor_df = psm_df.drop_duplicates(subset=["Precursor"])
-    mod_pep_df = psm_df.drop_duplicates(subset=["ModifiedPeptide"])
-    peptide_df = psm_df.drop_duplicates(subset=["peptide"])
-    peptide_grp_df = psm_df.drop_duplicates(subset=["PeptideGroup"])
-    df_dict = {
-        "psms": psm_df,
-        "precursors": precursor_df,
-        "modifiedpeptides": mod_pep_df,
-        "peptides": peptide_df,
-        "peptidegroups": peptide_grp_df,
-    }
-    return df_dict
 
 
 @pytest.fixture

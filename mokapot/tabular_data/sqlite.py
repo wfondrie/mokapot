@@ -39,6 +39,7 @@ class SqliteWriter(TabularDataWriter, ABC):
 
     def initialize(self):
         # Nothing to do here, we expect the table(s) to already exist
+        # Q: What are "the tables" ? And why arent they checked here?
         pass
 
     def finalize(self):
@@ -63,9 +64,13 @@ class ConfidenceSqliteWriter(SqliteWriter):
         database: str | Path | sqlite3.Connection,
         columns: list[str],
         column_types: list[np.dtype],
+        *,
+        score_column: str,
         level: str = "psms",
+        peptide_column: str = "peptide",
         qvalue_column: str = "q-value",
         pep_column: str = "posterior_error_prob",
+        psm_id_column: str = "PSMId",
     ) -> None:
         super().__init__(database, columns, column_types)
         self.level_cols = {
@@ -84,7 +89,10 @@ class ConfidenceSqliteWriter(SqliteWriter):
         }
         self.level = level
         self.qvalue_column = qvalue_column
-        self.pep_column = pep_column
+        self.post_err_p_column = pep_column
+        self.psm_id_column = psm_id_column
+        self.peptide_column = peptide_column
+        self.score_column = score_column
 
     def get_query(self, level):
         if level == "psms":
@@ -98,6 +106,18 @@ class ConfidenceSqliteWriter(SqliteWriter):
         query = self.get_query(self.level)
         data = data.to_dict("records")
         for row in data:
-            row["q_value"] = row[self.qvalue_column]
-            row["posterior_error_prob"] = row[self.pep_column]
+            try:
+                row["q_value"] = row[self.qvalue_column]
+                row["posterior_error_prob"] = row[self.post_err_p_column]
+                row["PSMId"] = row[self.psm_id_column]
+                row["score"] = row[self.score_column]
+                row["peptide"] = row[self.peptide_column]
+            except KeyError as e:
+                raise KeyError(
+                    f"Error findig key: {str(e)} in keys: {row.keys()}"
+                )
         self.connection.executemany(query, data)
+
+    def read(self, level: str = "psms"):
+        table_name, table_id_col, mokapot_id_col = self.level_cols[level]
+        return pd.read_sql_table(table_name, self.connection)

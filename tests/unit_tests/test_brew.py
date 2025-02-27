@@ -4,10 +4,10 @@ import copy
 
 import numpy as np
 import pytest
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 import mokapot
-from mokapot import PercolatorModel, Model
+from mokapot import LinearPsmDataset, Model, PercolatorModel
 
 np.random.seed(42)
 
@@ -25,17 +25,64 @@ def test_brew_simple(psms_ondisk, svm):
     assert isinstance(models[0], PercolatorModel)
 
 
+def test_brew_positive_negative(psm_df_builder, svm):
+    """A small-ish PSM dataset"""
+    data = psm_df_builder(1000, 1000, score_diffs=[5.0])
+
+    psms_positive = LinearPsmDataset(
+        psms=data.df,
+        target_column="target",
+        spectrum_columns=["specid"],
+        peptide_column="peptide",
+        feature_columns=list(data.score_cols),
+        copy_data=True,
+        rng=42,
+    )
+    data_negative = data.df.copy()
+    for c in data.score_cols:
+        data_negative[c] *= -1
+
+    psms_negative = LinearPsmDataset(
+        psms=data_negative,
+        target_column="target",
+        spectrum_columns=["specid"],
+        peptide_column="peptide",
+        feature_columns=list(data.score_cols),
+        copy_data=True,
+        rng=42,
+    )
+
+    pos_models, pos_scores = mokapot.brew(
+        [psms_positive],
+        PercolatorModel(train_fdr=0.05, max_iter=10, rng=2),
+        test_fdr=0.05,
+        rng=2,
+    )
+    neg_models, neg_scores = mokapot.brew(
+        [psms_negative],
+        PercolatorModel(train_fdr=0.05, max_iter=10, rng=2),
+        test_fdr=0.05,
+        rng=2,
+    )
+
+    assert np.allclose(pos_scores[0], neg_scores[0])
+
+
 def test_brew_simple_parquet(psms_ondisk_from_parquet, svm):
     """Test with mostly default parameters of brew"""
-    models, scores = mokapot.brew([psms_ondisk_from_parquet], svm, test_fdr=0.05)
+    models, scores = mokapot.brew(
+        [psms_ondisk_from_parquet], svm, test_fdr=0.05
+    )
     assert len(models) == 3
     assert isinstance(models[0], PercolatorModel)
 
 
-def test_brew_random_forest(psms_ondisk):
+def test_brew_decision_tree(psms_ondisk):
     """Verify there are no dependencies on the SVM."""
     rfm = Model(
-        RandomForestClassifier(),
+        # Changed from RF bc it is faster to run. 2024-12-06
+        # RandomForestClassifier(),
+        DecisionTreeClassifier(min_samples_leaf=10, min_samples_split=20),
         train_fdr=0.1,
     )
     models, scores = mokapot.brew([psms_ondisk], model=rfm, test_fdr=0.1)
@@ -43,6 +90,7 @@ def test_brew_random_forest(psms_ondisk):
     assert isinstance(models[0], Model)
 
 
+@pytest.mark.slow
 def test_brew_joint(psms_ondisk, svm):
     """Test that the multiple input PSM collections yield multiple out"""
     collections = [psms_ondisk, copy.copy(psms_ondisk), copy.copy(psms_ondisk)]
@@ -70,8 +118,15 @@ def test_brew_folds(psms_ondisk, svm):
     assert len(models) == 4
 
 
+@pytest.mark.slow
 def test_brew_seed(psms_ondisk, svm):
     """Test that (not) changing the split selection seed works"""
+    # Set logger level to debug
+
+    import logging
+
+    logging.getLogger("mokapot").setLevel(logging.DEBUG)
+
     folds = 3
     seed = 0
     psms_ondisk_b = copy.copy(psms_ondisk)
@@ -86,15 +141,22 @@ def test_brew_seed(psms_ondisk, svm):
     )
     assert len(models_b) == folds
 
-    assert np.array_equal(scores_a[0], scores_b[0]), "Results differed with same seed"
+    assert np.array_equal(scores_a[0], scores_b[0]), (
+        "Results differed with same seed"
+    )
 
     models_c, scores_c = mokapot.brew(
         [psms_ondisk_c], svm, test_fdr=0.05, folds=folds, rng=seed + 2
     )
+
+    # Scores can be zero if the seed is the same BUT the model cannot
+    # tell between targets and decoys. This should not happen in this test
+    # and would usually mean there is a bug elsewhere.
+    assert scores_a[0].max() > 0, "Scores are all zero"
     assert len(models_c) == folds
-    assert not (
-        np.array_equal(scores_a[0], scores_c[0])
-    ), "Results were identical with different seed!"
+    assert not (np.array_equal(scores_a[0], scores_c[0])), (
+        "Results were identical with different seed!"
+    )
 
 
 def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
@@ -121,7 +183,9 @@ def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
     )
     assert len(models_b) == folds
 
-    assert np.array_equal(scores_a[0], scores_b[0]), "Results differed with same seed"
+    assert np.array_equal(scores_a[0], scores_b[0]), (
+        "Results differed with same seed"
+    )
 
     models_c, scores_c = mokapot.brew(
         [psms_ondisk_c],
@@ -131,13 +195,16 @@ def test_brew_seed_parquet(psms_ondisk_from_parquet, svm):
         rng=seed + 2,
     )
     assert len(models_c) == folds
-    assert not (
-        np.array_equal(scores_a[0], scores_c[0])
-    ), "Results were identical with different seed!"
+    # This happens when the internal seeding mechanism is not
+    # correctly setting the seed internally.
+    assert not (np.array_equal(scores_a[0], scores_c[0])), (
+        "Results were identical with different seed!"
+    )
 
 
 def test_brew_test_fdr_error(psms_ondisk, svm):
     """Test that we get a sensible error message"""
+    # Q: When what happens???
     with pytest.raises(RuntimeError) as err:
         mokapot.brew([psms_ondisk], svm, test_fdr=0.001, rng=2)
     assert "Failed to calibrate" in str(err)
@@ -221,7 +288,10 @@ def test_brew_using_non_trained_models_error(psms_ondisk, svm):
     svm.is_trained = False
     with pytest.raises(RuntimeError) as err:
         mokapot.brew([psms_ondisk], [svm, svm, svm], test_fdr=0.05)
-    assert "One or more of the provided models was not previously trained" in str(err)
+    assert (
+        "One or more of the provided models was not previously trained"
+        in str(err)
+    )
 
 
 def assert_not_close(x, y):

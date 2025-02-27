@@ -1,10 +1,11 @@
 """
 Defines a function to run the Percolator algorithm.
 """
+
 import copy
 import logging
 from operator import itemgetter
-from typing import Iterable
+from typing import Generator, Iterable
 
 import numpy as np
 import pandas as pd
@@ -13,17 +14,23 @@ from typeguard import typechecked
 
 from mokapot import utils
 from mokapot.constants import (
-    CHUNK_SIZE_ROWS_PREDICTION,
     CHUNK_SIZE_READ_ALL_DATA,
+    CHUNK_SIZE_ROWS_PREDICTION,
 )
 from mokapot.dataset import (
     LinearPsmDataset,
+    PsmDataset,
     calibrate_scores,
     update_labels,
-    OnDiskPsmDataset,
 )
-from mokapot.model import PercolatorModel, Model
+from mokapot.model import (
+    BestFeatureIsBetterError,
+    Model,
+    ModelIterationError,
+    PercolatorModel,
+)
 from mokapot.parsers.pin import parse_in_chunks
+from mokapot.utils import strictzip
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,15 +38,15 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 @typechecked
 def brew(
-    datasets: list[OnDiskPsmDataset],
-    model=None,
+    datasets: list[PsmDataset],
+    model: None | Model | list[Model] = None,
     test_fdr: float = 0.01,
     folds: int = 3,
     max_workers: int = 1,
     rng=None,
     subset_max_train: int | None = None,
     ensemble: bool = False,
-):
+) -> tuple[list[Model], list[np.ndarray[np.float64]]]:
     """
     Re-score one or more collection of PSMs.
 
@@ -102,12 +109,15 @@ def brew(
         model = PercolatorModel()
 
     try:
+        # Q: what is this doing? Why does the randon number
+        # generater get set only if the model has an estimator?
+        # Shouldn't it assign it to all the models if they are passed?
         model.estimator
         model.rng = rng
     except AttributeError:
         pass
 
-        # Check that all of the datasets have the same features:
+    # Check that all of the datasets have the same features:
     feat_set = set(datasets[0].feature_columns)
     if not all([
         set(dataset.feature_columns) == feat_set for dataset in datasets
@@ -117,14 +127,15 @@ def brew(
     data_size = [len(datasets.spectra_dataframe) for datasets in datasets]
     if sum(data_size) > 1:
         LOGGER.info("Found %i total PSMs.", sum(data_size))
-        num_targets = sum([
-            (dataset.spectra_dataframe[dataset.target_column]).sum()
-            for dataset in datasets
-        ])
-        num_decoys = sum([
-            (~dataset.spectra_dataframe[dataset.target_column]).sum()
-            for dataset in datasets
-        ])
+        num_targets = 0
+        num_decoys = 0
+        for dataset in datasets:
+            trg = dataset.target_values
+            local_ntargets = trg.sum()
+            local_ndecoys = len(trg) - local_ntargets
+            num_targets += local_ntargets
+            num_decoys += local_ndecoys
+
         LOGGER.info(
             "  - %i target PSMs and %i decoy PSMs detected.",
             num_targets,
@@ -134,7 +145,16 @@ def brew(
     test_folds_idx = [dataset._split(folds, rng) for dataset in datasets]
 
     # If trained models are provided, use them as-is.
-    try:
+    # If the model is not iterable, it means that a single model is pased, thus
+    # It is more of a template for training. (or was generated within this
+    # code, thus "None" was passed)
+    is_mod_iterable = hasattr(model, "__iter__")
+    if is_mod_iterable:
+        # Q: Is this branch ever used?
+        # JSPP 2024-12-06 I think it makes sense to split this function
+        # To remve the trained case ... which adds a lot of clutter.
+        # Furthermore, that function can fall back to this one if its
+        # Not actually trained.
         fitted = [[m, False] for m in model if m.is_trained]
 
         if len(model) != folds:
@@ -148,7 +168,7 @@ def brew(
                 "One or more of the provided models was not previously trained"
             )
 
-    except TypeError:
+    else:
         train_sets = list(
             make_train_sets(
                 test_idx=test_folds_idx,
@@ -229,7 +249,12 @@ def brew(
                 )
             )
     else:
-        logging.info("Model training failed. Setting scores to zero.")
+        num_passed = sum([m.is_trained for m in models])
+        num_failed = len(models) - num_passed
+        LOGGER.warning(
+            f"Model training failed on {num_failed}/{len(models)}."
+            " Setting scores to zero."
+        )
         scores = [np.zeros(x) for x in data_size]
     # Find which is best: the learned model, the best feature, or
     # a pretrained model.
@@ -243,10 +268,9 @@ def brew(
 
     preds = [
         update_labels(
-            dataset.reader,
-            score,
-            dataset.target_column,
-            test_fdr,
+            scores=score,
+            targets=dataset.target_values,
+            eval_fdr=test_fdr,
         )
         for dataset, score in zip(datasets, scores)
     ]
@@ -283,16 +307,29 @@ def brew(
 
     # Reverse all scores for which desc is False (this way, we don't have to
     # return `descs` from this function
+    # Q: why dont we just return a class that denotes if its descending?
+    #    JSPP 2024-12-15
     for idx, desc in enumerate(descs):
         if not desc:
             scores[idx] = -scores[idx]
             descs[idx] = not descs[idx]
 
-    return models, scores
+    LOGGER.info("Assigning scores to PSMs...")
+    for score, dataset in strictzip(scores, datasets):
+        if str(score.dtype) == "bool":
+            # On the rare occasions where the scores are bools
+            # This can happen if the model falls back to the best feature
+            # and the best feature is a bool.
+            scores = np.array(score, dtype=float)
+        dataset.scores = score
+
+    return list(models), scores
 
 
 # Utility Functions -----------------------------------------------------------
-def make_train_sets(test_idx, subset_max_train, data_size, rng):
+def make_train_sets(
+    test_idx, subset_max_train, data_size, rng
+) -> Generator[list[list[int]], None, None]:
     """
     Parameters
     ----------
@@ -305,8 +342,8 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
 
     Yields
     ------
-    PsmDataset
-        The training set.
+    list of list of int
+        The training set. Each element is a list of ints.
     """
     subset_max_train_per_file = []
     if subset_max_train is not None:
@@ -344,30 +381,20 @@ def make_train_sets(test_idx, subset_max_train, data_size, rng):
                 if current_subset_max_train < train_idx_size:
                     train_idx[i] = rng.choice(
                         train_idx[i], current_subset_max_train, replace=False
-                    )
+                    ).tolist()
         yield train_idx
 
 
 @typechecked
 def _create_linear_dataset(
-    dataset: OnDiskPsmDataset, psms: pd.DataFrame, enforce_checks: bool = True
+    dataset: PsmDataset, psms: pd.DataFrame, enforce_checks: bool = True
 ):
-    utils.convert_targets_column(
-        data=psms, target_column=dataset.target_column
+    psms[dataset.target_column] = utils.make_bool_trarget(
+        psms.loc[:, dataset.target_column]
     )
     return LinearPsmDataset(
         psms=psms,
-        target_column=dataset.target_column,
-        spectrum_columns=dataset.spectrum_columns,
-        peptide_column=dataset.peptide_column,
-        protein_column=dataset.protein_column,
-        feature_columns=dataset.feature_columns,
-        filename_column=dataset.filename_column,
-        scan_column=dataset.scan_column,
-        calcmass_column=dataset.calcmass_column,
-        expmass_column=dataset.expmass_column,
-        rt_column=dataset.rt_column,
-        charge_column=dataset.charge_column,
+        column_groups=dataset.column_groups,
         copy_data=False,
         enforce_checks=enforce_checks,
     )
@@ -381,7 +408,10 @@ def get_index_values(df, col_name, val, orig_idx):
 
 @typechecked
 def predict_fold(
-    model: Model, fold: int, dataset: LinearPsmDataset, scores: list
+    model: Model,
+    fold: int,
+    dataset: LinearPsmDataset,
+    scores: list,
 ):
     scores[fold].append(model.predict(dataset))
 
@@ -389,7 +419,7 @@ def predict_fold(
 @typechecked
 def _predict(
     models_idx: list,
-    datasets: Iterable[OnDiskPsmDataset],
+    datasets: Iterable[PsmDataset],
     models: Iterable[Model],
     test_fdr: float,
     max_workers: int,
@@ -421,8 +451,9 @@ def _predict(
         fold_scores = [[] for _ in range(n_folds)]
         targets = [[] for _ in range(n_folds)]
         orig_idx = [[] for _ in range(n_folds)]
-        file_iterator = dataset.read_data(
-            columns=dataset.columns, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
+        file_iterator = dataset.read_data_chunked(
+            columns=dataset.columns,
+            chunk_size=CHUNK_SIZE_ROWS_PREDICTION,
         )
         model_test_idx = utils.create_chunks(
             data=mod_idx, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
@@ -435,7 +466,9 @@ def _predict(
             ]
             dataset_slices = [
                 _create_linear_dataset(
-                    dataset, psm_slice, enforce_checks=False
+                    dataset,
+                    psm_slice,
+                    enforce_checks=False,
                 )
                 for psm_slice in psms_slices
             ]
@@ -454,9 +487,9 @@ def _predict(
             del psms_slices, dataset_slices
         del file_iterator
         del model_test_idx
+        # What is this iteration doing?
         for mod in models:
             try:
-                mod.estimator.decision_function
                 scores.append(
                     calibrate_scores(
                         np.hstack(fold_scores.pop(0)),
@@ -480,7 +513,9 @@ def _predict(
 
 @typechecked
 def _predict_with_ensemble(
-    dataset: OnDiskPsmDataset, models: Iterable[Model], max_workers
+    dataset: PsmDataset,
+    models: Iterable[Model],
+    max_workers: int,
 ):
     """
     Return the new scores for the dataset using ensemble of all trained models
@@ -495,7 +530,7 @@ def _predict_with_ensemble(
         was reset or not.
     """
     scores = [[] for _ in range(len(models))]
-    file_iterator = dataset.read_data(
+    file_iterator = dataset.read_data_chunked(
         columns=dataset.columns, chunk_size=CHUNK_SIZE_ROWS_PREDICTION
     )
     for psms_chunk in file_iterator:
@@ -506,12 +541,12 @@ def _predict_with_ensemble(
             delayed(model.predict)(dataset=linear_dataset) for model in models
         )
         [score.append(fs) for score, fs in zip(scores, fold_scores)]
-    del fold_scores
+        del fold_scores
     scores = [np.hstack(score) for score in scores]
     return np.mean(scores, axis=0)
 
 
-def _fit_model(train_set, psms, model, fold):
+def _fit_model(train_set, psms, model: Model, fold):
     """
     Fit the estimator using the training data.
 
@@ -519,7 +554,7 @@ def _fit_model(train_set, psms, model, fold):
     ----------
     train_set : PsmDataset
         A PsmDataset that specifies the training data
-    model : tuple of Model
+    model : a mokapot.model.Model
         A Classifier to train.
     fold : int
         The fold number. Only used for logging.
@@ -538,8 +573,20 @@ def _fit_model(train_set, psms, model, fold):
     train_set = _create_linear_dataset(psms[0], train_set)
     try:
         model.fit(train_set)
-    except RuntimeError as msg:
-        if str(msg) != "Model performs worse after training.":
+    except BestFeatureIsBetterError as msg:
+        LOGGER.debug(msg)
+        if "Model performs worse after training." not in str(msg):
+            LOGGER.info(f"Fold {fold + 1}: {msg}")
+            raise
+
+        if model.is_trained:
+            reset = True
+    except ModelIterationError as msg:
+        # Q: should we handle this differently?
+        #    the model getting better and then worse is different than
+        #    it never getting better.
+        LOGGER.debug(msg)
+        if "Model performs worse after training." not in str(msg):
             LOGGER.info(f"Fold {fold + 1}: {msg}")
             raise
 
