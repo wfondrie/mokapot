@@ -21,6 +21,8 @@ STANDARD_COLUMN_NAME_MAP = {
     "q-value": "mokapot_qvalue",
     "posterior_error_prob": "mokapot_posterior_error_prob",
     "score": "mokapot_score",
+    # Used when writing the confidence assignment.
+    "is_decoy": "is_decoy",
     # Used in mokapot.picked_protein
     "protein_group": "mokapot_protein_group",
     "stripped_sequence": "stripped_sequence",

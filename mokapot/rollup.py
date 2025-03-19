@@ -10,7 +10,6 @@ from mokapot.confidence import compute_and_write_confidence
 from mokapot.statistics import OnlineStatistics
 from mokapot.tabular_data import (
     BufferType,
-    ComputedTabularDataReader,
     MergedTabularDataReader,
     TabularDataReader,
     TabularDataWriter,
@@ -38,14 +37,32 @@ def compute_rollup_levels(
 
 
 def get_target_decoy_reader(path: Path, is_decoy: bool):
-    return ComputedTabularDataReader(
-        reader=TabularDataReader.from_path(
-            path, column_map=STANDARD_COLUMN_NAME_MAP
-        ),
-        column="is_decoy",
-        dtype=np.dtype("bool"),
-        func=lambda df: np.full(len(df), is_decoy),
+    reader = TabularDataReader.from_path(
+        path, column_map=STANDARD_COLUMN_NAME_MAP
     )
+    if "is_decoy" in reader.get_column_names():
+        # If the reader column exist make sure all values
+        # match the expected value
+        dec_col = reader.read(["is_decoy"])
+        all_matches = np.all(dec_col["is_decoy"] == is_decoy)
+        if not all_matches:
+            raise ValueError(
+                f"Column 'is_decoy' in {path} does not"
+                f" match expected value {is_decoy}"
+            )
+        return reader
+
+    raise RuntimeError("Column 'is_decoy' not found in reader.")
+    # Pretty sure this is dead code now ...
+    # Former implementations did no store the decoy state
+    # on the reader ... this made the column dissapear in
+    # some output types.
+    # return ComputedTabularDataReader(
+    #     reader=reader,
+    #     column="is_decoy",
+    #     dtype=np.dtype("bool"),
+    #     func=lambda df: np.full(len(df), is_decoy),
+    # )
 
 
 DEFAULT_PARENT_LEVELS = {

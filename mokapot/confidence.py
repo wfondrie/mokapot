@@ -252,13 +252,15 @@ class Confidence:
             reader = TabularDataReader.from_path(level_path)
             reader = ComputedTabularDataReader(
                 reader,
-                "is_decoy",
+                STANDARD_COLUMN_NAME_MAP["is_decoy"],
                 np.dtype("bool"),
                 lambda df: ~df[self._target_column].values,
             )
 
             writer = TargetDecoyWriter(
-                out_writers, write_decoys, decoy_column="is_decoy"
+                out_writers,
+                write_decoys=write_decoys,
+                decoy_column=STANDARD_COLUMN_NAME_MAP["is_decoy"],
             )
 
             compute_and_write_confidence(
@@ -952,9 +954,13 @@ class OutputWriterFactory:
         self.id_col = id_column
         id_col = [id_column] if id_column is not None else []
         prot_col = [protein_column] if protein_column is not None else []
+        decoy_col = (
+            [STANDARD_COLUMN_NAME_MAP["is_decoy"]] if write_decoys else []
+        )
         self.output_column_names = [
             *id_col,
             *spectra_columns,
+            *decoy_col,
             peptide_column,
             *extra_output_columns,
             STANDARD_COLUMN_NAME_MAP["score"],
@@ -971,6 +977,8 @@ class OutputWriterFactory:
             STANDARD_COLUMN_NAME_MAP["q-value"],
             STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
         ]
+
+        self.initialized_writers = set()
 
     def __repr__(self) -> str:
         formatted_dict = pformat(self.__dict__)
@@ -1027,11 +1035,17 @@ class OutputWriterFactory:
 
         writer = TabularDataWriter.from_suffix(path, output_columns, [])
         if initialize:
-            writer.initialize()
+            try:
+                writer.initialize()
+            except FileExistsError as e:
+                context = f"Failed to initialize writer: {e} for level {level}"
+                raise FileExistsError(context) from e
         return writer
 
     def build_writers(
-        self, level_manager: LevelManager, prefix: str | None = None
+        self,
+        level_manager: LevelManager,
+        prefix: str | None = None,
     ) -> tuple[
         dict[str, list[TabularDataWriter] | list[ConfidenceSqliteWriter]], str
     ]:
@@ -1075,12 +1089,21 @@ class OutputWriterFactory:
             ]
 
             outfile_targets = level_manager.dest_dir / "".join(name)
+            # We need to initalize only if we are not appending
+            # For instance if this is the second dataset in a
+            # multi-dataset analysis with aggregation,
+            # we need to initialize the file only once.
+
+            should_init = not self.append_to_output_file
+            if outfile_targets in self.initialized_writers:
+                should_init = False
+            self.initialized_writers.add(outfile_targets)
 
             output_writers[level].append(
                 self._create_writer(
                     path=outfile_targets,
                     level=level,
-                    initialize=not self.append_to_output_file,
+                    initialize=should_init,
                 )
             )
 
@@ -1092,11 +1115,15 @@ class OutputWriterFactory:
                     str(level_manager.default_extension),
                 ]
                 outfile_decoys = level_manager.dest_dir / "".join(decoy_name)
+                if outfile_decoys in self.initialized_writers:
+                    should_init = False
+                self.initialized_writers.add(outfile_decoys)
+
                 output_writers[level].append(
                     self._create_writer(
                         path=outfile_decoys,
                         level=level,
-                        initialize=not self.append_to_output_file,
+                        initialize=should_init,
                     )
                 )
 
@@ -1242,8 +1269,7 @@ def compute_and_write_confidence(
         data = temp_reader.read()
         scores = data[STANDARD_COLUMN_NAME_MAP["score"]].to_numpy()
 
-        # Q: Should I add 'is_decoy' to the standard col mapping?
-        targets = ~data["is_decoy"].to_numpy()
+        targets = ~data[STANDARD_COLUMN_NAME_MAP["is_decoy"]].to_numpy()
         if all(targets):
             LOGGER.warning(
                 "No decoy PSMs remain for confidence estimation. "
@@ -1296,7 +1322,10 @@ def compute_and_write_confidence(
         score_target_iterator = create_score_target_iterator(
             temp_reader.get_chunked_data_iterator(
                 chunk_size=CONFIDENCE_CHUNK_SIZE,
-                columns=[STANDARD_COLUMN_NAME_MAP["score"], "is_decoy"],
+                columns=[
+                    STANDARD_COLUMN_NAME_MAP["score"],
+                    STANDARD_COLUMN_NAME_MAP["is_decoy"],
+                ],
             )
         )
         hist_data = TDHistData.from_score_target_iterator(
@@ -1327,7 +1356,7 @@ def compute_and_write_confidence(
 def create_score_target_iterator(chunked_iterator: Iterator):
     for df_chunk in chunked_iterator:
         scores = df_chunk[STANDARD_COLUMN_NAME_MAP["score"]].values
-        targets = ~df_chunk["is_decoy"].values
+        targets = ~df_chunk[STANDARD_COLUMN_NAME_MAP["is_decoy"]].values
         yield scores, targets
 
 

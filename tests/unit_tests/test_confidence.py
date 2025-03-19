@@ -28,7 +28,7 @@ def run_with_chunk_size(chunk_size):
 @pytest.fixture
 def inmem_psms_ds(psm_df_builder):
     """A small-ish PSM dataset"""
-    data = psm_df_builder(1000, 1000, score_diffs=[5.0])
+    data = psm_df_builder(ntargets=1000, ndecoys=1000, score_diffs=[5.0])
     psms = LinearPsmDataset(
         psms=data.df,
         target_column="target",
@@ -209,3 +209,56 @@ def test_assign_confidence_parquet(
         )
 
     assert_frame_equal(df_results_group1, df_results_group2)
+
+
+@pytest.mark.parametrize("decoys", [True, False])
+def test_confidence_api(inmem_psms_ds, tmp_path, decoys):
+    orig_df = inmem_psms_ds.data.copy()
+
+    ntargets = orig_df["target"].sum()
+    ndecoys = len(orig_df) - ntargets
+
+    conf = assign_confidence(
+        [inmem_psms_ds],
+        scores_list=None,
+        eval_fdr=0.01,
+        dest_dir=tmp_path,
+        max_workers=4,
+        deduplication=False,
+        write_decoys=decoys,
+    )
+
+    if decoys:
+        assert len(conf[0].psms) == ntargets + ndecoys
+        assert conf[0].psms.columns.tolist() == [
+            "specid",
+            STANDARD_COLUMN_NAME_MAP["is_decoy"],
+            "peptide",
+            STANDARD_COLUMN_NAME_MAP["score"],
+            STANDARD_COLUMN_NAME_MAP["q-value"],
+            STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
+        ]
+        # Note here we propagate the peptide + id column
+        # names from the original dataset, but the generated
+        # columns are hard-coded internally
+
+        # A couple of peptides can randomly be non-unique, so
+        # being in the 90
+        acceptable_peptide_range = 0.9 * (ntargets + ndecoys)
+        npeps = len(conf[0].psms["peptide"])
+        assert npeps > acceptable_peptide_range
+        assert npeps <= (ntargets + ndecoys)
+    else:
+        assert len(conf[0].psms) == ntargets
+        assert conf[0].psms.columns.tolist() == [
+            "specid",
+            "peptide",
+            STANDARD_COLUMN_NAME_MAP["score"],
+            STANDARD_COLUMN_NAME_MAP["q-value"],
+            STANDARD_COLUMN_NAME_MAP["posterior_error_prob"],
+        ]
+
+        acceptable_peptide_range = 0.9 * ntargets
+        npeps = len(conf[0].psms["peptide"])
+        assert npeps > acceptable_peptide_range
+        assert npeps <= ntargets

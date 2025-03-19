@@ -147,7 +147,8 @@ def test_cli_options(tmp_path, scope_files):
     )
 
 
-def test_cli_aggregate(tmp_path, scope_files):
+@pytest.mark.parametrize("keep_decoys", [True, False])
+def test_cli_aggregate(tmp_path, scope_files, keep_decoys):
     """Test that aggregate results in one result file."""
     params = [
         scope_files[0],
@@ -158,21 +159,23 @@ def test_cli_aggregate(tmp_path, scope_files):
         ("--max_iter", "1"),
     ]
 
+    if keep_decoys:
+        params.append("--keep_decoys")
+
     run_mokapot_cli(params)
 
     # Line counts were determined by one (hopefully correct) test run
-    assert file_approx_len(tmp_path, "blah.targets.psms.tsv", 10256)
-    assert file_approx_len(tmp_path, "blah.targets.peptides.tsv", 9663)
-    assert file_missing(tmp_path, "blah.decoys.psms.tsv")
-    assert file_missing(tmp_path, "blah.decoys.peptides.tsv")
-
-    # Test that decoys are also in the output when --keep_decoys is used
-    params += ["--keep_decoys"]
-    run_mokapot_cli(params)
-    assert file_approx_len(tmp_path, "blah.targets.psms.tsv", 10256)
-    assert file_approx_len(tmp_path, "blah.targets.peptides.tsv", 9663)
-    assert file_approx_len(tmp_path, "blah.decoys.psms.tsv", 3787)
-    assert file_approx_len(tmp_path, "blah.decoys.peptides.tsv", 3694)
+    if not keep_decoys:
+        assert file_approx_len(tmp_path, "blah.targets.psms.tsv", 10256)
+        assert file_approx_len(tmp_path, "blah.targets.peptides.tsv", 9663)
+        assert file_missing(tmp_path, "blah.decoys.psms.tsv")
+        assert file_missing(tmp_path, "blah.decoys.peptides.tsv")
+    else:
+        # Test that decoys are also in the output when --keep_decoys is used
+        assert file_approx_len(tmp_path, "blah.targets.psms.tsv", 10256)
+        assert file_approx_len(tmp_path, "blah.targets.peptides.tsv", 9663)
+        assert file_approx_len(tmp_path, "blah.decoys.psms.tsv", 3787)
+        assert file_approx_len(tmp_path, "blah.decoys.peptides.tsv", 3694)
 
 
 def test_cli_fasta(tmp_path, phospho_files):
@@ -379,11 +382,17 @@ def test_cli_saved_models(tmp_path, phospho_files):
         ("--dest_dir", tmp_path),
         ("--test_fdr", "0.01"),
     ]
+    second_path = tmp_path / "second"
+    params2 = [
+        phospho_files[0],
+        ("--dest_dir", second_path),
+        ("--test_fdr", "0.01"),
+    ]
 
     run_mokapot_cli(params + ["--save_models"])
 
-    params += ["--load_models", *list(Path(tmp_path).glob("*.pkl"))]
-    run_mokapot_cli(params)
+    params2 += ["--load_models", *list(Path(tmp_path).glob("*.pkl"))]
+    run_mokapot_cli(params2)
     assert file_approx_len(tmp_path, "targets.psms.tsv", 42331)
     assert file_approx_len(tmp_path, "targets.peptides.tsv", 33538)
 

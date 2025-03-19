@@ -135,13 +135,18 @@ def flashlfq_psms_ds_ondisk(psm_df_builder, tmp_path):
 
 
 @pytest.mark.parametrize("deduplication", [True, False])
-def test_internal_flashlfq_ondisk(flashlfq_psms_ds_ondisk, deduplication):
+def test_internal_flashlfq_ondisk(
+    flashlfq_psms_ds_ondisk,
+    deduplication,
+    tmp_path,
+):
     mods, scores = mokapot.brew([flashlfq_psms_ds_ondisk], test_fdr=0.01)
     conf = mokapot.assign_confidence(
         [flashlfq_psms_ds_ondisk],
         scores_list=scores,
         eval_fdr=0.01,
         deduplication=deduplication,
+        dest_dir=tmp_path,
     )
     _tmp = _format_flashlfq(conf[0])
     nrow = len(_tmp)
@@ -155,13 +160,18 @@ def test_internal_flashlfq_ondisk(flashlfq_psms_ds_ondisk, deduplication):
 
 
 @pytest.mark.parametrize("deduplication", [True, False])
-def test_internal_flashlfq(flashlfq_psms_ds, deduplication):
+def test_internal_flashlfq(
+    flashlfq_psms_ds,
+    deduplication,
+    tmp_path,
+):
     mods, scores = mokapot.brew([flashlfq_psms_ds], test_fdr=0.01)
     conf = mokapot.assign_confidence(
         [flashlfq_psms_ds],
         scores_list=scores,
         eval_fdr=0.1,
         deduplication=deduplication,
+        dest_dir=tmp_path,
     )
     _tmp = _format_flashlfq(conf[0])
 
@@ -175,6 +185,7 @@ def test_sanity(flashlfq_psms_ds, tmp_path):
         scores_list=scores,
         eval_fdr=0.1,
         deduplication=False,  # RN fails with deduplication = True
+        dest_dir=tmp_path,
     )
     test1 = conf[0].to_flashlfq(tmp_path / "test1.txt")
     mokapot.to_flashlfq(conf, tmp_path / "test2.txt")

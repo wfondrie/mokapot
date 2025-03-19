@@ -259,7 +259,10 @@ def test_tabular_writer_context_manager(tmp_path):
 
         def __init__(self):
             super().__init__(
-                tmp_path / "test.csv", columns=["a", "b"], column_types=[]
+                tmp_path / "test.csv",
+                columns=["a", "b"],
+                column_types=[],
+                overwrite=True,
             )
 
         def initialize(self):

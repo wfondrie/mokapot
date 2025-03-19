@@ -132,6 +132,10 @@ class ComputedTabularDataReader(TabularDataReader):
         self.func = func
         self.column = column
 
+        reader_cols = self.reader.get_column_names()
+        if self.column in reader_cols:
+            raise ValueError(f"Column {self.column} already exists in reader")
+
     def __repr__(self) -> str:
         out = f"ComputedTabularDataReader({pformat(self.reader)},"
         out += f" {self.column}, {self.dtype}, {self.func})"
@@ -253,8 +257,12 @@ class MergedTabularDataReader(TabularDataReader):
             return row[col].iloc[0]
 
         def iterate_over_dicts(df: pd.DataFrame) -> Iterator:
-            dict = df.to_dict(orient="records")
-            return iter(dict)
+            colnames = list(df.columns)
+            if len(colnames) != len(set(colnames)):
+                dupes = [x for x in colnames if colnames.count(x) > 1]
+                raise ValueError(f"Column names are not unique: {dupes}")
+            dicts = df.to_dict(orient="records")
+            return iter(dicts)
 
         def get_value_dict(row, col):
             return row[col]

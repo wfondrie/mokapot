@@ -88,13 +88,16 @@ class CSVFileWriter(TabularDataWriter):
         columns: list[str],
         column_types: list[np.dtype],
         sep: str = "\t",
+        overwrite: bool = False,
     ):
         super().__init__(columns, column_types)
         self.file_name = file_name
         self.stdargs = {"sep": sep, "index": False}
+        self.overwrite = overwrite
+        self.initialized = False
 
     def __str__(self):
-        return f"CSVFileWriter({self.file_name=},{self.columns=})"
+        return f"CSVFileWriter({self.file_name=},{self.columns=},)"
 
     def __repr__(self):
         return (
@@ -102,11 +105,29 @@ class CSVFileWriter(TabularDataWriter):
         )
 
     def initialize(self):
+        if self.initialized:
+            msg = "CSVFileWriter has already been initialized."
+            warnings.warn(msg)
+            return
         # Just write header information
         if Path(self.file_name).exists():
-            warnings.warn(
-                f"CSV file {self.file_name} exists, but will be overwritten."
-            )
+            # If the file is empty we can allow a silent over-write
+            # This happens when the target and the decoy writers
+            # are initialized to the same file (which is normal)
+            fsize = Path(self.file_name).stat().st_size
+            is_empty = fsize == 0
+            if not is_empty:
+                if self.overwrite:
+                    msg = f"CSV file {self.file_name} exists,"
+                    msg += " but will be overwritten."
+                    warnings.warn(msg)
+                else:
+                    msg = f"File {self.file_name} already exists"
+                    msg += f" (size: {fsize} bytes)"
+                    msg += " Pass `overwrite=True` to "
+                    msg += f"overwrite/append to the file. {self}"
+                    raise FileExistsError(msg)
+
         df = pd.DataFrame(columns=self.columns)
         df.to_csv(self.file_name, **self.stdargs)
 

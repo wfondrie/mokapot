@@ -139,7 +139,7 @@ def create_chunks_with_identifier(data, identifier_column, chunk_size):
 
 def read_percolator(
     perc_file: Path,
-    max_workers,
+    max_workers: int = 1,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,

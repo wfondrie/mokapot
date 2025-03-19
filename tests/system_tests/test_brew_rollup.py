@@ -35,9 +35,9 @@ def run_brew_rollup(
     )
 
 
-@pytest.fixture(scope="session")
-def rollup_src_dirs(tmp_path_factory):
-    dest_dir = Path("scratch", "testing_rollup")
+@pytest.fixture()
+def rollup_src_dirs(tmp_path):
+    dest_dir = tmp_path / "testing_rollup"
     dest_dir.mkdir(parents=True, exist_ok=True)
     pq_dest_dir = dest_dir / "parquet"
     pq_dest_dir.mkdir(parents=True, exist_ok=True)

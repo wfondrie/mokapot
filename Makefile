@@ -16,6 +16,12 @@ profile:
 unit-test:
 	uv run --group test --extra xml python -m pytest --durations=0 --slow-last -v ./tests/unit_tests
 
+run-vignettes:
+	cd docs/source/vignettes && for file in *.ipynb; do uv run --extra plot --group docs jupyter execute $${file}; done
+
+clean-vignettes:
+	cd docs/source/vignettes && for file in *.ipynb; do uv run --group docs jupyter nbconvert --clear-output --inplace $${file}; done
+
 check: ruff-lint format pre-commit
 	@echo "All checks passed"
 
