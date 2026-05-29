@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-toml
       - id: check-yaml
@@ -10,14 +10,14 @@ repos:
         exclude: ^data/
       - id: detect-private-key
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-    rev: v2.14.0
+    rev: v2.16.0
     hooks:
       - id: pretty-format-toml
         args: [--autofix, --indent, '2']
       - id: pretty-format-yaml
         args: [--autofix, --indent, '2', --offset, '2', '--preserve-quotes']
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.1
+    rev: v0.15.15
     hooks:
       - id: ruff
       - id: ruff-format
