@@ -125,7 +125,8 @@ def _format_flashlfq(conf):
     seq = passing[conf.dataset.peptide_column]
 
     base_seq = (
-        seq.str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
+        seq.str
+        .replace(r"[\[\(].*?[\]\)]", "", regex=True)
         .str.replace(r"^.*?\.", "", regex=True)
         .str.replace(r"\..*?$", "", regex=True)
     )

@@ -161,7 +161,8 @@ def strip_peptides(sequences: pd.Series) -> pd.Series:
     """
     # Strip modifications and flanking AA's from peptide sequences.
     sequences = (
-        sequences.str.replace(r"[\[\(].*?[\]\)]", "", regex=True)
+        sequences.str
+        .replace(r"[\[\(].*?[\]\)]", "", regex=True)
         .str.replace(r"^.*?\.", "", regex=True)
         .str.replace(r"\..*?$", "", regex=True)
         .str.strip("-")

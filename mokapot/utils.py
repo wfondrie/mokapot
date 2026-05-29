@@ -24,7 +24,8 @@ def groupby_max(df, by_cols, max_col, rng):
     """Quickly get the indices for the maximum value of col"""
     by_cols = tuplize(by_cols)
     idx = (
-        df.sample(frac=1, random_state=rng)
+        df
+        .sample(frac=1, random_state=rng)
         .sort_values(list(by_cols) + [max_col], axis=0)
         .drop_duplicates(list(by_cols), keep="last")
         .index
