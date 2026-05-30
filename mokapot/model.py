@@ -338,7 +338,7 @@ class Model:
             target = target[shuffled_idx]
             num_passed.append((target == 1).sum())
 
-            LOGGER.debug(
+            LOGGER.info(
                 "\t- Iteration %i: %i training PSMs passed.", i, num_passed[i]
             )
 
@@ -362,9 +362,9 @@ class Model:
         self.estimator = model
         weights = _get_weights(self.estimator, self.features)
         if weights is not None:
-            LOGGER.debug("Normalized feature weights in the learned model:")
+            LOGGER.info("Normalized feature weights in the learned model:")
             for line in weights:
-                LOGGER.debug("    %s", line)
+                LOGGER.info("    %s", line)
 
         self.is_trained = True
         LOGGER.info("Done training.")

@@ -509,7 +509,12 @@ def assign_confidence(
         if any(dataset.scores is None for dataset in datasets):
             LOGGER.info("No scores found, attempting to find best feature.")
             feature = datasets[0].find_best_feature(eval_fdr).feature
-            LOGGER.info("Best feature found: %s", feature)
+            LOGGER.info(
+                "Best feature: '%s' (%i PSMs at q<=%g).",
+                feature.name,
+                feature.positives,
+                eval_fdr,
+            )
             scores_use = [
                 dataset.read_data(columns=[feature.name])[
                     feature.name

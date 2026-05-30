@@ -293,10 +293,16 @@ def brew(
         descs = [True] * len(datasets)
 
     if using_best_feat:
+        feat_name = best_feats[best_feat_idx][0]
+        name_str = f" '{feat_name}'" if isinstance(feat_name, str) else ""
         LOGGER.warning(
-            "Learned model did not improve over the best feature. "
-            "Now scoring by the best feature for each collection "
-            "of PSMs."
+            "Learned model did not improve over the best feature%s "
+            "(%i PSMs at q<=%g vs %i for the model). "
+            "Now scoring by the best feature for each collection of PSMs.",
+            name_str,
+            feat_total,
+            test_fdr,
+            pred_total,
         )
     elif reset:
         LOGGER.warning(
