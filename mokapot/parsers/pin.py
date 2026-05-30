@@ -236,15 +236,27 @@ def read_percolator(
         feature for feature in features if feature not in features_to_drop
     ]
 
-    LOGGER.info("Using %i features:", len(_feature_columns))
+    LOGGER.info("Using %i features.", len(_feature_columns))
     for i, feat in enumerate(_feature_columns):
-        LOGGER.info("  (%i)\t%s", i + 0, feat)
+        LOGGER.debug("  (%i)\t%s", i, feat)
 
     prelim_columns.update(
         feature_columns=_feature_columns,
     )
     column_groups = prelim_columns
-    LOGGER.info(f"Infered column grouping: {pformat(column_groups)}")
+
+    # Log a concise summary of the inferred column roles at INFO; the full
+    # ColumnGroups dump is only emitted at DEBUG.
+    opt = column_groups.optional_columns
+    LOGGER.info("Inferred column roles:")
+    LOGGER.info("  - target:   %s", column_groups.target_column)
+    LOGGER.info("  - peptide:  %s", column_groups.peptide_column)
+    LOGGER.info("  - spectrum: %s", ", ".join(column_groups.spectrum_columns))
+    if opt.id is not None:
+        LOGGER.info("  - id:       %s", opt.id)
+    if opt.protein is not None:
+        LOGGER.info("  - protein:  %s", opt.protein)
+    LOGGER.debug("Full inferred column grouping:\n%s", pformat(column_groups))
 
     return OnDiskPsmDataset(
         perc_file,
