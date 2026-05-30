@@ -27,7 +27,7 @@ class OnDiskPsmDataset(PsmDataset):
     # Q: can we have a docstring here?
     def __init__(
         self,
-        filename_or_reader: Path | TabularDataReader,
+        filename_or_reader: Path | str | TabularDataReader,
         spectra_dataframe: pd.DataFrame,
         *,
         target_column: str | None = None,

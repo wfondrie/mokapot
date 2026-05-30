@@ -51,3 +51,18 @@ def test_pin_parsing(std_pin):
 def test_pin_wo_dir():
     """Test a PIN file without a DefaultDirection line"""
     mokapot.read_pin(Path("data", "scope2_FP97AA.pin"), max_workers=4)
+
+
+def test_pin_default_max_workers(std_pin):
+    """read_pin should work without specifying max_workers."""
+    datasets = mokapot.read_pin(std_pin)
+    assert len(datasets) == 1
+    assert isinstance(datasets[0], mokapot.OnDiskPsmDataset)
+
+
+def test_pin_to_df(std_pin):
+    """read_pin(to_df=True) should return the parsed PSMs as a DataFrame."""
+    df = mokapot.read_pin(std_pin, to_df=True)
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 2
+    assert "pepTide" in df.columns

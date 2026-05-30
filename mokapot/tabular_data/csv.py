@@ -7,6 +7,7 @@ import pandas as pd
 from typeguard import typechecked
 
 from mokapot.tabular_data import TabularDataReader, TabularDataWriter
+from mokapot.tabular_data.base import normalize_string_dtypes
 
 
 @typechecked
@@ -44,10 +45,11 @@ class CSVFileReader(TabularDataReader):
 
     def get_column_types(self) -> list[np.dtype]:
         df = pd.read_csv(self.file_name, **self.stdargs, nrows=2)
-        return df.dtypes.tolist()
+        return normalize_string_dtypes(df).dtypes.tolist()
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         result = pd.read_csv(self.file_name, usecols=columns, **self.stdargs)
+        result = normalize_string_dtypes(result)
         return result if columns is None else result[columns]
 
     def get_chunked_data_iterator(
@@ -59,6 +61,7 @@ class CSVFileReader(TabularDataReader):
             chunksize=chunk_size,
             **self.stdargs,
         ):
+            chunk = normalize_string_dtypes(chunk)
             yield chunk if columns is None else chunk[columns]
 
     def get_default_extension(self) -> str:

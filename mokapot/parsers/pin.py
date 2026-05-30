@@ -34,13 +34,14 @@ LOGGER = logging.getLogger(__name__)
 # Functions -------------------------------------------------------------------
 def read_pin(
     pin_files,
-    max_workers: int,
+    max_workers: int = 1,
+    to_df: bool = False,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
     rt_column=None,
     charge_column=None,
-) -> list[OnDiskPsmDataset]:
+) -> list[OnDiskPsmDataset] | pd.DataFrame:
     """Read Percolator input (PIN) tab-delimited files.
 
     Read PSMs from one or more Percolator input (PIN) tab-delmited files,
@@ -69,8 +70,12 @@ def read_pin(
     ----------
     pin_files : str, tuple of str, or pandas.DataFrame
         One or more PIN files to read or a :py:class:`pandas.DataFrame`.
-    max_workers: int
-        Maximum number of parallel processes to use.
+    max_workers: int, optional
+        Maximum number of parallel processes to use. The default is ``1``.
+    to_df : bool, optional
+        Return a :py:class:`pandas.DataFrame` with the parsed PSMs instead of
+        :py:class:`~mokapot.dataset.OnDiskPsmDataset` objects. This is handy
+        for inspecting the contents of a PIN file. The default is ``False``.
     filename_column : str, optional
         The column specifying the MS data file. If :code:`None`, mokapot will
         look for a column called "filename" (case insensitive). This is
@@ -96,10 +101,21 @@ def read_pin(
 
     Returns
     -------
+    list of OnDiskPsmDataset or pandas.DataFrame
         A list of :py:class:`~mokapot.dataset.OnDiskPsmDataset` objects
-        containing the PSMs from all of the PIN files.
+        containing the PSMs from all of the PIN files, or---if ``to_df`` is
+        ``True``---a single :py:class:`pandas.DataFrame` with the parsed PSMs
+        from all of the PIN files.
     """
     logging.info("Parsing PSMs...")
+    if to_df:
+        return pd.concat(
+            [
+                TabularDataReader.from_path(Path(pin_file)).read()
+                for pin_file in tuplize(pin_files)
+            ],
+            ignore_index=True,
+        )
     return [
         read_percolator(
             pin_file,
@@ -138,8 +154,8 @@ def create_chunks_with_identifier(data, identifier_column, chunk_size):
 
 
 def read_percolator(
-    perc_file: Path,
-    max_workers,
+    perc_file: Path | str,
+    max_workers: int = 1,
     filename_column=None,
     calcmass_column=None,
     expmass_column=None,
@@ -155,7 +171,7 @@ def read_percolator(
 
     Parameters
     ----------
-    perc_file : Path
+    perc_file : Path or str
         The file to parse.
 
     Returns
@@ -163,6 +179,10 @@ def read_percolator(
     OnDiskPsmDataset
     """
 
+    # read_pin documents accepting str paths, so coerce to Path here for the
+    # benefit of the type-checked APIs (TabularDataReader, OnDiskPsmDataset)
+    # used below.
+    perc_file = Path(perc_file)
     LOGGER.info("Reading %s...", perc_file)
     reader = TabularDataReader.from_path(perc_file)
     columns = reader.get_column_names()
@@ -250,9 +270,12 @@ def drop_missing_values_and_fill_spectra_dataframe(
         ):  # Isnt this a constant within the function?
             df_spectra_list.append(feature[spectra])
             with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", category=pd.errors.SettingWithCopyWarning
-                )
+                # SettingWithCopyWarning was removed in pandas 3.0 (where
+                # Copy-on-Write makes the in-place drop below safe). Only
+                # suppress it on pandas versions that still define it.
+                scw = getattr(pd.errors, "SettingWithCopyWarning", None)
+                if scw is not None:
+                    warnings.filterwarnings("ignore", category=scw)
                 feature.drop(spectra, axis=1, inplace=True)
         na_mask = pd.concat(
             [na_mask, pd.DataFrame([feature.isna().any(axis=0)])],

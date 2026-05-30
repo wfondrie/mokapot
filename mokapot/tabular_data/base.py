@@ -21,6 +21,43 @@ class BufferType(Enum):
     Dicts = "Dicts"
 
 
+def normalize_string_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce pandas extension string columns back to numpy ``object`` dtype.
+
+    As of pandas 3.0, text columns are inferred as a ``StringDtype`` rather
+    than ``object`` by default. mokapot represents string columns with numpy
+    ``object`` dtype throughout and assumes column types are ``numpy.dtype``
+    instances (which ``StringDtype`` is not, breaking both the ``@typechecked``
+    contracts and the pyarrow schema conversion in the parquet writer). This
+    normalizes such columns so behavior is identical on pandas 2 and 3, without
+    mutating any global pandas options.
+    """
+    string_cols = {
+        col: object
+        for col, dtype in df.dtypes.items()
+        if isinstance(dtype, pd.StringDtype)
+    }
+    return df.astype(string_cols) if string_cols else df
+
+
+def as_numpy_dtype(dtype) -> np.dtype:
+    """Best-effort conversion of a (possibly pandas extension) dtype to numpy.
+
+    pandas extension dtypes such as the pandas>=3 ``StringDtype`` are not
+    ``numpy.dtype`` instances and cannot be passed to functions like
+    ``numpy.can_cast``. String dtypes map to ``object``; anything else numpy
+    cannot interpret also falls back to ``object``.
+    """
+    if isinstance(dtype, np.dtype):
+        return dtype
+    if isinstance(dtype, pd.StringDtype):
+        return np.dtype(object)
+    try:
+        return np.dtype(dtype)
+    except TypeError:
+        return np.dtype(object)
+
+
 @typechecked
 class TabularDataReader(ABC):
     """
@@ -66,7 +103,7 @@ class TabularDataReader(ABC):
 
     @staticmethod
     def from_path(
-        file_name: Path,
+        file_name: Path | str,
         column_map: dict[str, str] | None = None,
         only_columns: list[str] | None = None,
         **kwargs,
@@ -74,6 +111,10 @@ class TabularDataReader(ABC):
         # This import has to be here to avoid a circular import ...
         from .format_chooser import reader_from_path
 
+        # Accept str paths (e.g. from ``read_pin("psms.pin")``) and coerce
+        # to Path so the suffix-based dispatch below works regardless of
+        # what the caller passed.
+        file_name = Path(file_name)
         return reader_from_path(file_name, column_map, only_columns, **kwargs)
 
     @staticmethod
@@ -186,7 +227,9 @@ class ColumnMappedReader(TabularDataReader):
         if self.reader._returned_dataframe_is_mutable():
             df.rename(columns=self.column_map, inplace=True)
         else:
-            df = df.rename(columns=self.column_map, inplace=False, copy=False)
+            # No copy= here: it is deprecated under pandas 3 Copy-on-Write,
+            # which already defers the copy until the result is mutated.
+            df = df.rename(columns=self.column_map, inplace=False)
         return df
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
@@ -218,7 +261,7 @@ class DataFrameReader(TabularDataReader):
     df: pd.DataFrame
 
     def __init__(self, df: pd.DataFrame):
-        self.df = df
+        self.df = normalize_string_dtypes(df)
 
     def __str__(self):
         return f"DataFrameReader({self.df.columns=})"
@@ -244,6 +287,14 @@ class DataFrameReader(TabularDataReader):
 
     def _returned_dataframe_is_mutable(self):
         return False
+
+    def get_default_extension(self) -> str:
+        # In-memory data has no inherent file format; default to the same
+        # tab-delimited text output as the CSV reader. Without this, reading
+        # a spec-compliant ("traditional") PIN file -- which is wrapped in a
+        # DataFrameReader -- would raise NotImplementedError downstream in
+        # assign_confidence.
+        return ".tsv"
 
 
 @typechecked
@@ -293,6 +344,8 @@ class TabularDataWriter(ABC):
         if self.column_types is not None:
             column_types = data.dtypes.tolist()
             for own_type, other_type in zip(self.column_types, column_types):
+                own_type = as_numpy_dtype(own_type)
+                other_type = as_numpy_dtype(other_type)
                 if not np.can_cast(own_type, other_type, "same_kind"):
                     raise ValueError(
                         f"Column types {column_types} do not match "

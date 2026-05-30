@@ -515,17 +515,15 @@ def fit_nnls(n, k, ascending=True, *, weight_exponent=-1.0, erase_zeros=False):
             U = make_perm_mat(np.arange(sum(nnz)), nnz.nonzero()[0])
             W = U @ W
 
-    # The default tolerance of nnls is too low, leading sometimes to
-    # non-convergent iterations and subsequent failures. A good tolerance
-    # should probably be related to the condition number of `W @ A` and to
-    # the error in `W @ k` (numerical and statistical, where the latter is
-    # probably much, much larger than the former). Since this is a) difficult
-    # to estimate anyway and b) run-time consuming, we settle here for a
-    # fixed tolerance, # which a) seems large enough to never lead to
-    # non-convergence and b) is fitting for the typical condition numbers and
-    # values of k seen in experiments.
-    tol = 1e-7
-    d, _, mode = _nnls(W @ A @ R, W @ k, tol=tol)
+    # As of SciPy 1.15 the private ``_nnls`` is a compiled routine with the
+    # signature ``_nnls(A, b, maxiter)`` returning ``(x, rnorm, mode)``; the
+    # ``tol`` argument it used to accept was dropped because the rewritten
+    # active-set algorithm no longer needs it. We mirror SciPy's own default
+    # of ``3 * n_columns`` iterations.
+    A_mat = W @ A @ R
+    b_vec = W @ k
+    maxiter = 3 * A_mat.shape[1]
+    d, _, mode = _nnls(A_mat, b_vec, maxiter)
     if mode != 1:
         LOGGER.debug(
             "\t - Warning: nnls went into loop. Taking last solution."

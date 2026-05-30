@@ -5,7 +5,9 @@ from .base import (
     DataFrameReader,
     TabularDataReader,
     TabularDataWriter,
+    as_numpy_dtype,
     auto_finalize,
+    normalize_string_dtypes,
     remove_columns,
 )
 from .csv import CSVFileReader, CSVFileWriter

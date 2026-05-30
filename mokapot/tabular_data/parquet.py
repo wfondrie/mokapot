@@ -8,6 +8,7 @@ from pyarrow import parquet as pq
 from typeguard import typechecked
 
 from mokapot.tabular_data import TabularDataReader, TabularDataWriter
+from mokapot.tabular_data.base import as_numpy_dtype, normalize_string_dtypes
 
 
 @typechecked
@@ -107,11 +108,13 @@ class ParquetFileReader(TabularDataReader):
     def get_column_types(self) -> list[np.dtype]:
         schema = pq.ParquetFile(self.file_name).schema
         pq_types = schema.to_arrow_schema().types
-        return [np.dtype(type.to_pandas_dtype()) for type in pq_types]
+        # as_numpy_dtype maps any pandas extension dtype (e.g. the StringDtype
+        # newer pyarrow produces for string columns) back to a numpy dtype.
+        return [as_numpy_dtype(type.to_pandas_dtype()) for type in pq_types]
 
     def read(self, columns: list[str] | None = None) -> pd.DataFrame:
         result = pq.read_table(self.file_name, columns=columns).to_pandas()
-        return result
+        return normalize_string_dtypes(result)
 
     def get_chunked_data_iterator(
         self, chunk_size: int, columns: list[str] | None = None
@@ -121,7 +124,7 @@ class ParquetFileReader(TabularDataReader):
         for i, record_batch in enumerate(
             pf.iter_batches(chunk_size, columns=columns)
         ):
-            df = record_batch.to_pandas()
+            df = normalize_string_dtypes(record_batch.to_pandas())
             df.index += i * chunk_size
             yield df
 

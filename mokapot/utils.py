@@ -132,7 +132,11 @@ def make_bool_trarget(target_column: pd.Series):
     if target_column.dtype == bool:
         return target_column
 
-    if target_column.dtype == object:
+    # Object dtype, or the StringDtype that pandas>=3 infers for text columns,
+    # may hold integer-like labels (e.g. "0"/"1") that need converting.
+    if target_column.dtype == object or isinstance(
+        target_column.dtype, pd.StringDtype
+    ):
         try:
             target_column = target_column.astype(int)
         except ValueError as e:

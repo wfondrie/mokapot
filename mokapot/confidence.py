@@ -57,6 +57,7 @@ from mokapot.tabular_data import (
     MergedTabularDataReader,
     TabularDataReader,
     TabularDataWriter,
+    normalize_string_dtypes,
 )
 from mokapot.tabular_data.streaming import JoinedTabularDataReader
 from mokapot.tabular_data.target_decoy_writer import TargetDecoyWriter
@@ -297,6 +298,10 @@ class Confidence:
         proteins_df = proteins_df.sort_values(
             by=self._score_column, ascending=False
         ).reset_index(drop=True)
+        # picked_protein builds new string columns, which pandas>=3 infers as
+        # StringDtype; normalize to object so the column types are numpy
+        # dtypes.
+        proteins_df = normalize_string_dtypes(proteins_df)
         protein_writer = TabularDataWriter.from_suffix(
             file_name=level_paths["proteins"],
             columns=proteins_df.columns.tolist(),
@@ -366,7 +371,7 @@ def assign_confidence(
     scores_list: list[np.ndarray[float]] | None = None,
     max_workers: int = 1,
     eval_fdr: float = 0.01,
-    dest_dir: Path | None = None,
+    dest_dir: Path | str | None = None,
     file_root: str = "",
     prefixes: list[str | None] | None = None,
     write_decoys: bool = False,
@@ -379,7 +384,7 @@ def assign_confidence(
     peps_error: bool = False,
     peps_algorithm="qvality",
     qvalue_algorithm="tdc",
-    sqlite_path: Path | None = None,
+    sqlite_path: Path | str | None = None,
     stream_confidence: bool = False,
 ):
     """Assign confidence to PSMs, peptides, and optionally proteins.
@@ -396,9 +401,10 @@ def assign_confidence(
     eval_fdr : float, optional
         The FDR threshold at which to report and evaluate performance,
         by default 0.01.
-    dest_dir : Path | None, optional
-        The directory in which to save the files. None will use the
-        current working directory, by default None.
+    dest_dir : Path | str | None, optional
+        The directory in which to save the files. It is created if it does
+        not exist. None will use the current working directory, by default
+        None.
     file_root : str, optional
         Base name prefix for output files, by default "".
     prefixes : list[str | None] | None, optional
@@ -424,7 +430,7 @@ def assign_confidence(
         by default "qvality".
     qvalue_algorithm : {'tdc', 'hist'}, optional
         Algorithm for q-value calculation, by default "tdc".
-    sqlite_path : Path | None, optional
+    sqlite_path : Path | str | None, optional
         Path to the SQLite database to write mokapot results, by default None.
     stream_confidence : bool, optional
         Whether to stream confidence calculations for large datasets
@@ -446,6 +452,16 @@ def assign_confidence(
 
     if dest_dir is None:
         dest_dir = Path()
+    else:
+        # Accept a str path for convenience, and ensure the output directory
+        # exists before the writers target it. (The CLI does this itself; the
+        # library function must too.)
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Coerce here so the internal writers can keep a strict Path type.
+    if sqlite_path is not None:
+        sqlite_path = Path(sqlite_path)
 
     # just take the first one for info (and make sure the other are the same)
     curr_dataset = datasets[0]

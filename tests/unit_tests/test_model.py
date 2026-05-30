@@ -167,6 +167,17 @@ def test_model_persistance(tmp_path):
     assert isinstance(loaded, mokapot.Model)
 
 
+def test_model_persistance_str_path(tmp_path):
+    """save_model/load_model accept str paths, not just Path objects."""
+    model_file = str(tmp_path / "model.pkl")  # a str, not a Path
+
+    model = mokapot.Model(LogisticRegression(), train_fdr=0.05, max_iter=1)
+    mokapot.save_model(model, model_file)
+    loaded = mokapot.load_model(model_file)
+
+    assert isinstance(loaded, mokapot.Model)
+
+
 def test_dummy_scaler():
     """Test the DummyScaler class"""
     data = np.random.default_rng(42).normal(0, 1, (20, 10))
