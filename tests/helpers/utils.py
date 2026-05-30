@@ -175,7 +175,12 @@ class ColumnValidator:
             msg += f" ({num_missing}/{tot_col})"
             fails.append(msg)
 
-        if series.dtype != self.col_type:
+        # pandas>=3 reads text columns back as a StringDtype rather than the
+        # object ("O") dtype used previously; treat them as equivalent.
+        actual_dtype = series.dtype
+        if isinstance(actual_dtype, pd.StringDtype):
+            actual_dtype = pd.api.types.pandas_dtype("object")
+        if actual_dtype != self.col_type:
             fails.append(
                 f"Type {series.dtype} != {self.col_type} at col: '{self.name}'"
             )

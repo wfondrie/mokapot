@@ -166,11 +166,16 @@ def test_dataframe_reader(psm_df_6):
     chunks = [chunk for chunk in chunk_iterator]
     sizes = [len(chunk) for chunk in chunks]
     assert sizes == [4, 2]
+    # mokapot represents string columns with object dtype (pandas>=3 would
+    # otherwise infer a StringDtype for these literals), so make the expected
+    # frames object-typed too.
     pd.testing.assert_frame_equal(
-        chunks[0], pd.DataFrame({"peptide": ["a", "b", "a", "c"]})
+        chunks[0],
+        pd.DataFrame({"peptide": ["a", "b", "a", "c"]}, dtype=object),
     )
     pd.testing.assert_frame_equal(
-        chunks[1], pd.DataFrame({"peptide": ["d", "e"]}, index=[4, 5])
+        chunks[1],
+        pd.DataFrame({"peptide": ["d", "e"]}, index=[4, 5], dtype=object),
     )
 
     assert reader.read(["feature_1", "spectrum"]).columns.tolist() == [

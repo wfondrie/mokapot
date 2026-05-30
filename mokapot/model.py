@@ -200,18 +200,18 @@ class Model:
         self._rng = np.random.default_rng(rng)
 
     @typechecked
-    def save(self, out_file: Path):
+    def save(self, out_file: Path | str):
         """
         Save the model to a file.
 
         Parameters
         ----------
-        out_file : str
+        out_file : str or Path
             The name of the file for the saved model.
 
         Returns
         -------
-        str
+        str or Path
             The output file name.
 
         Notes
@@ -220,7 +220,7 @@ class Model:
         versions, a saved model may not work when either is changed
         from the version that created the model.
         """
-        with open(out_file, "wb+") as out:
+        with open(Path(out_file), "wb+") as out:
             pickle.dump(self, out)
 
         return out_file
@@ -492,13 +492,13 @@ class DummyScaler:
 
 # Functions -------------------------------------------------------------------
 @typechecked
-def save_model(model, out_file: Path):
+def save_model(model, out_file: Path | str):
     """
     Save a :py:class:`mokapot.model.Model` object to a file.
 
     Parameters
     ----------
-    out_file : str
+    out_file : str or Path
         The name of the file for the saved model.
 
     Returns
@@ -516,7 +516,7 @@ def save_model(model, out_file: Path):
 
 
 @typechecked
-def load_model(model_file: Path):
+def load_model(model_file: Path | str):
     """
     Load a saved model for mokapot.
 
@@ -526,7 +526,7 @@ def load_model(model_file: Path):
 
     Parameters
     ----------
-    model_file : str
+    model_file : str or Path
         The name of file from which to load the model.
 
     Returns
@@ -539,6 +539,7 @@ def load_model(model_file: Path):
     Unpickling data in Python is unsafe. Make sure that the model is from
     a source that you trust.
     """
+    model_file = Path(model_file)
     # Try a percolator model first:
     try:
         weights = pd.read_csv(model_file, sep="\t", nrows=2).loc[1, :]

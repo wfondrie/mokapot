@@ -71,6 +71,23 @@ def test_assign_unscored_confidence(inmem_psms_ds, tmp_path, deduplication):
     # TODO actually add assertions here ...
 
 
+def test_assign_confidence_str_dest_dir_is_created(inmem_psms_ds, tmp_path):
+    """dest_dir may be a str and is created if it does not yet exist."""
+    dest_dir = tmp_path / "does_not_exist_yet"
+    assert not dest_dir.exists()
+
+    conf = assign_confidence(
+        [inmem_psms_ds],
+        scores_list=None,
+        eval_fdr=0.01,
+        dest_dir=str(dest_dir),  # pass a str, not a Path
+        deduplication=False,
+    )
+
+    assert dest_dir.is_dir()
+    assert len(conf[0].out_writers["psms"][0].read()) > 0
+
+
 @pytest.mark.parametrize("deduplication", [True, False])
 def test_chunked_assign_confidence(psm_df_1000, tmp_path, deduplication):
     """Test that assign_confidence() works correctly with small chunks"""

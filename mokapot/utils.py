@@ -24,7 +24,8 @@ def groupby_max(df, by_cols, max_col, rng):
     """Quickly get the indices for the maximum value of col"""
     by_cols = tuplize(by_cols)
     idx = (
-        df.sample(frac=1, random_state=rng)
+        df
+        .sample(frac=1, random_state=rng)
         .sort_values(list(by_cols) + [max_col], axis=0)
         .drop_duplicates(list(by_cols), keep="last")
         .index
@@ -131,7 +132,11 @@ def make_bool_trarget(target_column: pd.Series):
     if target_column.dtype == bool:
         return target_column
 
-    if target_column.dtype == object:
+    # Object dtype, or the StringDtype that pandas>=3 infers for text columns,
+    # may hold integer-like labels (e.g. "0"/"1") that need converting.
+    if target_column.dtype == object or isinstance(
+        target_column.dtype, pd.StringDtype
+    ):
         try:
             target_column = target_column.astype(int)
         except ValueError as e:
