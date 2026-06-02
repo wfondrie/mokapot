@@ -99,7 +99,8 @@ class TabularDataReader(ABC):
         return True
 
     def get_default_extension(self) -> str:
-        raise NotImplementedError
+        # raise NotImplementedError
+        return ".tsv"
 
     @staticmethod
     def from_path(
