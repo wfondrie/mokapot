@@ -96,7 +96,7 @@ def picked_protein(
     )
 
     if shared_unmatched:
-        LOGGER.debug("%s", unmatched_prots.loc[~shared, "stripped sequence"])
+        LOGGER.debug("%s", unmatched_prots.loc[~shared, STRIP_SEQUENCE_NAME])
         LOGGER.warning(
             "%i out of %i peptides could not be mapped. "
             "Please check your digest settings.",
